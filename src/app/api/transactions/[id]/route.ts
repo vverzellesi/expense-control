@@ -1,0 +1,89 @@
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/db";
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const transaction = await prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        installment: true,
+      },
+    });
+
+    if (!transaction) {
+      return NextResponse.json(
+        { error: "Transacao nao encontrada" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(transaction);
+  } catch (error) {
+    console.error("Error fetching transaction:", error);
+    return NextResponse.json(
+      { error: "Erro ao buscar transacao" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { description, amount, date, type, origin, categoryId, isFixed } = body;
+
+    const transaction = await prisma.transaction.update({
+      where: { id },
+      data: {
+        description,
+        amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
+        date: new Date(date),
+        type,
+        origin,
+        categoryId: categoryId || null,
+        isFixed: isFixed || false,
+      },
+      include: {
+        category: true,
+        installment: true,
+      },
+    });
+
+    return NextResponse.json(transaction);
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+    return NextResponse.json(
+      { error: "Erro ao atualizar transacao" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    await prisma.transaction.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    return NextResponse.json(
+      { error: "Erro ao excluir transacao" },
+      { status: 500 }
+    );
+  }
+}

@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Transaction {
+  id                  String            @id @default(cuid())
+  description         String
+  amount              Float
+  date                DateTime
+  type                String            // "INCOME" or "EXPENSE"
+  origin              String
+  categoryId          String?
+  category            Category?         @relation(fields: [categoryId], references: [id])
+  isFixed             Boolean           @default(false)
+  isInstallment       Boolean           @default(false)
+  installmentId       String?
+  installment         Installment?      @relation(fields: [installmentId], references: [id])
+  currentInstallment  Int?
+  recurringExpenseId  String?
+  recurringExpense    RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+}
+
+model RecurringExpense {
+  id           String        @id @default(cuid())
+  description  String
+  defaultAmount Float        // Valor padrao
+  dayOfMonth   Int           // Dia do mes para gerar (1-31)
+  type         String        // "INCOME" or "EXPENSE"
+  origin       String
+  categoryId   String?
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  isActive     Boolean       @default(true)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Category {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  color             String
+  icon              String?
+  transactions      Transaction[]
+  budgets           Budget[]
+  categoryRules     CategoryRule[]
+  recurringExpenses RecurringExpense[]
+}
+
+model Installment {
+  id                String        @id @default(cuid())
+  description       String
+  totalAmount       Float
+  totalInstallments Int
+  installmentAmount Float
+  startDate         DateTime
+  origin            String
+  transactions      Transaction[]
+}
+
+model Origin {
+  id   String @id @default(cuid())
+  name String @unique
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  categoryId String   @unique
+  category   Category @relation(fields: [categoryId], references: [id])
+  amount     Float
+  isActive   Boolean  @default(true)
+}
+
+model CategoryRule {
+  id         String   @id @default(cuid())
+  keyword    String
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([keyword, categoryId])
+}

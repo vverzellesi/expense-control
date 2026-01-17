@@ -1,0 +1,233 @@
+import prisma from "./db";
+import type { Category, CategoryRule } from "@/types";
+
+interface RuleWithCategory extends CategoryRule {
+  category: Category;
+}
+
+let rulesCache: RuleWithCategory[] | null = null;
+
+export async function getRules(): Promise<RuleWithCategory[]> {
+  if (rulesCache) return rulesCache;
+
+  const rules = await prisma.categoryRule.findMany({
+    include: { category: true },
+  });
+
+  rulesCache = rules as RuleWithCategory[];
+  return rulesCache;
+}
+
+export function invalidateRulesCache() {
+  rulesCache = null;
+}
+
+export async function suggestCategory(
+  description: string
+): Promise<Category | null> {
+  const rules = await getRules();
+  const upperDesc = description.toUpperCase();
+
+  for (const rule of rules) {
+    if (upperDesc.includes(rule.keyword.toUpperCase())) {
+      return rule.category;
+    }
+  }
+
+  return null;
+}
+
+export async function addRule(
+  keyword: string,
+  categoryId: string
+): Promise<CategoryRule> {
+  const rule = await prisma.categoryRule.create({
+    data: {
+      keyword: keyword.toUpperCase(),
+      categoryId,
+    },
+  });
+
+  invalidateRulesCache();
+  return rule;
+}
+
+export async function deleteRule(ruleId: string): Promise<void> {
+  await prisma.categoryRule.delete({
+    where: { id: ruleId },
+  });
+
+  invalidateRulesCache();
+}
+
+// Recurring transaction patterns (subscriptions and regular services)
+const RECURRING_PATTERNS: { pattern: RegExp; name: string }[] = [
+  { pattern: /NETFLIX/i, name: "Netflix" },
+  { pattern: /SPOTIFY/i, name: "Spotify" },
+  { pattern: /AMAZON\s*PRIME/i, name: "Amazon Prime" },
+  { pattern: /PRIME\s*VIDEO/i, name: "Prime Video" },
+  { pattern: /DISNEY\s*\+?/i, name: "Disney+" },
+  { pattern: /HBO\s*MAX/i, name: "HBO Max" },
+  { pattern: /IFOOD\s*(?:CLUB|BENEFICIOS)?/i, name: "iFood" },
+  { pattern: /SEM\s*PARAR/i, name: "Sem Parar" },
+  { pattern: /VELOE/i, name: "Veloe" },
+  { pattern: /CLARO\s*(?:TV|FIXO|MOVEL)?/i, name: "Claro" },
+  { pattern: /VIVO\s*(?:FIXO|MOVEL)?/i, name: "Vivo" },
+  { pattern: /TIM\s*(?:FIXO|MOVEL)?/i, name: "Tim" },
+  { pattern: /\bOI\s*(?:FIXO|MOVEL)?\b/i, name: "Oi" },
+  { pattern: /GOOGLE\s*(?:ONE|STORAGE|CLOUD)/i, name: "Google One" },
+  { pattern: /APPLE\.COM\/BILL/i, name: "Apple" },
+  { pattern: /APPLE\s*(?:MUSIC|TV|ARCADE|ICLOUD)/i, name: "Apple" },
+  { pattern: /CHATGPT|OPENAI/i, name: "ChatGPT" },
+  { pattern: /YOUTUBE\s*(?:PREMIUM|MUSIC)/i, name: "YouTube Premium" },
+  { pattern: /DEEZER/i, name: "Deezer" },
+  { pattern: /PARAMOUNT\s*\+?/i, name: "Paramount+" },
+  { pattern: /GLOBOPLAY/i, name: "Globoplay" },
+  { pattern: /STAR\s*\+?/i, name: "Star+" },
+  { pattern: /TWITCH/i, name: "Twitch" },
+  { pattern: /PLAYSTATION\s*(?:PLUS|NOW|NETWORK)/i, name: "PlayStation" },
+  { pattern: /XBOX\s*(?:GAME\s*PASS|LIVE)/i, name: "Xbox" },
+  { pattern: /NINTENDO/i, name: "Nintendo" },
+  { pattern: /DROPBOX/i, name: "Dropbox" },
+  { pattern: /MICROSOFT\s*(?:365|OFFICE)/i, name: "Microsoft 365" },
+  { pattern: /ADOBE/i, name: "Adobe" },
+  { pattern: /CANVA/i, name: "Canva" },
+  { pattern: /NOTION/i, name: "Notion" },
+  { pattern: /GITHUB/i, name: "GitHub" },
+  { pattern: /HEADSPACE/i, name: "Headspace" },
+  { pattern: /CALM/i, name: "Calm" },
+  { pattern: /DUOLINGO/i, name: "Duolingo" },
+  { pattern: /GYMPASS|WELLHUB/i, name: "Wellhub" },
+  { pattern: /RAPPI\s*(?:PRIME|TURBO)/i, name: "Rappi Prime" },
+  { pattern: /UBER\s*(?:ONE|PASS)/i, name: "Uber One" },
+  { pattern: /NUBANK\s*VIDA/i, name: "Nubank Vida" },
+  { pattern: /SEGURO\s*(?:AUTO|VIDA|RESIDENCIAL)/i, name: "Seguro" },
+];
+
+/**
+ * Detect if a transaction is likely a recurring subscription
+ */
+export function detectRecurringTransaction(description: string): {
+  isRecurring: boolean;
+  recurringName?: string;
+} {
+  const upperDesc = description.toUpperCase();
+
+  for (const { pattern, name } of RECURRING_PATTERNS) {
+    if (pattern.test(upperDesc)) {
+      return { isRecurring: true, recurringName: name };
+    }
+  }
+
+  return { isRecurring: false };
+}
+
+export function detectInstallment(description: string): {
+  isInstallment: boolean;
+  currentInstallment?: number;
+  totalInstallments?: number;
+} {
+  // Pattern: "3/10", "3 de 10", "PARC 3/10", "PARCELA 3 DE 10"
+  const numberedPatterns = [
+    /(\d+)\s*\/\s*(\d+)/,
+    /(\d+)\s*DE\s*(\d+)/i,
+    /PARC(?:ELA)?\s*(\d+)\s*(?:\/|DE)\s*(\d+)/i,
+  ];
+
+  for (const pattern of numberedPatterns) {
+    const match = description.match(pattern);
+    if (match) {
+      const current = parseInt(match[1], 10);
+      const total = parseInt(match[2], 10);
+
+      if (current > 0 && total > 0 && current <= total) {
+        return {
+          isInstallment: true,
+          currentInstallment: current,
+          totalInstallments: total,
+        };
+      }
+    }
+  }
+
+  // Detect "- Parcela" without number (common in C6 credit card statements)
+  if (/[-–]\s*Parcela\s*$/i.test(description) || /\bParcela\s*$/i.test(description)) {
+    return { isInstallment: true };
+  }
+
+  return { isInstallment: false };
+}
+
+export const defaultCategories = [
+  { name: "Moradia", color: "#3B82F6", icon: "home" },
+  { name: "Alimentacao", color: "#F97316", icon: "utensils" },
+  { name: "Mercado", color: "#22C55E", icon: "shopping-cart" },
+  { name: "Transporte", color: "#8B5CF6", icon: "car" },
+  { name: "Saude", color: "#EF4444", icon: "heart" },
+  { name: "Lazer", color: "#EC4899", icon: "gamepad" },
+  { name: "Educacao", color: "#6366F1", icon: "book" },
+  { name: "Servicos", color: "#14B8A6", icon: "smartphone" },
+  { name: "Compras", color: "#F59E0B", icon: "shopping-bag" },
+  { name: "Salario", color: "#10B981", icon: "wallet" },
+  { name: "Investimentos", color: "#06B6D4", icon: "trending-up" },
+  { name: "Outros", color: "#6B7280", icon: "help-circle" },
+];
+
+export const defaultRules = [
+  { keyword: "UBER", category: "Transporte" },
+  { keyword: "99", category: "Transporte" },
+  { keyword: "CABIFY", category: "Transporte" },
+  { keyword: "IFOOD", category: "Alimentacao" },
+  { keyword: "RAPPI", category: "Alimentacao" },
+  { keyword: "AIQFOME", category: "Alimentacao" },
+  { keyword: "ZDELIVERY", category: "Alimentacao" },
+  { keyword: "MERCADOLIVRE", category: "Compras" },
+  { keyword: "MERCADO LIVRE", category: "Compras" },
+  { keyword: "MERCADOPAGO", category: "Compras" },
+  { keyword: "SUPERMERCADO", category: "Mercado" },
+  { keyword: "CARREFOUR", category: "Mercado" },
+  { keyword: "EXTRA", category: "Mercado" },
+  { keyword: "PAO DE ACUCAR", category: "Mercado" },
+  { keyword: "ASSAI", category: "Mercado" },
+  { keyword: "ATACADAO", category: "Mercado" },
+  { keyword: "MERCADO", category: "Mercado" },
+  { keyword: "NETFLIX", category: "Servicos" },
+  { keyword: "SPOTIFY", category: "Servicos" },
+  { keyword: "AMAZON PRIME", category: "Servicos" },
+  { keyword: "DISNEY", category: "Servicos" },
+  { keyword: "HBO", category: "Servicos" },
+  { keyword: "YOUTUBE", category: "Servicos" },
+  { keyword: "FARMACIA", category: "Saude" },
+  { keyword: "DROGARIA", category: "Saude" },
+  { keyword: "DROGASIL", category: "Saude" },
+  { keyword: "DROGA RAIA", category: "Saude" },
+  { keyword: "PANVEL", category: "Saude" },
+  { keyword: "ALUGUEL", category: "Moradia" },
+  { keyword: "CONDOMINIO", category: "Moradia" },
+  { keyword: "IPTU", category: "Moradia" },
+  { keyword: "ENERGIA", category: "Moradia" },
+  { keyword: "AGUA", category: "Moradia" },
+  { keyword: "GAS", category: "Moradia" },
+  { keyword: "INTERNET", category: "Moradia" },
+  { keyword: "RESTAURANTE", category: "Alimentacao" },
+  { keyword: "LANCHONETE", category: "Alimentacao" },
+  { keyword: "PIZZARIA", category: "Alimentacao" },
+  { keyword: "PADARIA", category: "Alimentacao" },
+  { keyword: "SHOPPING", category: "Compras" },
+  { keyword: "LOJAS", category: "Compras" },
+  { keyword: "RENNER", category: "Compras" },
+  { keyword: "C&A", category: "Compras" },
+  { keyword: "RIACHUELO", category: "Compras" },
+  { keyword: "CINEMA", category: "Lazer" },
+  { keyword: "TEATRO", category: "Lazer" },
+  { keyword: "SHOW", category: "Lazer" },
+  { keyword: "INGRESSO", category: "Lazer" },
+  { keyword: "CURSO", category: "Educacao" },
+  { keyword: "ESCOLA", category: "Educacao" },
+  { keyword: "FACULDADE", category: "Educacao" },
+  { keyword: "LIVRO", category: "Educacao" },
+  { keyword: "AMAZON", category: "Compras" },
+  { keyword: "MAGAZINE LUIZA", category: "Compras" },
+  { keyword: "MAGALU", category: "Compras" },
+  { keyword: "CASAS BAHIA", category: "Compras" },
+];
