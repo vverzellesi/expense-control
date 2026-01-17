@@ -27,6 +27,30 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Get previous month transactions for comparison
+    const prevMonthStart = new Date(targetYear, targetMonth - 2, 1);
+    const prevMonthEnd = new Date(targetYear, targetMonth - 1, 0);
+    const prevTransactions = await prisma.transaction.findMany({
+      where: {
+        date: {
+          gte: prevMonthStart,
+          lte: prevMonthEnd,
+        },
+      },
+    });
+
+    // Calculate previous month totals
+    let prevIncome = 0;
+    let prevExpense = 0;
+    for (const t of prevTransactions) {
+      if (t.type === "INCOME") {
+        prevIncome += Math.abs(t.amount);
+      } else if (t.type === "EXPENSE") {
+        prevExpense += Math.abs(t.amount);
+      }
+      // TRANSFER is ignored in totals
+    }
+
     // Calculate summary
     let income = 0;
     let expense = 0;
@@ -35,9 +59,10 @@ export async function GET(request: NextRequest) {
     for (const t of transactions) {
       if (t.type === "INCOME") {
         income += Math.abs(t.amount);
-      } else {
+      } else if (t.type === "EXPENSE") {
         expense += Math.abs(t.amount);
       }
+      // TRANSFER is ignored in totals
 
       if (t.category && t.type === "EXPENSE") {
         if (!categoryTotals[t.categoryId!]) {
@@ -50,6 +75,13 @@ export async function GET(request: NextRequest) {
         categoryTotals[t.categoryId!].total += Math.abs(t.amount);
       }
     }
+
+    // Calculate comparison percentages
+    const incomeChange = prevIncome > 0 ? ((income - prevIncome) / prevIncome) * 100 : 0;
+    const expenseChange = prevExpense > 0 ? ((expense - prevExpense) / prevExpense) * 100 : 0;
+    const prevBalance = prevIncome - prevExpense;
+    const balance = income - expense;
+    const balanceChange = prevBalance !== 0 ? ((balance - prevBalance) / Math.abs(prevBalance)) * 100 : 0;
 
     // Get category breakdown
     const categoryBreakdown = Object.entries(categoryTotals)
@@ -83,9 +115,10 @@ export async function GET(request: NextRequest) {
       for (const t of monthTransactions) {
         if (t.type === "INCOME") {
           monthIncome += Math.abs(t.amount);
-        } else {
+        } else if (t.type === "EXPENSE") {
           monthExpense += Math.abs(t.amount);
         }
+        // TRANSFER is ignored in totals
       }
 
       monthlyData.push({
@@ -95,6 +128,39 @@ export async function GET(request: NextRequest) {
         expense: monthExpense,
       });
     }
+
+    // Get savings goal
+    const savingsGoalSetting = await prisma.settings.findUnique({
+      where: { key: "savingsGoal" },
+    });
+    const savingsGoal = savingsGoalSetting ? parseFloat(savingsGoalSetting.value) : null;
+    const currentSavings = income - expense;
+    const savingsPercentage = savingsGoal && savingsGoal > 0
+      ? (currentSavings / savingsGoal) * 100
+      : null;
+
+    // Get budget alerts (categories at 80% or more of budget)
+    const budgets = await prisma.budget.findMany({
+      where: { isActive: true },
+      include: { category: true },
+    });
+
+    const budgetAlerts = budgets
+      .map((budget) => {
+        const spent = categoryTotals[budget.categoryId]?.total || 0;
+        const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+        return {
+          categoryId: budget.categoryId,
+          categoryName: budget.category.name,
+          categoryColor: budget.category.color,
+          budgetAmount: budget.amount,
+          spent,
+          percentage,
+          isOver: spent > budget.amount,
+        };
+      })
+      .filter((alert) => alert.percentage >= 80)
+      .sort((a, b) => b.percentage - a.percentage);
 
     // Get fixed expenses
     const fixedExpenses = await prisma.transaction.findMany({
@@ -131,10 +197,29 @@ export async function GET(request: NextRequest) {
       summary: {
         income,
         expense,
-        balance: income - expense,
+        balance,
       },
+      comparison: {
+        incomeChange,
+        expenseChange,
+        balanceChange,
+        previousMonth: {
+          income: prevIncome,
+          expense: prevExpense,
+          balance: prevBalance,
+        },
+      },
+      savingsGoal: savingsGoal
+        ? {
+            goal: savingsGoal,
+            current: currentSavings,
+            percentage: savingsPercentage,
+            isAchieved: currentSavings >= savingsGoal,
+          }
+        : null,
       categoryBreakdown,
       monthlyData,
+      budgetAlerts,
       fixedExpenses,
       upcomingInstallments,
     });

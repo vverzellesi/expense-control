@@ -23,6 +23,7 @@ model Transaction {
   currentInstallment  Int?
   recurringExpenseId  String?
   recurringExpense    RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+  tags                String?           // JSON array: '["trabalho", "viagem"]'
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 }
@@ -84,4 +85,11 @@ model CategoryRule {
   category   Category @relation(fields: [categoryId], references: [id])
 
   @@unique([keyword, categoryId])
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
 }

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag } from "lucide-react";
+import { Plus, Trash2, Target, Tag, PiggyBank } from "lucide-react";
 import type { Category, Budget, CategoryRule } from "@/types";
 
 interface BudgetWithCategory extends Budget {
@@ -62,6 +62,10 @@ export default function SettingsPage() {
   // Current month spending
   const [spending, setSpending] = useState<Record<string, number>>({});
 
+  // Savings goal
+  const [savingsGoal, setSavingsGoal] = useState("");
+  const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -69,19 +73,24 @@ export default function SettingsPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [categoriesRes, budgetsRes, rulesRes] = await Promise.all([
+      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes] = await Promise.all([
         fetch("/api/categories"),
         fetch("/api/budgets"),
         fetch("/api/rules"),
+        fetch("/api/settings?key=savingsGoal"),
       ]);
 
       const categoriesData = await categoriesRes.json();
       const budgetsData = await budgetsRes.json();
       const rulesData = await rulesRes.json();
+      const savingsGoalData = await savingsGoalRes.json();
 
       setCategories(categoriesData);
       setBudgets(budgetsData);
       setRules(rulesData);
+      if (savingsGoalData?.value) {
+        setSavingsGoal(savingsGoalData.value);
+      }
 
       // Fetch current month spending
       const now = new Date();
@@ -252,6 +261,38 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveSavingsGoal(e: React.FormEvent) {
+    e.preventDefault();
+
+    setSavingsGoalSaving(true);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "savingsGoal",
+          value: savingsGoal,
+        }),
+      });
+
+      if (!res.ok) throw new Error();
+
+      toast({
+        title: "Sucesso",
+        description: "Meta de economia salva com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar meta de economia",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingsGoalSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -280,6 +321,10 @@ export default function SettingsPage() {
           <TabsTrigger value="rules">
             <Tag className="mr-2 h-4 w-4" />
             Regras de Categorizacao
+          </TabsTrigger>
+          <TabsTrigger value="goals">
+            <PiggyBank className="mr-2 h-4 w-4" />
+            Meta de Economia
           </TabsTrigger>
         </TabsList>
 
@@ -531,6 +576,57 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="goals" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PiggyBank className="h-5 w-5" />
+                Meta de Economia Mensal
+              </CardTitle>
+              <CardDescription>
+                Defina quanto voce deseja economizar por mes. O progresso sera exibido no dashboard.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveSavingsGoal} className="flex gap-4">
+                <div className="flex-1">
+                  <Label>Meta Mensal (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={savingsGoal}
+                    onChange={(e) => setSavingsGoal(e.target.value)}
+                    placeholder="Ex: 1000.00"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    A economia e calculada como: Receitas - Despesas
+                  </p>
+                </div>
+                <div className="flex items-end">
+                  <Button type="submit" disabled={savingsGoalSaving}>
+                    {savingsGoalSaving ? "Salvando..." : "Salvar Meta"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {savingsGoal && parseFloat(savingsGoal) > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Meta Atual</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {formatCurrency(parseFloat(savingsGoal))}
+                </div>
+                <p className="mt-1 text-sm text-gray-500">por mes</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

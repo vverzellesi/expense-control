@@ -1,4 +1,4 @@
-export type TransactionType = "INCOME" | "EXPENSE";
+export type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 
 export interface Transaction {
   id: string;
@@ -16,6 +16,7 @@ export interface Transaction {
   currentInstallment: number | null;
   recurringExpenseId: string | null;
   recurringExpense?: RecurringExpense | null;
+  tags: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }

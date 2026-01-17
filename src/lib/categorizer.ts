@@ -122,6 +122,37 @@ export function detectRecurringTransaction(description: string): {
   return { isRecurring: false };
 }
 
+// Patterns for credit card bill payments and internal transfers
+const TRANSFER_PATTERNS: RegExp[] = [
+  // Credit card bill payments
+  /PAGTO?\s*(DE\s*)?(FATURA|CARTAO|CART[AÃ]O)/i,
+  /PAGAMENTO\s*(DE\s*)?(FATURA|CARTAO|CART[AÃ]O)/i,
+  /FATURA\s*(CARTAO|CART[AÃ]O|C6|ITAU|ITAÚ|BTG|NUBANK|BRADESCO|SANTANDER|BB|CAIXA|INTER|NEXT|ORIGINAL|PAN|NEON|DIGIO|WILL|XP)/i,
+  /PAG\s*FAT/i,
+  /(C6|ITAU|ITAÚ|BTG|NUBANK|BRADESCO|SANTANDER|BB|CAIXA|INTER|NEXT)\s*(CARTAO|CART[AÃ]O|FATURA)/i,
+  /DEBITO\s*AUTO(MATICO)?\s*(CARTAO|CART[AÃ]O|FATURA)/i,
+  // Internal transfers (between own accounts)
+  /TRANSF\s*(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
+  /TRANSFERENCIA\s*(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
+  /APLICACAO|APLICAÇÃO|RESGATE/i,
+  /INVEST(IMENTO)?\s*(CDB|LCI|LCA|TESOURO|POUPANCA|POUPANÇA)/i,
+];
+
+/**
+ * Detect if a transaction is a transfer (credit card payment, internal transfer)
+ */
+export function detectTransfer(description: string): boolean {
+  const upperDesc = description.toUpperCase();
+
+  for (const pattern of TRANSFER_PATTERNS) {
+    if (pattern.test(upperDesc)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function detectInstallment(description: string): {
   isInstallment: boolean;
   currentInstallment?: number;

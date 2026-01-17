@@ -6,27 +6,44 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const categoryId = searchParams.get("categoryId");
     const origin = searchParams.get("origin");
     const type = searchParams.get("type");
     const isFixed = searchParams.get("isFixed");
     const isInstallment = searchParams.get("isInstallment");
+    const search = searchParams.get("search");
+    const tag = searchParams.get("tag");
 
     const where: Record<string, unknown> = {};
 
-    if (month && year) {
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0);
+    // Custom date range filter takes priority
+    if (startDate && endDate) {
       where.date = {
-        gte: startDate,
-        lte: endDate,
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
+    } else if (month && year) {
+      const monthStart = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const monthEnd = new Date(parseInt(year), parseInt(month), 0);
+      where.date = {
+        gte: monthStart,
+        lte: monthEnd,
       };
     } else if (year) {
-      const startDate = new Date(parseInt(year), 0, 1);
-      const endDate = new Date(parseInt(year), 11, 31);
+      const yearStart = new Date(parseInt(year), 0, 1);
+      const yearEnd = new Date(parseInt(year), 11, 31);
       where.date = {
-        gte: startDate,
-        lte: endDate,
+        gte: yearStart,
+        lte: yearEnd,
+      };
+    }
+
+    // Global text search
+    if (search && search.trim()) {
+      where.description = {
+        contains: search.trim(),
       };
     }
 
@@ -48,6 +65,13 @@ export async function GET(request: NextRequest) {
 
     if (isInstallment === "true") {
       where.isInstallment = true;
+    }
+
+    // Filter by tag (searches within JSON array string)
+    if (tag && tag.trim()) {
+      where.tags = {
+        contains: tag.trim(),
+      };
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -85,7 +109,15 @@ export async function POST(request: NextRequest) {
       isInstallment,
       totalInstallments,
       installmentAmount,
+      tags,
     } = body;
+
+    // Process tags - accept array or string, store as JSON string
+    const processedTags = tags
+      ? Array.isArray(tags)
+        ? JSON.stringify(tags)
+        : tags
+      : null;
 
     if (isInstallment && totalInstallments > 1) {
       // Create installment group and transactions
@@ -119,6 +151,7 @@ export async function POST(request: NextRequest) {
             isInstallment: true,
             installmentId: installment.id,
             currentInstallment: i + 1,
+            tags: processedTags,
           },
           include: {
             category: true,
@@ -140,6 +173,7 @@ export async function POST(request: NextRequest) {
           categoryId: categoryId || null,
           isFixed: isFixed || false,
           isInstallment: false,
+          tags: processedTags,
         },
         include: {
           category: true,

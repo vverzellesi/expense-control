@@ -33,8 +33,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { TransactionForm } from "@/components/TransactionForm";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Plus, Pencil, Trash2, Filter } from "lucide-react";
+import { Plus, Pencil, Trash2, Filter, Search, X, Tag } from "lucide-react";
 import type { Transaction, Category, Origin } from "@/types";
 
 function TransactionsContent() {
@@ -49,17 +50,23 @@ function TransactionsContent() {
 
   // Filters
   const currentDate = new Date();
-  const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1));
-  const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
+  const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  const [filterStartDate, setFilterStartDate] = useState(currentMonthStart.toISOString().split("T")[0]);
+  const [filterEndDate, setFilterEndDate] = useState(currentMonthEnd.toISOString().split("T")[0]);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterFixed, setFilterFixed] = useState(false);
   const [filterInstallment, setFilterInstallment] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [filterTag, setFilterTag] = useState("");
+  const [allTags, setAllTags] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
-  }, [filterMonth, filterYear, filterCategory, filterType, filterFixed, filterInstallment]);
+  }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, searchQuery, filterTag]);
 
   useEffect(() => {
     fetchCategories();
@@ -70,16 +77,32 @@ function TransactionsContent() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (filterMonth) params.set("month", filterMonth);
-      if (filterYear) params.set("year", filterYear);
+      if (filterStartDate) params.set("startDate", filterStartDate);
+      if (filterEndDate) params.set("endDate", filterEndDate);
       if (filterCategory && filterCategory !== "all") params.set("categoryId", filterCategory);
       if (filterType && filterType !== "all") params.set("type", filterType);
       if (filterFixed) params.set("isFixed", "true");
       if (filterInstallment) params.set("isInstallment", "true");
+      if (searchQuery) params.set("search", searchQuery);
+      if (filterTag) params.set("tag", filterTag);
 
       const res = await fetch(`/api/transactions?${params.toString()}`);
       const data = await res.json();
       setTransactions(data);
+
+      // Extract unique tags from all transactions
+      const tagsSet = new Set<string>();
+      data.forEach((t: Transaction) => {
+        if (t.tags) {
+          try {
+            const parsedTags = JSON.parse(t.tags);
+            parsedTags.forEach((tag: string) => tagsSet.add(tag));
+          } catch {
+            // Ignore parsing errors
+          }
+        }
+      });
+      setAllTags(Array.from(tagsSet).sort());
     } catch (error) {
       console.error("Error fetching transactions:", error);
     } finally {
@@ -119,31 +142,46 @@ function TransactionsContent() {
     fetchData();
   }
 
-  const months = [
-    { value: "1", label: "Janeiro" },
-    { value: "2", label: "Fevereiro" },
-    { value: "3", label: "Marco" },
-    { value: "4", label: "Abril" },
-    { value: "5", label: "Maio" },
-    { value: "6", label: "Junho" },
-    { value: "7", label: "Julho" },
-    { value: "8", label: "Agosto" },
-    { value: "9", label: "Setembro" },
-    { value: "10", label: "Outubro" },
-    { value: "11", label: "Novembro" },
-    { value: "12", label: "Dezembro" },
-  ];
+  function handleDateRangeChange(startDate: string, endDate: string) {
+    setFilterStartDate(startDate);
+    setFilterEndDate(endDate);
+  }
 
-  const years = Array.from({ length: 5 }, (_, i) => {
-    const year = currentDate.getFullYear() - 2 + i;
-    return { value: String(year), label: String(year) };
-  });
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setSearchQuery(searchInput);
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    setSearchQuery("");
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
         <div className="flex gap-2">
+          <form onSubmit={handleSearch} className="relative flex">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Buscar por descricao..."
+                className="w-64 pl-9 pr-8"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </form>
           <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
             <Filter className="mr-2 h-4 w-4" />
             Filtros
@@ -180,37 +218,14 @@ function TransactionsContent() {
       {showFilters && (
         <Card>
           <CardContent className="pt-6">
-            <div className="grid gap-4 md:grid-cols-6">
+            <div className="flex flex-wrap items-end gap-4">
               <div>
-                <Label>Mes</Label>
-                <Select value={filterMonth} onValueChange={setFilterMonth}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Ano</Label>
-                <Select value={filterYear} onValueChange={setFilterYear}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => (
-                      <SelectItem key={y.value} value={y.value}>
-                        {y.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Periodo</Label>
+                <DateRangePicker
+                  startDate={filterStartDate}
+                  endDate={filterEndDate}
+                  onRangeChange={handleDateRangeChange}
+                />
               </div>
 
               <div>
@@ -240,6 +255,7 @@ function TransactionsContent() {
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="INCOME">Receita</SelectItem>
                     <SelectItem value="EXPENSE">Despesa</SelectItem>
+                    <SelectItem value="TRANSFER">Transferencia</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -265,6 +281,28 @@ function TransactionsContent() {
                   <Label htmlFor="installment">Parceladas</Label>
                 </div>
               </div>
+
+              {allTags.length > 0 && (
+                <div>
+                  <Label>Tag</Label>
+                  <Select value={filterTag} onValueChange={setFilterTag}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todas</SelectItem>
+                      {allTags.map((tag) => (
+                        <SelectItem key={tag} value={tag}>
+                          <div className="flex items-center gap-1">
+                            <Tag className="h-3 w-3" />
+                            {tag}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -273,8 +311,19 @@ function TransactionsContent() {
       {/* Transactions List */}
       <Card>
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="flex items-center gap-2">
             {transactions.length} transacao{transactions.length !== 1 ? "es" : ""}
+            {searchQuery && (
+              <Badge variant="secondary" className="font-normal">
+                Busca: &quot;{searchQuery}&quot;
+              </Badge>
+            )}
+            {filterTag && (
+              <Badge variant="outline" className="font-normal">
+                <Tag className="mr-1 h-3 w-3" />
+                {filterTag}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -315,7 +364,7 @@ function TransactionsContent() {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {transaction.isFixed && (
                         <Badge variant="secondary">Fixa</Badge>
                       )}
@@ -325,12 +374,32 @@ function TransactionsContent() {
                           {transaction.installment?.totalInstallments}
                         </Badge>
                       )}
+                      {transaction.tags && (() => {
+                        try {
+                          const tags = JSON.parse(transaction.tags);
+                          return tags.map((tag: string) => (
+                            <Badge
+                              key={tag}
+                              variant="outline"
+                              className="cursor-pointer bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                              onClick={() => setFilterTag(tag)}
+                            >
+                              <Tag className="mr-1 h-3 w-3" />
+                              {tag}
+                            </Badge>
+                          ));
+                        } catch {
+                          return null;
+                        }
+                      })()}
                     </div>
 
                     <div
                       className={`min-w-[100px] text-right font-semibold ${
                         transaction.type === "INCOME"
                           ? "text-green-600"
+                          : transaction.type === "TRANSFER"
+                          ? "text-gray-400"
                           : "text-red-600"
                       }`}
                     >

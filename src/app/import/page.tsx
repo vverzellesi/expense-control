@@ -31,11 +31,14 @@ import {
   FileSpreadsheet,
   ArrowUpCircle,
   ArrowDownCircle,
+  ArrowLeftRight,
   Pencil,
   RefreshCw,
   Repeat,
+  AlertTriangle,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { detectTransfer } from "@/lib/categorizer";
 import type { Category, ImportedTransaction, TransactionType } from "@/types";
 
 type ExtendedTransaction = ImportedTransaction & {
@@ -47,6 +50,7 @@ type ExtendedTransaction = ImportedTransaction & {
   isRecurring?: boolean;
   recurringName?: string;
   originalDate?: Date;
+  isDuplicate?: boolean;
 };
 
 export default function ImportPage() {
@@ -91,6 +95,45 @@ export default function ImportPage() {
     const res = await fetch("/api/categories");
     const data = await res.json();
     setCategories(data);
+  }
+
+  async function checkDuplicates(parsedTransactions: ExtendedTransaction[]) {
+    try {
+      const res = await fetch("/api/transactions/check-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactions: parsedTransactions.map((t) => ({
+            description: t.description,
+            amount: t.amount,
+            date: t.date instanceof Date ? t.date.toISOString() : t.date,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.hasDuplicates) {
+        const updatedTransactions = parsedTransactions.map((t, index) => ({
+          ...t,
+          isDuplicate: data.duplicates.includes(index),
+          selected: !data.duplicates.includes(index), // Auto-deselect duplicates
+        }));
+
+        toast({
+          title: "Possiveis duplicatas detectadas",
+          description: `${data.duplicates.length} transacao(es) podem ja existir no sistema`,
+          variant: "destructive",
+        });
+
+        return updatedTransactions;
+      }
+
+      return parsedTransactions;
+    } catch (error) {
+      console.error("Error checking duplicates:", error);
+      return parsedTransactions;
+    }
   }
 
   function getFileType(file: File): "csv" | "ocr" {
@@ -268,6 +311,9 @@ export default function ImportPage() {
         ? parseInt(installmentMatch[2])
         : undefined;
 
+      // Check for transfer pattern (credit card bill payment, internal transfer)
+      const isTransfer = detectTransfer(description);
+
       // Find category by rules
       let categoryId: string | undefined;
       const upperDesc = description.toUpperCase();
@@ -278,17 +324,25 @@ export default function ImportPage() {
         }
       }
 
-      // Default to "Outros" category if no rule matched
-      if (!categoryId) {
+      // Default to "Outros" category if no rule matched (except for transfers)
+      if (!categoryId && !isTransfer) {
         const outrosCategory = categories.find(c => c.name === "Outros");
         categoryId = outrosCategory?.id;
       }
 
+      // Determine transaction type
+      let transactionType: TransactionType = "EXPENSE";
+      if (isTransfer) {
+        transactionType = "TRANSFER";
+      } else if (amount > 0) {
+        transactionType = "INCOME";
+      }
+
       parsedTransactions.push({
         description,
-        amount: -Math.abs(amount), // Expenses are negative
+        amount: transactionType === "INCOME" ? Math.abs(amount) : -Math.abs(amount),
         date,
-        type: "EXPENSE" as TransactionType,
+        type: transactionType,
         isInstallment,
         currentInstallment,
         totalInstallments,
@@ -302,7 +356,9 @@ export default function ImportPage() {
       throw new Error("Nenhuma transação encontrada no arquivo");
     }
 
-    setTransactions(parsedTransactions);
+    // Check for duplicates
+    const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
+    setTransactions(transactionsWithDuplicates);
     setStep("preview");
   }
 
@@ -332,12 +388,14 @@ export default function ImportPage() {
 
       setOrigin(data.origin);
       setOcrConfidence(data.confidence);
-      setTransactions(
-        data.transactions.map((t: ExtendedTransaction) => ({
-          ...t,
-          date: new Date(t.date),
-        }))
-      );
+      const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => ({
+        ...t,
+        date: new Date(t.date),
+        selected: true,
+      }));
+      // Check for duplicates
+      const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
+      setTransactions(transactionsWithDuplicates);
       setStep("preview");
     } finally {
       clearInterval(progressInterval);
@@ -466,6 +524,10 @@ export default function ImportPage() {
   const expenseCount = transactions.filter(
     (t) => t.selected && t.type === "EXPENSE"
   ).length;
+  const transferCount = transactions.filter(
+    (t) => t.selected && t.type === "TRANSFER"
+  ).length;
+  const duplicateCount = transactions.filter((t) => t.isDuplicate).length;
 
   return (
     <div className="space-y-6">
@@ -574,17 +636,29 @@ export default function ImportPage() {
                     <span>
                       {selectedCount} de {transactions.length} selecionadas
                     </span>
-                    {fileType === "ocr" && (
-                      <>
-                        <span className="flex items-center gap-1">
-                          <ArrowDownCircle className="h-4 w-4 text-green-500" />
-                          {incomeCount} entradas
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <ArrowUpCircle className="h-4 w-4 text-red-500" />
-                          {expenseCount} saidas
-                        </span>
-                      </>
+                    {duplicateCount > 0 && (
+                      <span className="flex items-center gap-1 text-orange-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        {duplicateCount} possivel(eis) duplicata(s)
+                      </span>
+                    )}
+                    {incomeCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ArrowDownCircle className="h-4 w-4 text-green-500" />
+                        {incomeCount} entrada{incomeCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {expenseCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ArrowUpCircle className="h-4 w-4 text-red-500" />
+                        {expenseCount} despesa{expenseCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {transferCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ArrowLeftRight className="h-4 w-4 text-gray-500" />
+                        {transferCount} transferencia{transferCount !== 1 ? 's' : ''}
+                      </span>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -677,6 +751,11 @@ export default function ImportPage() {
                                 <ArrowDownCircle className="mr-1 h-3 w-3" />
                                 Entrada
                               </Badge>
+                            ) : t.type === "TRANSFER" ? (
+                              <Badge className="bg-gray-100 text-gray-800">
+                                <ArrowLeftRight className="mr-1 h-3 w-3" />
+                                Transfer
+                              </Badge>
                             ) : (
                               <Badge className="bg-red-100 text-red-800">
                                 <ArrowUpCircle className="mr-1 h-3 w-3" />
@@ -715,6 +794,18 @@ export default function ImportPage() {
                           ) : (
                             <div className="flex items-center gap-2">
                               <span className="flex-1">{t.description}</span>
+                              {t.isDuplicate && (
+                                <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Possivel duplicata
+                                </Badge>
+                              )}
+                              {t.type === "TRANSFER" && (
+                                <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                  <ArrowLeftRight className="h-3 w-3 mr-1" />
+                                  Transferencia
+                                </Badge>
+                              )}
                               {t.isInstallment && (
                                 <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                   <Repeat className="h-3 w-3 mr-1" />
@@ -779,7 +870,11 @@ export default function ImportPage() {
                         )}
                         <TableCell
                           className={`text-right font-medium ${
-                            t.type === "INCOME" ? "text-green-600" : "text-red-600"
+                            t.type === "INCOME"
+                              ? "text-green-600"
+                              : t.type === "TRANSFER"
+                              ? "text-gray-400"
+                              : "text-red-600"
                           }`}
                         >
                           {formatCurrency(t.amount)}

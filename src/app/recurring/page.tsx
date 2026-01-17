@@ -33,8 +33,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, Trash2, RefreshCw, Calendar, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw, Calendar, Check, Lightbulb, Sparkles } from "lucide-react";
 import type { Category, Origin, RecurringExpense, Transaction } from "@/types";
+
+interface RecurringSuggestion {
+  description: string;
+  normalizedDescription: string;
+  avgAmount: number;
+  occurrences: number;
+  avgDayOfMonth: number;
+  categoryId: string | null;
+  categoryName: string | null;
+  origin: string;
+}
 
 interface RecurringExpenseWithTransactions extends RecurringExpense {
   transactions: Transaction[];
@@ -45,12 +56,14 @@ export default function RecurringPage() {
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpenseWithTransactions[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [origins, setOrigins] = useState<Origin[]>([]);
+  const [suggestions, setSuggestions] = useState<RecurringSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<RecurringExpense | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generateAmount, setGenerateAmount] = useState("");
+  const [creatingSuggestion, setCreatingSuggestion] = useState<string | null>(null);
 
   // Form state
   const [description, setDescription] = useState("");
@@ -94,21 +107,24 @@ export default function RecurringPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [expensesRes, categoriesRes, originsRes] = await Promise.all([
+      const [expensesRes, categoriesRes, originsRes, suggestionsRes] = await Promise.all([
         fetch("/api/recurring"),
         fetch("/api/categories"),
         fetch("/api/origins"),
+        fetch("/api/recurring/suggestions"),
       ]);
 
-      const [expensesData, categoriesData, originsData] = await Promise.all([
+      const [expensesData, categoriesData, originsData, suggestionsData] = await Promise.all([
         expensesRes.json(),
         categoriesRes.json(),
         originsRes.json(),
+        suggestionsRes.json(),
       ]);
 
       setRecurringExpenses(expensesData);
       setCategories(categoriesData);
       setOrigins(originsData);
+      setSuggestions(Array.isArray(suggestionsData) ? suggestionsData : []);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -260,6 +276,42 @@ export default function RecurringPage() {
   function getLastTransactionAmount(expense: RecurringExpenseWithTransactions): number | null {
     if (expense.transactions.length === 0) return null;
     return Math.abs(expense.transactions[0].amount);
+  }
+
+  async function createFromSuggestion(suggestion: RecurringSuggestion) {
+    setCreatingSuggestion(suggestion.normalizedDescription);
+
+    try {
+      const res = await fetch("/api/recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: suggestion.description,
+          defaultAmount: suggestion.avgAmount,
+          dayOfMonth: suggestion.avgDayOfMonth,
+          type: "EXPENSE",
+          origin: suggestion.origin,
+          categoryId: suggestion.categoryId,
+        }),
+      });
+
+      if (!res.ok) throw new Error();
+
+      toast({
+        title: "Sucesso",
+        description: "Despesa recorrente criada a partir da sugestao",
+      });
+
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao criar despesa recorrente",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingSuggestion(null);
+    }
   }
 
   if (loading) {
@@ -415,6 +467,57 @@ export default function RecurringPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Suggestions Section */}
+      {suggestions.length > 0 && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-purple-800">
+              <Lightbulb className="h-5 w-5" />
+              Sugestoes de Despesas Recorrentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-purple-700">
+              Detectamos padroes de gastos que podem ser recorrentes. Clique para adicionar.
+            </p>
+            <div className="space-y-2">
+              {suggestions.map((suggestion) => (
+                <div
+                  key={suggestion.normalizedDescription}
+                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div>
+                    <div className="font-medium">{suggestion.description}</div>
+                    <div className="text-sm text-gray-500">
+                      {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth} - {suggestion.origin}
+                      {suggestion.categoryName && ` - ${suggestion.categoryName}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-semibold text-red-600">
+                        ~{formatCurrency(suggestion.avgAmount)}
+                      </div>
+                      <div className="text-xs text-gray-500">media</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => createFromSuggestion(suggestion)}
+                      disabled={creatingSuggestion === suggestion.normalizedDescription}
+                    >
+                      <Sparkles className="mr-1 h-4 w-4" />
+                      {creatingSuggestion === suggestion.normalizedDescription
+                        ? "Criando..."
+                        : "Adicionar"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Generate for current month */}
       <Card>

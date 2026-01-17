@@ -3,12 +3,30 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target } from "lucide-react";
 import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
 import type { Transaction, Category } from "@/types";
+
+interface BudgetAlert {
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  budgetAmount: number;
+  spent: number;
+  percentage: number;
+  isOver: boolean;
+}
+
+interface SavingsGoal {
+  goal: number;
+  current: number;
+  percentage: number | null;
+  isAchieved: boolean;
+}
 
 interface SummaryData {
   summary: {
@@ -16,6 +34,17 @@ interface SummaryData {
     expense: number;
     balance: number;
   };
+  comparison: {
+    incomeChange: number;
+    expenseChange: number;
+    balanceChange: number;
+    previousMonth: {
+      income: number;
+      expense: number;
+      balance: number;
+    };
+  };
+  savingsGoal: SavingsGoal | null;
   categoryBreakdown: {
     categoryId: string;
     categoryName: string;
@@ -29,6 +58,7 @@ interface SummaryData {
     income: number;
     expense: number;
   }[];
+  budgetAlerts: BudgetAlert[];
   fixedExpenses: (Transaction & { category: Category | null })[];
   upcomingInstallments: (Transaction & { category: Category | null })[];
 }
@@ -95,6 +125,18 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-green-600">
               {formatCurrency(data?.summary.income || 0)}
             </div>
+            {data?.comparison && data.comparison.previousMonth.income > 0 && (
+              <div className={`mt-1 flex items-center text-xs ${
+                data.comparison.incomeChange >= 0 ? "text-green-600" : "text-red-600"
+              }`}>
+                {data.comparison.incomeChange >= 0 ? (
+                  <TrendingUp className="mr-1 h-3 w-3" />
+                ) : (
+                  <TrendingDown className="mr-1 h-3 w-3" />
+                )}
+                {data.comparison.incomeChange >= 0 ? "+" : ""}{data.comparison.incomeChange.toFixed(1)}% vs mes anterior
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -107,6 +149,18 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-red-600">
               {formatCurrency(data?.summary.expense || 0)}
             </div>
+            {data?.comparison && data.comparison.previousMonth.expense > 0 && (
+              <div className={`mt-1 flex items-center text-xs ${
+                data.comparison.expenseChange <= 0 ? "text-green-600" : "text-red-600"
+              }`}>
+                {data.comparison.expenseChange <= 0 ? (
+                  <TrendingDown className="mr-1 h-3 w-3" />
+                ) : (
+                  <TrendingUp className="mr-1 h-3 w-3" />
+                )}
+                {data.comparison.expenseChange >= 0 ? "+" : ""}{data.comparison.expenseChange.toFixed(1)}% vs mes anterior
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -125,9 +179,133 @@ export default function Dashboard() {
             >
               {formatCurrency(data?.summary.balance || 0)}
             </div>
+            {data?.comparison && data.comparison.previousMonth.balance !== 0 && (
+              <div className={`mt-1 flex items-center text-xs ${
+                data.comparison.balanceChange >= 0 ? "text-green-600" : "text-red-600"
+              }`}>
+                {data.comparison.balanceChange >= 0 ? (
+                  <TrendingUp className="mr-1 h-3 w-3" />
+                ) : (
+                  <TrendingDown className="mr-1 h-3 w-3" />
+                )}
+                {data.comparison.balanceChange >= 0 ? "+" : ""}{data.comparison.balanceChange.toFixed(1)}% vs mes anterior
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Budget Alerts */}
+      {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-orange-800">
+              <AlertTriangle className="h-5 w-5" />
+              Alertas de Orcamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.budgetAlerts.map((alert) => (
+                <div
+                  key={alert.categoryId}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: alert.categoryColor }}
+                      />
+                      <span className="font-medium">{alert.categoryName}</span>
+                    </div>
+                    <span className={`text-sm font-semibold ${
+                      alert.isOver ? "text-red-600" : "text-orange-600"
+                    }`}>
+                      {alert.percentage.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <Progress
+                      value={Math.min(alert.percentage, 100)}
+                      className={`h-2 ${
+                        alert.isOver ? "[&>div]:bg-red-500" : "[&>div]:bg-orange-500"
+                      }`}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-gray-500">
+                    <span>{formatCurrency(alert.spent)} gastos</span>
+                    <span>Limite: {formatCurrency(alert.budgetAmount)}</span>
+                  </div>
+                  {alert.isOver && (
+                    <div className="mt-1 text-xs text-red-600">
+                      Excedido em {formatCurrency(alert.spent - alert.budgetAmount)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Savings Goal Card */}
+      {data?.savingsGoal && (
+        <Card className={`border-2 ${
+          data.savingsGoal.isAchieved
+            ? "border-green-200 bg-green-50"
+            : "border-blue-200 bg-blue-50"
+        }`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${
+              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
+            }`}>
+              <PiggyBank className="h-5 w-5" />
+              Meta de Economia
+              {data.savingsGoal.isAchieved && (
+                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
+                  Atingida!
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <div className={`text-3xl font-bold ${
+                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
+                }`}>
+                  {formatCurrency(data.savingsGoal.current)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  de {formatCurrency(data.savingsGoal.goal)} meta
+                </div>
+                <div className="mt-3">
+                  <Progress
+                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
+                    className={`h-3 ${
+                      data.savingsGoal.isAchieved
+                        ? "[&>div]:bg-green-500"
+                        : "[&>div]:bg-blue-500"
+                    }`}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {data.savingsGoal.percentage !== null
+                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
+                    : "0% da meta"}
+                </div>
+              </div>
+              <Link href="/settings">
+                <Button variant="outline" size="sm">
+                  <Target className="mr-2 h-4 w-4" />
+                  Editar Meta
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts */}
       <div className="grid gap-6 md:grid-cols-2">

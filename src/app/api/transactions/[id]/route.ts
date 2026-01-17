@@ -39,7 +39,14 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { description, amount, date, type, origin, categoryId, isFixed } = body;
+    const { description, amount, date, type, origin, categoryId, isFixed, tags } = body;
+
+    // Process tags - accept array or string, store as JSON string
+    const processedTags = tags
+      ? Array.isArray(tags)
+        ? JSON.stringify(tags)
+        : tags
+      : null;
 
     const transaction = await prisma.transaction.update({
       where: { id },
@@ -51,6 +58,7 @@ export async function PUT(
         origin,
         categoryId: categoryId || null,
         isFixed: isFixed || false,
+        tags: processedTags,
       },
       include: {
         category: true,

@@ -42,14 +42,17 @@ export function TransactionForm({
       ? new Date(transaction.date).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0]
   );
-  const [type, setType] = useState<"INCOME" | "EXPENSE">(
-    transaction?.type as "INCOME" | "EXPENSE" || "EXPENSE"
+  const [type, setType] = useState<"INCOME" | "EXPENSE" | "TRANSFER">(
+    transaction?.type as "INCOME" | "EXPENSE" | "TRANSFER" || "EXPENSE"
   );
   const [origin, setOrigin] = useState(transaction?.origin || "");
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || "");
   const [isFixed, setIsFixed] = useState(transaction?.isFixed || false);
   const [isInstallment, setIsInstallment] = useState(false);
   const [totalInstallments, setTotalInstallments] = useState("2");
+  const [tagsInput, setTagsInput] = useState(
+    transaction?.tags ? JSON.parse(transaction.tags).join(", ") : ""
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,6 +68,12 @@ export function TransactionForm({
 
     setLoading(true);
 
+    // Process tags - split by comma and trim
+    const tagsArray = tagsInput
+      .split(",")
+      .map((t: string) => t.trim())
+      .filter((t: string) => t.length > 0);
+
     try {
       const payload = {
         description,
@@ -77,6 +86,7 @@ export function TransactionForm({
         isInstallment: isInstallment && !transaction,
         totalInstallments: isInstallment ? parseInt(totalInstallments) : undefined,
         installmentAmount: isInstallment ? parseFloat(amount) : undefined,
+        tags: tagsArray.length > 0 ? tagsArray : null,
       };
 
       const url = transaction
@@ -116,7 +126,7 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-2">
         <div
           className={`cursor-pointer rounded-lg border-2 p-3 text-center transition-colors ${
             type === "EXPENSE"
@@ -136,6 +146,16 @@ export function TransactionForm({
           onClick={() => setType("INCOME")}
         >
           Receita
+        </div>
+        <div
+          className={`cursor-pointer rounded-lg border-2 p-3 text-center transition-colors ${
+            type === "TRANSFER"
+              ? "border-gray-500 bg-gray-100 text-gray-700"
+              : "border-gray-200 hover:border-gray-300"
+          }`}
+          onClick={() => setType("TRANSFER")}
+        >
+          Transferencia
         </div>
       </div>
 
@@ -210,6 +230,19 @@ export function TransactionForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div>
+        <Label htmlFor="tags">Tags (opcional)</Label>
+        <Input
+          id="tags"
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="Ex: trabalho, viagem, reuniao"
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Separe as tags por virgula
+        </p>
       </div>
 
       <div className="flex items-center justify-between">

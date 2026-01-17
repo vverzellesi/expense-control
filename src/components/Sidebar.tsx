@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import {
   BarChart3,
   Settings,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 
 const navigation = [
@@ -26,6 +28,27 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchAlerts() {
+      try {
+        const now = new Date();
+        const res = await fetch(
+          `/api/summary?month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+        );
+        const data = await res.json();
+        setAlertCount(data.budgetAlerts?.length || 0);
+      } catch (error) {
+        console.error("Error fetching alerts:", error);
+      }
+    }
+
+    fetchAlerts();
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-white">
@@ -37,6 +60,8 @@ export function Sidebar() {
           const isActive =
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
+          const showAlertBadge = item.href === "/" && alertCount > 0;
+
           return (
             <Link
               key={item.name}
@@ -49,7 +74,12 @@ export function Sidebar() {
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.name}
+              <span className="flex-1">{item.name}</span>
+              {showAlertBadge && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white">
+                  {alertCount}
+                </span>
+              )}
             </Link>
           );
         })}
