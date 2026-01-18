@@ -31,6 +31,7 @@ export interface RecurringExpense {
   categoryId: string | null;
   category?: Category | null;
   isActive: boolean;
+  autoGenerate: boolean; // false = aguarda importacao e vincula
   transactions?: Transaction[];
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -121,4 +122,52 @@ export interface StatementParseResult {
   bank: string;
   transactions: StatementTransaction[];
   averageConfidence: number;
+}
+
+// Projection Types
+export interface ProjectionInstallmentItem {
+  description: string;
+  amount: number;
+  currentInstallment: number;
+  totalInstallments: number;
+}
+
+export interface ProjectionRecurringItem {
+  description: string;
+  amount: number;
+  type: TransactionType;
+}
+
+export interface MonthProjection {
+  month: number;
+  year: number;
+  monthLabel: string; // "fev/26"
+
+  // Parcelas (do DB)
+  installmentsTotal: number;
+  installmentsCount: number;
+  installments: ProjectionInstallmentItem[];
+
+  // Recorrentes projetados
+  recurringExpenses: number;
+  recurringIncome: number;
+  recurringItems: ProjectionRecurringItem[];
+
+  // Totais
+  totalExpenses: number;
+  totalIncome: number;
+  projectedBalance: number;
+  isNegative: boolean;
+}
+
+export interface ProjectionTotals {
+  totalInstallments: number;
+  totalRecurringExpenses: number;
+  totalRecurringIncome: number;
+  netProjectedBalance: number;
+}
+
+export interface ProjectionResponse {
+  months: MonthProjection[];
+  totals: ProjectionTotals;
 }

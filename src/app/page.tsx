@@ -59,6 +59,7 @@ interface SummaryData {
     expense: number;
   }[];
   budgetAlerts: BudgetAlert[];
+  allBudgets: BudgetAlert[];
   fixedExpenses: (Transaction & { category: Category | null })[];
   upcomingInstallments: (Transaction & { category: Category | null })[];
 }
@@ -249,62 +250,62 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Savings Goal Card */}
-      {data?.savingsGoal && (
-        <Card className={`border-2 ${
-          data.savingsGoal.isAchieved
-            ? "border-green-200 bg-green-50"
-            : "border-blue-200 bg-blue-50"
-        }`}>
-          <CardHeader className="pb-3">
-            <CardTitle className={`flex items-center gap-2 text-lg ${
-              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
-            }`}>
-              <PiggyBank className="h-5 w-5" />
-              Meta de Economia
-              {data.savingsGoal.isAchieved && (
-                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
-                  Atingida!
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
-                <div className={`text-3xl font-bold ${
-                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
-                }`}>
-                  {formatCurrency(data.savingsGoal.current)}
-                </div>
-                <div className="mt-1 text-sm text-gray-600">
-                  de {formatCurrency(data.savingsGoal.goal)} meta
-                </div>
-                <div className="mt-3">
+      {/* Budget Progress Cards */}
+      {data?.allBudgets && data.allBudgets.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">Metas por Categoria</h2>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {data.allBudgets.map((budget) => (
+              <Card
+                key={budget.categoryId}
+                className={`${
+                  budget.isOver
+                    ? "border-red-200 bg-red-50"
+                    : budget.percentage >= 80
+                    ? "border-orange-200 bg-orange-50"
+                    : "border-gray-200"
+                }`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: budget.categoryColor }}
+                    />
+                    <span className="text-sm font-medium truncate">{budget.categoryName}</span>
+                  </div>
                   <Progress
-                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
-                    className={`h-3 ${
-                      data.savingsGoal.isAchieved
-                        ? "[&>div]:bg-green-500"
+                    value={Math.min(budget.percentage, 100)}
+                    className={`h-2 ${
+                      budget.isOver
+                        ? "[&>div]:bg-red-500"
+                        : budget.percentage >= 80
+                        ? "[&>div]:bg-orange-500"
                         : "[&>div]:bg-blue-500"
                     }`}
                   />
-                </div>
-                <div className="mt-1 text-xs text-gray-500">
-                  {data.savingsGoal.percentage !== null
-                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
-                    : "0% da meta"}
-                </div>
-              </div>
-              <Link href="/settings">
-                <Button variant="outline" size="sm">
-                  <Target className="mr-2 h-4 w-4" />
-                  Editar Meta
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="mt-2 flex justify-between text-xs">
+                    <span className={budget.isOver ? "text-red-600 font-medium" : "text-gray-600"}>
+                      {formatCurrency(budget.spent)}
+                    </span>
+                    <span className="text-gray-500">
+                      {formatCurrency(budget.budgetAmount)}
+                    </span>
+                  </div>
+                  <div className={`text-xs mt-1 ${
+                    budget.isOver
+                      ? "text-red-600"
+                      : budget.percentage >= 80
+                      ? "text-orange-600"
+                      : "text-gray-500"
+                  }`}>
+                    {budget.percentage.toFixed(0)}% utilizado
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Charts */}
@@ -414,6 +415,64 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Savings Goal Card */}
+      {data?.savingsGoal && (
+        <Card className={`border-2 ${
+          data.savingsGoal.isAchieved
+            ? "border-green-200 bg-green-50"
+            : "border-blue-200 bg-blue-50"
+        }`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${
+              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
+            }`}>
+              <PiggyBank className="h-5 w-5" />
+              Meta de Economia
+              {data.savingsGoal.isAchieved && (
+                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
+                  Atingida!
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <div className={`text-3xl font-bold ${
+                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
+                }`}>
+                  {formatCurrency(data.savingsGoal.current)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  de {formatCurrency(data.savingsGoal.goal)} meta
+                </div>
+                <div className="mt-3">
+                  <Progress
+                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
+                    className={`h-3 ${
+                      data.savingsGoal.isAchieved
+                        ? "[&>div]:bg-green-500"
+                        : "[&>div]:bg-blue-500"
+                    }`}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {data.savingsGoal.percentage !== null
+                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
+                    : "0% da meta"}
+                </div>
+              </div>
+              <Link href="/settings">
+                <Button variant="outline" size="sm">
+                  <Target className="mr-2 h-4 w-4" />
+                  Editar Meta
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

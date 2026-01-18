@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
+// Normalize text for matching (lowercase, remove accents)
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+// Check if transaction description matches recurring expense keywords
+function matchesRecurring(
+  transactionDesc: string,
+  recurringDesc: string
+): boolean {
+  const normalizedTransaction = normalizeText(transactionDesc);
+  const normalizedRecurring = normalizeText(recurringDesc);
+
+  // Split recurring description into keywords
+  const keywords = normalizedRecurring.split(/\s+/).filter((k) => k.length > 2);
+
+  // Check if any keyword is contained in the transaction description
+  return keywords.some((keyword) => normalizedTransaction.includes(keyword));
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -13,7 +37,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch recurring expenses that await import linking
+    const recurringToMatch = await prisma.recurringExpense.findMany({
+      where: {
+        autoGenerate: false,
+        isActive: true,
+      },
+      include: {
+        transactions: {
+          select: { id: true, date: true },
+        },
+      },
+    });
+
     const created = [];
+    let linkedCount = 0;
 
     for (const t of transactions) {
       // Determine type and amount sign
@@ -27,27 +65,81 @@ export async function POST(request: NextRequest) {
         amount = Math.abs(amount);
       }
 
+      const transactionDate = new Date(t.date);
+      const transactionMonth = transactionDate.getMonth();
+      const transactionYear = transactionDate.getFullYear();
+      const transactionOrigin = origin || t.origin || "Importacao CSV";
+
+      // Try to match with a recurring expense
+      let matchedRecurringId: string | null = null;
+
+      const matches = recurringToMatch.filter((recurring) => {
+        // Check origin match
+        if (recurring.origin !== transactionOrigin) {
+          return false;
+        }
+
+        // Check category match (if recurring has category defined)
+        if (recurring.categoryId && t.categoryId && recurring.categoryId !== t.categoryId) {
+          return false;
+        }
+
+        // Check description match
+        if (!matchesRecurring(t.description, recurring.description)) {
+          return false;
+        }
+
+        // Check if already has transaction for this month
+        const hasThisMonth = recurring.transactions.some((existingTx) => {
+          const existingDate = new Date(existingTx.date);
+          return (
+            existingDate.getMonth() === transactionMonth &&
+            existingDate.getFullYear() === transactionYear
+          );
+        });
+
+        if (hasThisMonth) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Only link if we have exactly one match (conservative)
+      if (matches.length === 1) {
+        matchedRecurringId = matches[0].id;
+        // Add to existing transactions to prevent double matching in same import
+        matches[0].transactions.push({ id: "temp", date: transactionDate });
+        linkedCount++;
+      }
+
       const transaction = await prisma.transaction.create({
         data: {
           description: t.description,
           amount,
-          date: new Date(t.date),
+          date: transactionDate,
           type,
-          origin: origin || t.origin || "Importacao CSV",
+          origin: transactionOrigin,
           categoryId: t.categoryId || null,
-          isFixed: false,
+          isFixed: matchedRecurringId !== null,
           isInstallment: t.isInstallment || false,
           currentInstallment: t.currentInstallment || null,
+          recurringExpenseId: matchedRecurringId,
         },
         include: {
           category: true,
+          recurringExpense: true,
         },
       });
       created.push(transaction);
     }
 
+    const message = linkedCount > 0
+      ? `${created.length} transacoes importadas (${linkedCount} vinculadas a recorrentes)`
+      : `${created.length} transacoes importadas com sucesso`;
+
     return NextResponse.json(
-      { message: `${created.length} transacoes importadas com sucesso`, count: created.length },
+      { message, count: created.length, linkedCount },
       { status: 201 }
     );
   } catch (error) {

@@ -27,7 +27,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { description, defaultAmount, dayOfMonth, type, origin, categoryId } = body;
+    const { description, defaultAmount, dayOfMonth, type, origin, categoryId, autoGenerate } = body;
 
     if (!description || defaultAmount === undefined || !dayOfMonth || !type || !origin) {
       return NextResponse.json(
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
         origin,
         categoryId: categoryId || null,
         isActive: true,
+        autoGenerate: autoGenerate ?? true,
       },
       include: {
         category: true,

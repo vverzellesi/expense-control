@@ -38,6 +38,7 @@ model RecurringExpense {
   categoryId   String?
   category     Category?     @relation(fields: [categoryId], references: [id])
   isActive     Boolean       @default(true)
+  autoGenerate Boolean       @default(true) // false = aguarda importacao e vincula
   transactions Transaction[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

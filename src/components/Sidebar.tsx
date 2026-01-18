@@ -14,6 +14,7 @@ import {
   Settings,
   RefreshCw,
   AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 
 const navigation = [
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Transações", href: "/transactions", icon: Receipt },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },
   { name: "Parcelas", href: "/installments", icon: CreditCard },
+  { name: "Projecao", href: "/projection", icon: TrendingUp },
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Categorias", href: "/categories", icon: Tags },
   { name: "Relatórios", href: "/reports", icon: BarChart3 },

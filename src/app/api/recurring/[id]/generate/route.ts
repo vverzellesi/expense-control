@@ -28,6 +28,14 @@ export async function POST(
       );
     }
 
+    // Check if this recurring expense should be auto-generated
+    if (!recurringExpense.autoGenerate) {
+      return NextResponse.json(
+        { error: "Esta despesa aguarda vinculacao via importacao de fatura. Desative 'Gerar automaticamente' se quiser gerar manualmente." },
+        { status: 400 }
+      );
+    }
+
     // Check if transaction already exists for this month
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0);

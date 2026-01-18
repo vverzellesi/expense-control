@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, Trash2, RefreshCw, Calendar, Check, Lightbulb, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw, Calendar, Check, Lightbulb, Sparkles, CreditCard } from "lucide-react";
 import type { Category, Origin, RecurringExpense, Transaction } from "@/types";
 
 interface RecurringSuggestion {
@@ -72,6 +72,7 @@ export default function RecurringPage() {
   const [type, setType] = useState<"INCOME" | "EXPENSE">("EXPENSE");
   const [origin, setOrigin] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [autoGenerate, setAutoGenerate] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
 
   const currentDate = new Date();
@@ -90,6 +91,7 @@ export default function RecurringPage() {
       setType(editingExpense.type as "INCOME" | "EXPENSE");
       setOrigin(editingExpense.origin);
       setCategoryId(editingExpense.categoryId || "");
+      setAutoGenerate(editingExpense.autoGenerate ?? true);
     } else {
       resetForm();
     }
@@ -102,6 +104,7 @@ export default function RecurringPage() {
     setType("EXPENSE");
     setOrigin("");
     setCategoryId("");
+    setAutoGenerate(true);
   }
 
   async function fetchData() {
@@ -161,6 +164,7 @@ export default function RecurringPage() {
           type,
           origin,
           categoryId: categoryId || null,
+          autoGenerate,
         }),
       });
 
@@ -447,6 +451,19 @@ export default function RecurringPage() {
                 </Select>
               </div>
 
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label className="text-base">Gerar automaticamente</Label>
+                  <p className="text-sm text-gray-500">
+                    Desative para despesas que vem na fatura do cartao
+                  </p>
+                </div>
+                <Switch
+                  checked={autoGenerate}
+                  onCheckedChange={setAutoGenerate}
+                />
+              </div>
+
               <div className="flex gap-2 pt-4">
                 <Button
                   type="button"
@@ -467,57 +484,6 @@ export default function RecurringPage() {
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* Suggestions Section */}
-      {suggestions.length > 0 && (
-        <Card className="border-purple-200 bg-purple-50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-purple-800">
-              <Lightbulb className="h-5 w-5" />
-              Sugestoes de Despesas Recorrentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-purple-700">
-              Detectamos padroes de gastos que podem ser recorrentes. Clique para adicionar.
-            </p>
-            <div className="space-y-2">
-              {suggestions.map((suggestion) => (
-                <div
-                  key={suggestion.normalizedDescription}
-                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
-                >
-                  <div>
-                    <div className="font-medium">{suggestion.description}</div>
-                    <div className="text-sm text-gray-500">
-                      {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth} - {suggestion.origin}
-                      {suggestion.categoryName && ` - ${suggestion.categoryName}`}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="font-semibold text-red-600">
-                        ~{formatCurrency(suggestion.avgAmount)}
-                      </div>
-                      <div className="text-xs text-gray-500">media</div>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => createFromSuggestion(suggestion)}
-                      disabled={creatingSuggestion === suggestion.normalizedDescription}
-                    >
-                      <Sparkles className="mr-1 h-4 w-4" />
-                      {creatingSuggestion === suggestion.normalizedDescription
-                        ? "Criando..."
-                        : "Adicionar"}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Generate for current month */}
       <Card>
@@ -566,7 +532,12 @@ export default function RecurringPage() {
                     {hasThisMonth ? (
                       <Badge className="bg-green-500">
                         <Check className="mr-1 h-3 w-3" />
-                        Gerado
+                        {expense.autoGenerate ? "Gerado" : "Vinculado"}
+                      </Badge>
+                    ) : !expense.autoGenerate ? (
+                      <Badge variant="outline" className="text-gray-500">
+                        <CreditCard className="mr-1 h-3 w-3" />
+                        Aguardando fatura
                       </Badge>
                     ) : generatingId === expense.id ? (
                       <div className="flex items-center gap-2">
@@ -647,6 +618,12 @@ export default function RecurringPage() {
                   </div>
 
                   <div className="flex items-center gap-4">
+                    {!expense.autoGenerate && (
+                      <Badge variant="outline" className="text-xs">
+                        <CreditCard className="mr-1 h-3 w-3" />
+                        Via fatura
+                      </Badge>
+                    )}
                     <div className="text-right">
                       <div
                         className={`font-semibold ${
@@ -691,6 +668,57 @@ export default function RecurringPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Suggestions Section */}
+      {suggestions.length > 0 && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-purple-800">
+              <Lightbulb className="h-5 w-5" />
+              Sugestoes de Despesas Recorrentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-purple-700">
+              Detectamos padroes de gastos que podem ser recorrentes. Clique para adicionar.
+            </p>
+            <div className="space-y-2">
+              {suggestions.map((suggestion) => (
+                <div
+                  key={suggestion.normalizedDescription}
+                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div>
+                    <div className="font-medium">{suggestion.description}</div>
+                    <div className="text-sm text-gray-500">
+                      {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth} - {suggestion.origin}
+                      {suggestion.categoryName && ` - ${suggestion.categoryName}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-semibold text-red-600">
+                        ~{formatCurrency(suggestion.avgAmount)}
+                      </div>
+                      <div className="text-xs text-gray-500">media</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => createFromSuggestion(suggestion)}
+                      disabled={creatingSuggestion === suggestion.normalizedDescription}
+                    >
+                      <Sparkles className="mr-1 h-4 w-4" />
+                      {creatingSuggestion === suggestion.normalizedDescription
+                        ? "Criando..."
+                        : "Adicionar"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>

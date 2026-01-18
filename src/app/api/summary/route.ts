@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
       include: { category: true },
     });
 
-    const budgetAlerts = budgets
+    const allBudgets = budgets
       .map((budget) => {
         const spent = categoryTotals[budget.categoryId]?.total || 0;
         const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
@@ -159,8 +159,9 @@ export async function GET(request: NextRequest) {
           isOver: spent > budget.amount,
         };
       })
-      .filter((alert) => alert.percentage >= 80)
       .sort((a, b) => b.percentage - a.percentage);
+
+    const budgetAlerts = allBudgets.filter((budget) => budget.percentage >= 80);
 
     // Get fixed expenses
     const fixedExpenses = await prisma.transaction.findMany({
@@ -220,6 +221,7 @@ export async function GET(request: NextRequest) {
       categoryBreakdown,
       monthlyData,
       budgetAlerts,
+      allBudgets,
       fixedExpenses,
       upcomingInstallments,
     });

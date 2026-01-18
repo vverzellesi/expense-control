@@ -42,7 +42,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { description, defaultAmount, dayOfMonth, type, origin, categoryId, isActive } = body;
+    const { description, defaultAmount, dayOfMonth, type, origin, categoryId, isActive, autoGenerate } = body;
 
     const recurringExpense = await prisma.recurringExpense.update({
       where: { id },
@@ -54,6 +54,7 @@ export async function PUT(
         origin,
         categoryId: categoryId || null,
         isActive: isActive ?? true,
+        autoGenerate: autoGenerate ?? true,
       },
       include: {
         category: true,
