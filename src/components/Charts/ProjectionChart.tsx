@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  LabelList,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 import type { MonthProjection } from "@/types";
@@ -25,6 +26,13 @@ export function ProjectionChart({ data }: Props) {
     expense: m.totalExpenses,
     balance: m.projectedBalance,
   }));
+
+  const formatCompact = (value: number) =>
+    new Intl.NumberFormat("pt-BR", {
+      notation: "compact",
+      compactDisplay: "short",
+      maximumFractionDigits: 1,
+    }).format(value);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -70,13 +78,43 @@ export function ProjectionChart({ data }: Props) {
           name="income"
           fill="#22c55e"
           radius={[4, 4, 0, 0]}
-        />
+        >
+          <LabelList
+            dataKey="income"
+            position="top"
+            formatter={formatCompact}
+            fontSize={10}
+            fill="#16a34a"
+          />
+        </Bar>
         <Bar
           dataKey="expense"
           name="expense"
           fill="#ef4444"
           radius={[4, 4, 0, 0]}
-        />
+        >
+          <LabelList
+            dataKey="expense"
+            position="top"
+            formatter={formatCompact}
+            fontSize={10}
+            fill="#dc2626"
+          />
+        </Bar>
+        <Bar
+          dataKey="balance"
+          name="balance"
+          fill="#3b82f6"
+          radius={[4, 4, 0, 0]}
+        >
+          <LabelList
+            dataKey="balance"
+            position="top"
+            formatter={formatCompact}
+            fontSize={10}
+            fill="#2563eb"
+          />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

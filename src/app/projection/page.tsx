@@ -116,16 +116,17 @@ export default function ProjectionPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total de Parcelas
+              Parcelas
             </CardTitle>
             <CreditCard className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(data?.totals.totalInstallments || 0)}
+              {formatCurrency((data?.totals.totalInstallments || 0) / months)}
+              <span className="text-sm font-normal text-gray-500">/mês (média)</span>
             </div>
             <p className="text-xs text-gray-500">
-              {totalInstallmentsCount} parcela{totalInstallmentsCount !== 1 ? "s" : ""}
+              Total: {formatCurrency(data?.totals.totalInstallments || 0)} ({totalInstallmentsCount} parcela{totalInstallmentsCount !== 1 ? "s" : ""})
             </p>
           </CardContent>
         </Card>
@@ -139,10 +140,11 @@ export default function ProjectionPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(data?.totals.totalRecurringExpenses || 0)}
+              {formatCurrency((data?.totals.totalRecurringExpenses || 0) / months)}
+              <span className="text-sm font-normal text-gray-500">/mês (média)</span>
             </div>
             <p className="text-xs text-gray-500">
-              {recurringCount} item{recurringCount !== 1 ? "s" : ""}/mes
+              Total: {formatCurrency(data?.totals.totalRecurringExpenses || 0)} ({recurringCount} item{recurringCount !== 1 ? "s" : ""})
             </p>
           </CardContent>
         </Card>
@@ -175,10 +177,11 @@ export default function ProjectionPage() {
                   : "text-red-600"
               )}
             >
-              {formatCurrency(data?.totals.netProjectedBalance || 0)}
+              {formatCurrency((data?.totals.netProjectedBalance || 0) / months)}
+              <span className="text-sm font-normal text-gray-500">/mês (média)</span>
             </div>
             <p className="text-xs text-gray-500">
-              Total em {months} meses
+              Total em {months} meses: {formatCurrency(data?.totals.netProjectedBalance || 0)}
             </p>
           </CardContent>
         </Card>
