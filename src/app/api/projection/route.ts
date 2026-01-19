@@ -32,10 +32,11 @@ export async function GET(request: NextRequest) {
     const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1 + numMonths, 0);
 
-    // Fetch future installment transactions
+    // Fetch future installment transactions (from grouped installments)
     const futureInstallments = await prisma.transaction.findMany({
       where: {
         isInstallment: true,
+        installmentId: { not: null }, // Only grouped installments
         date: {
           gte: startOfNextMonth,
           lte: endDate,
@@ -45,6 +46,50 @@ export async function GET(request: NextRequest) {
         installment: true,
       },
       orderBy: { date: "asc" },
+    });
+
+    // Fetch standalone installments (manually marked, without group)
+    // These need to have their future installments projected
+    const standaloneInstallments = await prisma.transaction.findMany({
+      where: {
+        isInstallment: true,
+        installmentId: null,
+        totalInstallments: { not: null },
+        currentInstallment: { not: null },
+      },
+    });
+
+    // Project future installments from standalone transactions
+    interface ProjectedInstallment {
+      description: string;
+      amount: number;
+      date: Date;
+      currentInstallment: number;
+      totalInstallments: number;
+    }
+
+    const projectedStandaloneInstallments: ProjectedInstallment[] = [];
+    standaloneInstallments.forEach((t) => {
+      if (!t.currentInstallment || !t.totalInstallments) return;
+
+      const remainingInstallments = t.totalInstallments - t.currentInstallment;
+      const transactionDate = new Date(t.date);
+
+      for (let i = 1; i <= remainingInstallments; i++) {
+        const futureDate = new Date(transactionDate);
+        futureDate.setMonth(transactionDate.getMonth() + i);
+
+        // Only include if within projection range
+        if (futureDate >= startOfNextMonth && futureDate <= endDate) {
+          projectedStandaloneInstallments.push({
+            description: t.description,
+            amount: Math.abs(t.amount),
+            date: futureDate,
+            currentInstallment: t.currentInstallment + i,
+            totalInstallments: t.totalInstallments,
+          });
+        }
+      }
     });
 
     // Fetch active recurring expenses/incomes
@@ -82,25 +127,42 @@ export async function GET(request: NextRequest) {
 
     for (let i = 0; i < numMonths; i++) {
       const projMonth = now.getMonth() + 1 + i;
-      const projYear = now.getFullYear() + Math.floor(projMonth / 12);
+      const projYear = now.getFullYear() + Math.floor((projMonth - 1) / 12);
       const normalizedMonth = ((projMonth - 1) % 12) + 1;
 
       const monthLabel = `${MONTH_LABELS[normalizedMonth - 1]}/${String(projYear).slice(-2)}`;
 
-      // Get installments for this month
+      // Get grouped installments for this month
       const monthInstallments = futureInstallments.filter((t) => {
         const tDate = new Date(t.date);
         return tDate.getMonth() + 1 === normalizedMonth && tDate.getFullYear() === projYear;
       });
 
-      const installmentItems: ProjectionInstallmentItem[] = monthInstallments.map((t) => ({
-        description: t.description,
-        amount: Math.abs(t.amount),
-        currentInstallment: t.currentInstallment || 1,
-        totalInstallments: t.installment?.totalInstallments || 1,
-      }));
+      // Get projected standalone installments for this month
+      const monthStandaloneInstallments = projectedStandaloneInstallments.filter((t) => {
+        return t.date.getMonth() + 1 === normalizedMonth && t.date.getFullYear() === projYear;
+      });
 
-      const installmentsTotal = monthInstallments.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const installmentItems: ProjectionInstallmentItem[] = [
+        // From grouped installments
+        ...monthInstallments.map((t) => ({
+          description: t.description,
+          amount: Math.abs(t.amount),
+          currentInstallment: t.currentInstallment || 1,
+          totalInstallments: t.installment?.totalInstallments || 1,
+        })),
+        // From projected standalone installments
+        ...monthStandaloneInstallments.map((t) => ({
+          description: t.description,
+          amount: t.amount,
+          currentInstallment: t.currentInstallment,
+          totalInstallments: t.totalInstallments,
+        })),
+      ];
+
+      const installmentsTotal =
+        monthInstallments.reduce((sum, t) => sum + Math.abs(t.amount), 0) +
+        monthStandaloneInstallments.reduce((sum, t) => sum + t.amount, 0);
       totalInstallmentsSum += installmentsTotal;
 
       // Calculate recurring for this month (using effective amount from latest transaction)
@@ -130,7 +192,7 @@ export async function GET(request: NextRequest) {
         year: projYear,
         monthLabel,
         installmentsTotal,
-        installmentsCount: monthInstallments.length,
+        installmentsCount: monthInstallments.length + monthStandaloneInstallments.length,
         installments: installmentItems,
         recurringExpenses,
         recurringIncome,

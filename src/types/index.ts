@@ -1,5 +1,15 @@
 export type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 
+// Special transaction types for credit card statements
+export type SpecialTransactionType =
+  | "BILL_PAYMENT"      // Pagamento de fatura (credito)
+  | "FINANCING"         // Parcelamento de fatura
+  | "REFUND"            // Estorno
+  | "FEE"               // Tarifa, anuidade
+  | "IOF"               // IOF de transacao internacional
+  | "CURRENCY_SPREAD"   // Spread de cotacao
+  | null;
+
 export interface Transaction {
   id: string;
   description: string;
@@ -14,6 +24,7 @@ export interface Transaction {
   installmentId: string | null;
   installment?: Installment | null;
   currentInstallment: number | null;
+  totalInstallments: number | null;
   recurringExpenseId: string | null;
   recurringExpense?: RecurringExpense | null;
   tags: string | null;
@@ -104,6 +115,8 @@ export interface ImportedTransaction {
   confidence?: number;
   isRecurring?: boolean;
   recurringName?: string;
+  specialType?: SpecialTransactionType;
+  specialTypeWarning?: string; // Aviso para o usuario sobre transacoes especiais
 }
 
 // OCR Types
@@ -203,6 +216,17 @@ export interface WeeklySummary {
 }
 
 // End of Month Projection Types
+export interface ProjectionBreakdown {
+  fixedExpensesPaid: number;
+  pendingRecurringExpenses: number;
+  variableExpenses: number;
+  projectedVariableExpenses: number;
+  fixedIncomePaid: number;
+  pendingRecurringIncome: number;
+  variableIncome: number;
+  projectedVariableIncome: number;
+}
+
 export interface EndOfMonthProjection {
   currentDay: number;
   totalDays: number;
@@ -213,6 +237,7 @@ export interface EndOfMonthProjection {
   projectedIncome: number;
   projectedBalance: number;
   isProjectionNegative: boolean;
+  breakdown?: ProjectionBreakdown;
 }
 
 // Unusual Transaction Types
@@ -226,4 +251,27 @@ export interface UnusualTransaction {
   categoryColor: string | null;
   categoryAverage: number;
   exceedsBy: number; // Percentage above average
+}
+
+// Weekly Breakdown Types (gastos por semana do mês)
+export interface WeekData {
+  weekNumber: number; // 1, 2, 3, 4, 5
+  startDate: string;
+  endDate: string;
+  total: number;
+  count: number;
+  dailyAverage: number;
+  categories: {
+    categoryId: string;
+    categoryName: string;
+    categoryColor: string;
+    total: number;
+  }[];
+}
+
+export interface WeeklyBreakdown {
+  weeks: WeekData[];
+  highestWeek: number; // semana com mais gastos
+  lowestWeek: number; // semana com menos gastos
+  averagePerWeek: number;
 }

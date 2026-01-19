@@ -5,8 +5,15 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const active = searchParams.get("active");
+    const origin = searchParams.get("origin");
+
+    const where: Record<string, unknown> = {};
+    if (origin) {
+      where.origin = origin;
+    }
 
     const installments = await prisma.installment.findMany({
+      where,
       include: {
         transactions: {
           include: {

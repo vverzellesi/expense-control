@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
           isFixed: matchedRecurringId !== null,
           isInstallment: t.isInstallment || false,
           currentInstallment: t.currentInstallment || null,
+          totalInstallments: t.totalInstallments || null,
           recurringExpenseId: matchedRecurringId,
         },
         include: {

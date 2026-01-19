@@ -39,7 +39,19 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { description, amount, date, type, origin, categoryId, isFixed, tags } = body;
+    const {
+      description,
+      amount,
+      date,
+      type,
+      origin,
+      categoryId,
+      isFixed,
+      tags,
+      isInstallment,
+      currentInstallment,
+      totalInstallments,
+    } = body;
 
     // Process tags - accept array or string, store as JSON string
     const processedTags = tags
@@ -59,6 +71,9 @@ export async function PUT(
         categoryId: categoryId || null,
         isFixed: isFixed || false,
         tags: processedTags,
+        isInstallment: isInstallment || false,
+        currentInstallment: isInstallment ? currentInstallment : null,
+        totalInstallments: isInstallment ? totalInstallments : null,
       },
       include: {
         category: true,

@@ -35,11 +35,13 @@ import { Badge } from "@/components/ui/badge";
 import { TransactionForm } from "@/components/TransactionForm";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Plus, Pencil, Trash2, Filter, Search, X, Tag } from "lucide-react";
+import { Plus, Pencil, Trash2, Filter, Search, X, Tag, Repeat } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import type { Transaction, Category, Origin } from "@/types";
 
 function TransactionsContent() {
   const searchParams = useSearchParams();
+  const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [origins, setOrigins] = useState<Origin[]>([]);
@@ -47,6 +49,8 @@ function TransactionsContent() {
   const [isFormOpen, setIsFormOpen] = useState(searchParams.get("new") === "true");
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [makingRecurring, setMakingRecurring] = useState<Transaction | null>(null);
+  const [recurringLoading, setRecurringLoading] = useState(false);
 
   // Filters
   const currentDate = new Date();
@@ -58,6 +62,7 @@ function TransactionsContent() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterFixed, setFilterFixed] = useState(false);
   const [filterInstallment, setFilterInstallment] = useState(false);
+  const [filterOrigin, setFilterOrigin] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -66,7 +71,7 @@ function TransactionsContent() {
 
   useEffect(() => {
     fetchData();
-  }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, searchQuery, filterTag]);
+  }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag]);
 
   useEffect(() => {
     fetchCategories();
@@ -83,6 +88,7 @@ function TransactionsContent() {
       if (filterType && filterType !== "all") params.set("type", filterType);
       if (filterFixed) params.set("isFixed", "true");
       if (filterInstallment) params.set("isInstallment", "true");
+      if (filterOrigin && filterOrigin !== "all") params.set("origin", filterOrigin);
       if (searchQuery) params.set("search", searchQuery);
       if (filterTag) params.set("tag", filterTag);
 
@@ -142,6 +148,43 @@ function TransactionsContent() {
     fetchData();
   }
 
+  async function handleMakeRecurring() {
+    if (!makingRecurring) return;
+
+    try {
+      setRecurringLoading(true);
+      const transactionDate = new Date(makingRecurring.date);
+      const dayOfMonth = transactionDate.getDate();
+
+      const res = await fetch(`/api/transactions/${makingRecurring.id}/make-recurring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayOfMonth, autoGenerate: true }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Erro ao criar despesa recorrente");
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Despesa recorrente criada com sucesso",
+      });
+
+      setMakingRecurring(null);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao criar despesa recorrente",
+        variant: "destructive",
+      });
+    } finally {
+      setRecurringLoading(false);
+    }
+  }
+
   function handleDateRangeChange(startDate: string, endDate: string) {
     setFilterStartDate(startDate);
     setFilterEndDate(endDate);
@@ -156,6 +199,51 @@ function TransactionsContent() {
     setSearchInput("");
     setSearchQuery("");
   }
+
+  // Group transactions by date range
+  function groupTransactionsByDateRange(txs: Transaction[]) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - today.getDay());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    const groups: { label: string; transactions: Transaction[] }[] = [
+      { label: "Hoje", transactions: [] },
+      { label: "Ontem", transactions: [] },
+      { label: "Esta semana", transactions: [] },
+      { label: "Este mês", transactions: [] },
+      { label: "Mês passado", transactions: [] },
+      { label: "Anteriores", transactions: [] },
+    ];
+
+    txs.forEach((t) => {
+      const date = new Date(t.date);
+      const txDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+      if (txDate.getTime() === today.getTime()) {
+        groups[0].transactions.push(t);
+      } else if (txDate.getTime() === yesterday.getTime()) {
+        groups[1].transactions.push(t);
+      } else if (txDate >= weekStart && txDate < yesterday) {
+        groups[2].transactions.push(t);
+      } else if (txDate >= monthStart && txDate < weekStart) {
+        groups[3].transactions.push(t);
+      } else if (txDate >= lastMonthStart && txDate <= lastMonthEnd) {
+        groups[4].transactions.push(t);
+      } else {
+        groups[5].transactions.push(t);
+      }
+    });
+
+    return groups.filter((g) => g.transactions.length > 0);
+  }
+
+  const groupedTransactions = groupTransactionsByDateRange(transactions);
 
   return (
     <div className="space-y-6">
@@ -260,6 +348,23 @@ function TransactionsContent() {
                 </Select>
               </div>
 
+              <div>
+                <Label>Origem</Label>
+                <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {origins.map((o) => (
+                      <SelectItem key={o.id} value={o.name}>
+                        {o.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-end gap-4">
                 <div className="flex items-center gap-2">
                   <Switch
@@ -324,6 +429,11 @@ function TransactionsContent() {
                 {filterTag}
               </Badge>
             )}
+            {filterOrigin && filterOrigin !== "all" && (
+              <Badge variant="secondary" className="font-normal">
+                Origem: {filterOrigin}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -334,98 +444,122 @@ function TransactionsContent() {
               Nenhuma transação encontrada
             </div>
           ) : (
-            <div className="space-y-2">
-              {transactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-4">
-                    {transaction.category && (
-                      <div
-                        className="h-4 w-4 rounded-full"
-                        style={{ backgroundColor: transaction.category.color }}
-                      />
-                    )}
-                    <div>
-                      <div className="font-medium">{transaction.description}</div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <span>{formatDate(transaction.date)}</span>
-                        <span>-</span>
-                        <span>{transaction.origin}</span>
-                        {transaction.category && (
-                          <>
-                            <span>-</span>
-                            <span>{transaction.category.name}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
+            <div className="space-y-6">
+              {groupedTransactions.map((group) => (
+                <div key={group.label}>
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                      {group.label}
+                    </h3>
+                    <span className="text-xs text-gray-400">
+                      ({group.transactions.length})
+                    </span>
                   </div>
+                  <div className="space-y-2">
+                    {group.transactions.map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          {transaction.category && (
+                            <div
+                              className="h-4 w-4 rounded-full"
+                              style={{ backgroundColor: transaction.category.color }}
+                            />
+                          )}
+                          <div>
+                            <div className="font-medium">{transaction.description}</div>
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <span>{formatDate(transaction.date)}</span>
+                              <span>-</span>
+                              <span>{transaction.origin}</span>
+                              {transaction.category && (
+                                <>
+                                  <span>-</span>
+                                  <span>{transaction.category.name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-wrap gap-1">
-                      {transaction.isFixed && (
-                        <Badge variant="secondary">Fixa</Badge>
-                      )}
-                      {transaction.isInstallment && (
-                        <Badge variant="outline">
-                          {transaction.currentInstallment}/
-                          {transaction.installment?.totalInstallments}
-                        </Badge>
-                      )}
-                      {transaction.tags && (() => {
-                        try {
-                          const tags = JSON.parse(transaction.tags);
-                          return tags.map((tag: string) => (
-                            <Badge
-                              key={tag}
-                              variant="outline"
-                              className="cursor-pointer bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                              onClick={() => setFilterTag(tag)}
+                        <div className="flex items-center gap-4">
+                          <div className="flex flex-wrap gap-1">
+                            {transaction.isFixed && (
+                              <Badge variant="secondary">Fixa</Badge>
+                            )}
+                            {transaction.isInstallment && (
+                              <Badge variant="outline">
+                                {transaction.currentInstallment}/
+                                {transaction.totalInstallments || transaction.installment?.totalInstallments}
+                              </Badge>
+                            )}
+                            {transaction.tags && (() => {
+                              try {
+                                const tags = JSON.parse(transaction.tags);
+                                return tags.map((tag: string) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="outline"
+                                    className="cursor-pointer bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                    onClick={() => setFilterTag(tag)}
+                                  >
+                                    <Tag className="mr-1 h-3 w-3" />
+                                    {tag}
+                                  </Badge>
+                                ));
+                              } catch {
+                                return null;
+                              }
+                            })()}
+                          </div>
+
+                          <div
+                            className={`min-w-[100px] text-right font-semibold ${
+                              transaction.type === "INCOME"
+                                ? "text-green-600"
+                                : transaction.type === "TRANSFER"
+                                ? "text-gray-400"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {transaction.type === "INCOME" ? "+" : ""}
+                            {formatCurrency(transaction.amount)}
+                          </div>
+
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingTransaction(transaction);
+                                setIsFormOpen(true);
+                              }}
                             >
-                              <Tag className="mr-1 h-3 w-3" />
-                              {tag}
-                            </Badge>
-                          ));
-                        } catch {
-                          return null;
-                        }
-                      })()}
-                    </div>
-
-                    <div
-                      className={`min-w-[100px] text-right font-semibold ${
-                        transaction.type === "INCOME"
-                          ? "text-green-600"
-                          : transaction.type === "TRANSFER"
-                          ? "text-gray-400"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {transaction.type === "INCOME" ? "+" : ""}
-                      {formatCurrency(transaction.amount)}
-                    </div>
-
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingTransaction(transaction);
-                          setIsFormOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeletingId(transaction.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {!transaction.recurringExpenseId && !transaction.isInstallment && !transaction.installmentId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setMakingRecurring(transaction)}
+                                title="Tornar recorrente"
+                              >
+                                <Repeat className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeletingId(transaction.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -448,6 +582,39 @@ function TransactionsContent() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600">
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Make Recurring Confirmation */}
+      <AlertDialog open={!!makingRecurring} onOpenChange={() => setMakingRecurring(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tornar recorrente</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Deseja criar uma despesa recorrente a partir desta transacao?
+                </p>
+                {makingRecurring && (
+                  <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                    <p><strong>Descricao:</strong> {makingRecurring.description}</p>
+                    <p><strong>Valor:</strong> {formatCurrency(Math.abs(makingRecurring.amount))}</p>
+                    <p><strong>Dia do mes:</strong> {new Date(makingRecurring.date).getDate()}</p>
+                    <p><strong>Origem:</strong> {makingRecurring.origin}</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">
+                  A transacao sera vinculada a nova despesa recorrente e marcada como fixa.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recurringLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleMakeRecurring} disabled={recurringLoading}>
+              {recurringLoading ? "Criando..." : "Criar recorrente"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

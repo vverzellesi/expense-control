@@ -158,11 +158,25 @@ export function detectInstallment(description: string): {
   currentInstallment?: number;
   totalInstallments?: number;
 } {
-  // Pattern: "3/10", "3 de 10", "PARC 3/10", "PARCELA 3 DE 10"
+  // Patterns for Brazilian credit card statements
+  // Examples:
+  // "EC *DEBORAEXCURSOES - Parcela 5/6"
+  // "MP *MOBYDICK - Parcela 4/5"
+  // "MERCADO*MULTIXIMPORTA - Parcela 4/12"
+  // "SALLES TENIS SQUASH L - Parcela 4/6"
+  // "RAIA DROGASIL SA - Parcela 2/3"
+
   const numberedPatterns = [
-    /(\d+)\s*\/\s*(\d+)/,
+    // "- Parcela X/Y" or "– Parcela X/Y" (most common in Brazilian card statements)
+    /[-–]\s*Parcela\s+(\d+)\s*[\/\\]\s*(\d+)/i,
+    // "Parcela X/Y" anywhere
+    /Parcela\s+(\d+)\s*[\/\\]\s*(\d+)/i,
+    // "PARC X/Y" or "PARC X DE Y"
+    /PARC(?:ELA)?\s*(\d+)\s*(?:[\/\\]|DE)\s*(\d+)/i,
+    // "X/Y" format (generic, check last)
+    /(\d+)\s*[\/\\]\s*(\d+)/,
+    // "X DE Y" format
     /(\d+)\s*DE\s*(\d+)/i,
-    /PARC(?:ELA)?\s*(\d+)\s*(?:\/|DE)\s*(\d+)/i,
   ];
 
   for (const pattern of numberedPatterns) {
@@ -171,7 +185,9 @@ export function detectInstallment(description: string): {
       const current = parseInt(match[1], 10);
       const total = parseInt(match[2], 10);
 
-      if (current > 0 && total > 0 && current <= total) {
+      // Validate: current must be <= total, total must be > 1 (at least 2 installments)
+      // and total should be reasonable (max 48 installments is common in Brazil)
+      if (current > 0 && total > 1 && current <= total && total <= 48) {
         return {
           isInstallment: true,
           currentInstallment: current,
@@ -182,6 +198,7 @@ export function detectInstallment(description: string): {
   }
 
   // Detect "- Parcela" without number (common in C6 credit card statements)
+  // This marks it as installment but without knowing which one
   if (/[-–]\s*Parcela\s*$/i.test(description) || /\bParcela\s*$/i.test(description)) {
     return { isInstallment: true };
   }

@@ -20,6 +20,7 @@ export function CategoryPieChart({ data }: Props) {
     name: item.categoryName,
     value: item.total,
     color: item.categoryColor,
+    percentage: item.percentage,
   }));
 
   return (
@@ -39,7 +40,10 @@ export function CategoryPieChart({ data }: Props) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number) => formatCurrency(value)}
+          formatter={(value: number, _name: string, props: { payload?: { percentage?: number } }) => {
+            const percentage = props.payload?.percentage;
+            return `${formatCurrency(value)} (${percentage?.toFixed(1)}%)`;
+          }}
           contentStyle={{
             backgroundColor: "white",
             border: "1px solid #e5e7eb",

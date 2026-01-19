@@ -50,7 +50,14 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average per category from historical data
-    const categoryAverages: Record<string, { total: number; count: number; name: string; color: string }> = {};
+    // Track both total amount and which months had transactions
+    const categoryAverages: Record<string, {
+      total: number;
+      count: number;
+      months: Set<string>;
+      name: string;
+      color: string
+    }> = {};
 
     for (const t of historicalTransactions) {
       if (t.categoryId) {
@@ -58,12 +65,17 @@ export async function GET(request: NextRequest) {
           categoryAverages[t.categoryId] = {
             total: 0,
             count: 0,
+            months: new Set(),
             name: t.category?.name || "Sem categoria",
             color: t.category?.color || "#888888",
           };
         }
         categoryAverages[t.categoryId].total += Math.abs(t.amount);
         categoryAverages[t.categoryId].count += 1;
+        // Track which month this transaction belongs to
+        const txDate = new Date(t.date);
+        const monthKey = `${txDate.getFullYear()}-${txDate.getMonth()}`;
+        categoryAverages[t.categoryId].months.add(monthKey);
       }
     }
 
@@ -74,9 +86,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Find unusual transactions (amount > threshold * category average)
+    // Only consider categories with history in at least 2 different months
+    const MIN_MONTHS_FOR_HISTORY = 2;
+
     const unusualTransactions = currentMonthTransactions
       .filter(t => {
         if (!t.categoryId) return false;
+        const categoryData = categoryAverages[t.categoryId];
+        // Skip if category doesn't have enough historical data
+        if (!categoryData || categoryData.months.size < MIN_MONTHS_FOR_HISTORY) return false;
         const avgAmount = categoryAvgAmounts[t.categoryId];
         if (!avgAmount || avgAmount === 0) return false;
         const amount = Math.abs(t.amount);

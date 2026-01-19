@@ -10,7 +10,7 @@ import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, Pig
 import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
-import type { Transaction, Category, WeeklySummary, EndOfMonthProjection, UnusualTransaction } from "@/types";
+import type { Transaction, Category, WeeklySummary, EndOfMonthProjection, UnusualTransaction, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
   categoryId: string;
@@ -66,6 +66,7 @@ interface SummaryData {
   fixedExpenses: (Transaction & { category: Category | null })[];
   upcomingInstallments: (Transaction & { category: Category | null })[];
   weeklySummary: WeeklySummary | null;
+  weeklyBreakdown: WeeklyBreakdown | null;
   projection: EndOfMonthProjection | null;
 }
 
@@ -298,6 +299,137 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {/* Weekly Breakdown - Gastos por Semana do Mês */}
+      {data?.weeklyBreakdown && data.weeklyBreakdown.weeks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-indigo-500" />
+              Gastos por Semana
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Week bars */}
+              <div className="space-y-3">
+                {data.weeklyBreakdown.weeks.map((week) => {
+                  const today = new Date();
+                  const weekStart = new Date(week.startDate);
+                  const weekEnd = new Date(week.endDate);
+
+                  // Determinar se a semana é passada, atual ou futura
+                  const isPastWeek = weekEnd < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                  const isFutureWeek = weekStart > today;
+                  const isCurrentWeek = !isPastWeek && !isFutureWeek;
+
+                  // Só considerar para maior/menor gasto as semanas que já passaram ou estão em andamento
+                  const weeksForComparison = data.weeklyBreakdown!.weeks.filter((w) => {
+                    const wEnd = new Date(w.endDate);
+                    return wEnd <= today || (new Date(w.startDate) <= today && wEnd >= today);
+                  });
+
+                  const maxTotal = Math.max(...data.weeklyBreakdown!.weeks.map((w) => w.total));
+                  const percentage = maxTotal > 0 ? (week.total / maxTotal) * 100 : 0;
+
+                  const maxTotalPastCurrent = Math.max(...weeksForComparison.map((w) => w.total));
+                  const minTotalPastCurrent = Math.min(...weeksForComparison.filter(w => w.total > 0).map((w) => w.total));
+
+                  const isHighest = !isFutureWeek && week.total === maxTotalPastCurrent && week.total > 0;
+                  const isLowest = !isFutureWeek && week.total === minTotalPastCurrent && week.total > 0 && weeksForComparison.filter(w => w.total > 0).length > 1;
+
+                  const startDay = new Date(week.startDate).getDate();
+                  const endDay = new Date(week.endDate).getDate();
+
+                  return (
+                    <div key={week.weekNumber} className={`space-y-1 ${isFutureWeek ? "opacity-60" : ""}`}>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Semana {week.weekNumber}</span>
+                          <span className="text-gray-500 text-xs">
+                            ({startDay} - {endDay})
+                          </span>
+                          {isCurrentWeek && (
+                            <Badge variant="outline" className="text-xs border-indigo-500 text-indigo-600">
+                              Atual
+                            </Badge>
+                          )}
+                          {isFutureWeek && (
+                            <Badge variant="outline" className="text-xs border-gray-400 text-gray-500">
+                              Projetado
+                            </Badge>
+                          )}
+                          {isHighest && (
+                            <Badge variant="destructive" className="text-xs">
+                              Maior gasto
+                            </Badge>
+                          )}
+                          {isLowest && (
+                            <Badge className="bg-green-500 text-xs">
+                              Menor gasto
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-semibold ${isFutureWeek ? "text-gray-500" : "text-red-600"}`}>
+                            {formatCurrency(week.total)}
+                          </span>
+                          <span className="text-gray-500 text-xs ml-2">
+                            ({week.count} transacoes)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="relative h-8 rounded-lg bg-gray-100 overflow-hidden">
+                        <div
+                          className={`absolute left-0 top-0 h-full rounded-lg transition-all ${
+                            isFutureWeek ? "bg-gray-300" :
+                            isHighest ? "bg-red-400" :
+                            isLowest ? "bg-green-400" :
+                            isCurrentWeek ? "bg-indigo-500" : "bg-indigo-400"
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                        {/* Category breakdown inside bar */}
+                        {week.categories.length > 0 && (
+                          <div className="absolute inset-0 flex items-center px-2 gap-1">
+                            {week.categories.slice(0, 3).map((cat) => (
+                              <div
+                                key={cat.categoryId}
+                                className="flex items-center gap-1 text-xs text-white bg-black/20 rounded px-1.5 py-0.5"
+                              >
+                                <div
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: cat.categoryColor }}
+                                />
+                                <span className="truncate max-w-[60px]">{cat.categoryName}</span>
+                              </div>
+                            ))}
+                            {week.categories.length > 3 && (
+                              <span className="text-xs text-white bg-black/20 rounded px-1.5 py-0.5">
+                                +{week.categories.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Summary */}
+              <div className="pt-3 border-t flex justify-between items-center text-sm">
+                <span className="text-gray-500">
+                  Media por semana
+                </span>
+                <span className="font-semibold">
+                  {formatCurrency(data.weeklyBreakdown.averagePerWeek)}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Unusual Transactions Alert (Feature 2) */}
       {unusualTransactions.length > 0 && (

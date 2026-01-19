@@ -73,6 +73,12 @@ export async function GET(request: NextRequest) {
       where.isInstallment = true;
     }
 
+    // Filter standalone installments (not linked to an Installment group)
+    const standalone = searchParams.get("standalone");
+    if (standalone === "true") {
+      where.installmentId = null;
+    }
+
     // Filter by tag (searches within JSON array string)
     if (tag && tag.trim()) {
       where.tags = {

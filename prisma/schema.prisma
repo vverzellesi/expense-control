@@ -21,6 +21,7 @@ model Transaction {
   installmentId       String?
   installment         Installment?      @relation(fields: [installmentId], references: [id])
   currentInstallment  Int?
+  totalInstallments   Int?              // Total de parcelas (para transacoes avulsas sem grupo)
   recurringExpenseId  String?
   recurringExpense    RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
   tags                String?           // JSON array: '["trabalho", "viagem"]'

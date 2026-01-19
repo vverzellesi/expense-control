@@ -36,10 +36,103 @@ import {
   RefreshCw,
   Repeat,
   AlertTriangle,
+  Info,
+  CreditCard,
+  Receipt,
+  Ban,
+  Link2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { detectTransfer } from "@/lib/categorizer";
-import type { Category, ImportedTransaction, TransactionType } from "@/types";
+import { detectTransfer, detectInstallment } from "@/lib/categorizer";
+import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType } from "@/types";
+
+// Detecta transacoes especiais de cartao de credito
+function detectSpecialTransaction(description: string): { type: SpecialTransactionType; warning: string } | null {
+  const upperDesc = description.toUpperCase();
+
+  // Pagamento de fatura (credito na fatura)
+  if (
+    upperDesc.includes("INCLUSAO DE PAGAMENTO") ||
+    upperDesc.includes("PAGAMENTO RECEBIDO") ||
+    upperDesc.includes("PAGTO RECEBIDO") ||
+    upperDesc.includes("CREDITO PAGAMENTO") ||
+    upperDesc.includes("PAGAMENTO FATURA") ||
+    upperDesc.includes("PAG FATURA")
+  ) {
+    return {
+      type: "BILL_PAYMENT",
+      warning: "Este e um registro de pagamento da fatura anterior. Normalmente deve ser ignorado ou tratado como credito."
+    };
+  }
+
+  // Parcelamento de fatura (refinanciamento)
+  if (
+    upperDesc.includes("PARCELAMENTO DE FATURA") ||
+    upperDesc.includes("PARCELAMENTO FATURA") ||
+    upperDesc.includes("FATURA PARCELADA") ||
+    upperDesc.includes("REPARCELAMENTO") ||
+    upperDesc.includes("REFINANCIAMENTO")
+  ) {
+    return {
+      type: "FINANCING",
+      warning: "Este e um parcelamento/refinanciamento de divida. O valor original ja foi contabilizado anteriormente."
+    };
+  }
+
+  // Estorno
+  if (
+    upperDesc.includes("ESTORNO") ||
+    upperDesc.includes("DEVOLUCAO") ||
+    upperDesc.includes("CANCELAMENTO") ||
+    upperDesc.includes("REEMBOLSO") ||
+    upperDesc.includes("CHARGEBACK")
+  ) {
+    return {
+      type: "REFUND",
+      warning: "Este e um estorno/devolucao. O valor sera creditado (positivo)."
+    };
+  }
+
+  // Taxas e tarifas
+  if (
+    upperDesc.includes("ANUIDADE") ||
+    upperDesc.includes("TARIFA") ||
+    (upperDesc.includes("TAXA") && !upperDesc.includes("TAXAS DE"))
+  ) {
+    return {
+      type: "FEE",
+      warning: "Esta e uma tarifa/anuidade do cartao."
+    };
+  }
+
+  // IOF (transacoes internacionais)
+  if (
+    upperDesc.includes(" IOF") ||
+    upperDesc.includes("IOF ") ||
+    upperDesc.includes("IMPOSTO IOF")
+  ) {
+    return {
+      type: "IOF",
+      warning: "Este e o IOF de uma transacao internacional."
+    };
+  }
+
+  // Spread de cotacao (transacoes internacionais)
+  if (
+    upperDesc.includes("COTACAO") ||
+    upperDesc.includes("COTAÇÃO") ||
+    upperDesc.includes("SPREAD") ||
+    upperDesc.includes("CUUSD") ||
+    upperDesc.includes("CUEUR")
+  ) {
+    return {
+      type: "CURRENCY_SPREAD",
+      warning: "Este e o spread de cotacao de uma transacao internacional."
+    };
+  }
+
+  return null;
+}
 
 type ExtendedTransaction = ImportedTransaction & {
   categoryId?: string;
@@ -51,6 +144,14 @@ type ExtendedTransaction = ImportedTransaction & {
   recurringName?: string;
   originalDate?: Date;
   isDuplicate?: boolean;
+  specialType?: SpecialTransactionType;
+  specialTypeWarning?: string;
+  isRelatedInstallment?: boolean;
+  relatedInstallmentInfo?: {
+    relatedTransactionId: string;
+    relatedDescription: string;
+    relatedInstallment: number;
+  };
 };
 
 export default function ImportPage() {
@@ -107,29 +208,54 @@ export default function ImportPage() {
             description: t.description,
             amount: t.amount,
             date: t.date instanceof Date ? t.date.toISOString() : t.date,
+            isInstallment: t.isInstallment,
+            currentInstallment: t.currentInstallment,
+            totalInstallments: t.totalInstallments,
           })),
         }),
       });
 
       const data = await res.json();
 
-      if (data.hasDuplicates) {
-        const updatedTransactions = parsedTransactions.map((t, index) => ({
+      // Build a map of related installments by index
+      const relatedMap = new Map<number, typeof data.relatedInstallments[0]>();
+      if (data.relatedInstallments) {
+        for (const ri of data.relatedInstallments) {
+          relatedMap.set(ri.index, ri);
+        }
+      }
+
+      let updatedTransactions = parsedTransactions.map((t, index) => {
+        const related = relatedMap.get(index);
+        return {
           ...t,
           isDuplicate: data.duplicates.includes(index),
-          selected: !data.duplicates.includes(index), // Auto-deselect duplicates
-        }));
+          selected: !data.duplicates.includes(index), // Auto-deselect duplicates only
+          isRelatedInstallment: !!related,
+          relatedInstallmentInfo: related ? {
+            relatedTransactionId: related.relatedTransactionId,
+            relatedDescription: related.relatedDescription,
+            relatedInstallment: related.relatedInstallment,
+          } : undefined,
+        };
+      });
 
+      if (data.hasDuplicates) {
         toast({
           title: "Possiveis duplicatas detectadas",
           description: `${data.duplicates.length} transacao(es) podem ja existir no sistema`,
           variant: "destructive",
         });
-
-        return updatedTransactions;
       }
 
-      return parsedTransactions;
+      if (data.hasRelatedInstallments) {
+        toast({
+          title: "Parcelas relacionadas encontradas",
+          description: `${data.relatedInstallments.length} parcela(s) sao continuacao de compras existentes`,
+        });
+      }
+
+      return updatedTransactions;
     } catch (error) {
       console.error("Error checking duplicates:", error);
       return parsedTransactions;
@@ -301,18 +427,17 @@ export default function ImportPage() {
 
       if (isNaN(amount)) continue;
 
-      // Check for installment pattern
-      const installmentMatch = description.match(/(\d+)\s*(?:\/|DE)\s*(\d+)/i);
-      const isInstallment = !!installmentMatch;
-      const currentInstallment = installmentMatch
-        ? parseInt(installmentMatch[1])
-        : undefined;
-      const totalInstallments = installmentMatch
-        ? parseInt(installmentMatch[2])
-        : undefined;
+      // Check for installment pattern using the improved detectInstallment function
+      const installmentInfo = detectInstallment(description);
+      const isInstallment = installmentInfo.isInstallment;
+      const currentInstallment = installmentInfo.currentInstallment;
+      const totalInstallments = installmentInfo.totalInstallments;
 
       // Check for transfer pattern (credit card bill payment, internal transfer)
       const isTransfer = detectTransfer(description);
+
+      // Detect special transaction types (bill payments, financing, etc.)
+      const specialTx = detectSpecialTransaction(description);
 
       // Find category by rules
       let categoryId: string | undefined;
@@ -324,23 +449,60 @@ export default function ImportPage() {
         }
       }
 
-      // Default to "Outros" category if no rule matched (except for transfers)
-      if (!categoryId && !isTransfer) {
+      // Default to "Outros" category if no rule matched (except for transfers and special types)
+      if (!categoryId && !isTransfer && !specialTx) {
         const outrosCategory = categories.find(c => c.name === "Outros");
         categoryId = outrosCategory?.id;
       }
 
-      // Determine transaction type
+      // Determine transaction type based on special type detection
       let transactionType: TransactionType = "EXPENSE";
-      if (isTransfer) {
+      let finalAmount = amount;
+
+      if (specialTx) {
+        switch (specialTx.type) {
+          case "BILL_PAYMENT":
+            // Bill payments should be positive (credit) or ignored
+            // If the CSV shows as negative (expense), it's wrong - should be positive
+            transactionType = "INCOME";
+            finalAmount = Math.abs(amount);
+            break;
+          case "REFUND":
+            // Refunds are credits
+            transactionType = "INCOME";
+            finalAmount = Math.abs(amount);
+            break;
+          case "FINANCING":
+            // Financing is a special case - it's technically an expense but represents
+            // refinanced debt, not new spending
+            transactionType = "EXPENSE";
+            finalAmount = -Math.abs(amount);
+            break;
+          case "FEE":
+          case "IOF":
+          case "CURRENCY_SPREAD":
+            // Fees are expenses
+            transactionType = "EXPENSE";
+            finalAmount = -Math.abs(amount);
+            break;
+        }
+      } else if (isTransfer) {
         transactionType = "TRANSFER";
+        finalAmount = amount; // Keep original sign
       } else if (amount > 0) {
         transactionType = "INCOME";
+        finalAmount = Math.abs(amount);
+      } else {
+        transactionType = "EXPENSE";
+        finalAmount = -Math.abs(amount);
       }
+
+      // Auto-deselect bill payments (they shouldn't be imported as regular transactions)
+      const shouldBeSelected = specialTx?.type !== "BILL_PAYMENT";
 
       parsedTransactions.push({
         description,
-        amount: transactionType === "INCOME" ? Math.abs(amount) : -Math.abs(amount),
+        amount: finalAmount,
         date,
         type: transactionType,
         isInstallment,
@@ -348,7 +510,9 @@ export default function ImportPage() {
         totalInstallments,
         categoryId,
         suggestedCategoryId: categoryId,
-        selected: true,
+        selected: shouldBeSelected,
+        specialType: specialTx?.type,
+        specialTypeWarning: specialTx?.warning,
       });
     }
 
@@ -481,6 +645,7 @@ export default function ImportPage() {
             categoryId: t.categoryId,
             isInstallment: t.isInstallment,
             currentInstallment: t.currentInstallment,
+            totalInstallments: t.totalInstallments,
           })),
           origin,
         }),
@@ -519,15 +684,19 @@ export default function ImportPage() {
 
   const selectedCount = transactions.filter((t) => t.selected).length;
   const incomeCount = transactions.filter(
-    (t) => t.selected && t.type === "INCOME"
+    (t) => t.selected && t.type === "INCOME" && !t.specialType
   ).length;
   const expenseCount = transactions.filter(
-    (t) => t.selected && t.type === "EXPENSE"
+    (t) => t.selected && t.type === "EXPENSE" && !t.specialType
   ).length;
   const transferCount = transactions.filter(
     (t) => t.selected && t.type === "TRANSFER"
   ).length;
   const duplicateCount = transactions.filter((t) => t.isDuplicate).length;
+  const relatedInstallmentCount = transactions.filter((t) => t.isRelatedInstallment).length;
+  const specialCount = transactions.filter((t) => t.specialType).length;
+  const billPaymentCount = transactions.filter((t) => t.specialType === "BILL_PAYMENT").length;
+  const financingCount = transactions.filter((t) => t.specialType === "FINANCING").length;
 
   return (
     <div className="space-y-6">
@@ -642,6 +811,12 @@ export default function ImportPage() {
                         {duplicateCount} possivel(eis) duplicata(s)
                       </span>
                     )}
+                    {relatedInstallmentCount > 0 && (
+                      <span className="flex items-center gap-1 text-blue-600">
+                        <Link2 className="h-4 w-4" />
+                        {relatedInstallmentCount} parcela(s) relacionada(s)
+                      </span>
+                    )}
                     {incomeCount > 0 && (
                       <span className="flex items-center gap-1">
                         <ArrowDownCircle className="h-4 w-4 text-green-500" />
@@ -695,6 +870,39 @@ export default function ImportPage() {
                     <span className="text-xs text-blue-600">
                       As datas das parcelas serao ajustadas para este mes
                     </span>
+                  </div>
+                )}
+
+                {specialCount > 0 && (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-amber-800">
+                          Transacoes especiais detectadas ({specialCount})
+                        </p>
+                        <ul className="text-xs text-amber-700 space-y-1">
+                          {billPaymentCount > 0 && (
+                            <li className="flex items-center gap-1">
+                              <CreditCard className="h-3 w-3" />
+                              <strong>{billPaymentCount}</strong> pagamento(s) de fatura - desmarcados automaticamente
+                            </li>
+                          )}
+                          {financingCount > 0 && (
+                            <li className="flex items-center gap-1">
+                              <Receipt className="h-3 w-3" />
+                              <strong>{financingCount}</strong> parcelamento(s) de fatura - verifique se deve importar
+                            </li>
+                          )}
+                          {(specialCount - billPaymentCount - financingCount) > 0 && (
+                            <li className="flex items-center gap-1">
+                              <Info className="h-3 w-3" />
+                              <strong>{specialCount - billPaymentCount - financingCount}</strong> outras transacoes especiais (IOF, taxas, estornos)
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -814,10 +1022,44 @@ export default function ImportPage() {
                                     : "Parcela"}
                                 </Badge>
                               )}
+                              {t.isRelatedInstallment && t.relatedInstallmentInfo && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                                  title={`Continuacao de: ${t.relatedInstallmentInfo.relatedDescription}`}
+                                >
+                                  <Link2 className="h-3 w-3 mr-1" />
+                                  Vinculada a {t.relatedInstallmentInfo.relatedInstallment}/{t.totalInstallments}
+                                </Badge>
+                              )}
                               {t.isRecurring && (
                                 <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                                   <RefreshCw className="h-3 w-3 mr-1" />
                                   {t.recurringName || "Recorrente"}
+                                </Badge>
+                              )}
+                              {t.specialType === "BILL_PAYMENT" && (
+                                <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300" title={t.specialTypeWarning}>
+                                  <CreditCard className="h-3 w-3 mr-1" />
+                                  Pagamento Fatura
+                                </Badge>
+                              )}
+                              {t.specialType === "FINANCING" && (
+                                <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300" title={t.specialTypeWarning}>
+                                  <Receipt className="h-3 w-3 mr-1" />
+                                  Parcelamento Fatura
+                                </Badge>
+                              )}
+                              {t.specialType === "REFUND" && (
+                                <Badge variant="outline" className="text-xs bg-green-100 text-green-800 border-green-300" title={t.specialTypeWarning}>
+                                  <ArrowDownCircle className="h-3 w-3 mr-1" />
+                                  Estorno
+                                </Badge>
+                              )}
+                              {(t.specialType === "FEE" || t.specialType === "IOF" || t.specialType === "CURRENCY_SPREAD") && (
+                                <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300" title={t.specialTypeWarning}>
+                                  <Info className="h-3 w-3 mr-1" />
+                                  {t.specialType === "FEE" ? "Taxa/Anuidade" : t.specialType === "IOF" ? "IOF" : "Cotacao"}
                                 </Badge>
                               )}
                               {t.transactionKind && (

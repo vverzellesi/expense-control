@@ -9,6 +9,150 @@ function getMondayOfWeek(date: Date): Date {
   return new Date(d.setDate(diff));
 }
 
+// Helper to calculate weekly breakdown for the month
+interface WeekDataInternal {
+  weekNumber: number;
+  startDate: Date;
+  endDate: Date;
+  total: number;
+  count: number;
+  categories: Record<string, { name: string; color: string; total: number }>;
+}
+
+function calculateWeeklyBreakdown(
+  transactions: Array<{
+    date: Date;
+    amount: number;
+    type: string;
+    categoryId: string | null;
+    category: { name: string; color: string } | null;
+  }>,
+  monthStart: Date,
+  monthEnd: Date
+) {
+  // Get all weeks that overlap with this month
+  const weeks: WeekDataInternal[] = [];
+  let weekNumber = 1;
+  let currentDate = new Date(monthStart);
+
+  while (currentDate <= monthEnd) {
+    // Find the start of the week (Sunday or first day of month)
+    const weekStart = new Date(currentDate);
+    if (weekStart < monthStart) {
+      weekStart.setTime(monthStart.getTime());
+    }
+    weekStart.setHours(0, 0, 0, 0);
+
+    // Find the end of the week (Saturday or last day of month)
+    const weekEnd = new Date(currentDate);
+    // Move to Saturday (day 6)
+    const daysUntilSaturday = 6 - weekEnd.getDay();
+    weekEnd.setDate(weekEnd.getDate() + daysUntilSaturday);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    // Cap at month end
+    if (weekEnd > monthEnd) {
+      weekEnd.setTime(monthEnd.getTime());
+      weekEnd.setHours(23, 59, 59, 999);
+    }
+
+    weeks.push({
+      weekNumber,
+      startDate: new Date(weekStart),
+      endDate: new Date(weekEnd),
+      total: 0,
+      count: 0,
+      categories: {},
+    });
+
+    // Move to next week (Sunday)
+    currentDate = new Date(weekEnd);
+    currentDate.setDate(currentDate.getDate() + 1);
+    currentDate.setHours(0, 0, 0, 0);
+    weekNumber++;
+  }
+
+  // Distribute transactions into weeks
+  for (const t of transactions) {
+    if (t.type !== "EXPENSE") continue;
+
+    const tDate = new Date(t.date);
+    tDate.setHours(12, 0, 0, 0); // Normalize to midday to avoid timezone issues
+
+    for (const week of weeks) {
+      if (tDate >= week.startDate && tDate <= week.endDate) {
+        week.total += Math.abs(t.amount);
+        week.count++;
+
+        if (t.categoryId && t.category) {
+          if (!week.categories[t.categoryId]) {
+            week.categories[t.categoryId] = {
+              name: t.category.name,
+              color: t.category.color,
+              total: 0,
+            };
+          }
+          week.categories[t.categoryId].total += Math.abs(t.amount);
+        }
+        break;
+      }
+    }
+  }
+
+  // Format weeks for response
+  const formattedWeeks = weeks.map((week) => {
+    const daysDiff =
+      Math.ceil(
+        (week.endDate.getTime() - week.startDate.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+
+    return {
+      weekNumber: week.weekNumber,
+      startDate: week.startDate.toISOString(),
+      endDate: week.endDate.toISOString(),
+      total: week.total,
+      count: week.count,
+      dailyAverage: daysDiff > 0 ? week.total / daysDiff : 0,
+      categories: Object.entries(week.categories)
+        .map(([categoryId, data]) => ({
+          categoryId,
+          categoryName: data.name,
+          categoryColor: data.color,
+          total: data.total,
+        }))
+        .sort((a, b) => b.total - a.total),
+    };
+  });
+
+  // Find highest and lowest spending weeks
+  const weeksWithSpending = formattedWeeks.filter((w) => w.total > 0);
+  let highestWeek = 1;
+  let lowestWeek = 1;
+  let maxTotal = 0;
+  let minTotal = Infinity;
+
+  for (const week of weeksWithSpending) {
+    if (week.total > maxTotal) {
+      maxTotal = week.total;
+      highestWeek = week.weekNumber;
+    }
+    if (week.total < minTotal) {
+      minTotal = week.total;
+      lowestWeek = week.weekNumber;
+    }
+  }
+
+  const totalSpending = formattedWeeks.reduce((sum, w) => sum + w.total, 0);
+  const averagePerWeek = formattedWeeks.length > 0 ? totalSpending / formattedWeeks.length : 0;
+
+  return {
+    weeks: formattedWeeks,
+    highestWeek,
+    lowestWeek,
+    averagePerWeek,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -227,7 +371,12 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Feature 9: End of Month Projection
+    // Weekly Breakdown: gastos por semana do mês
+    const weeklyBreakdown = calculateWeeklyBreakdown(transactions, startDate, endDate);
+
+    // Feature 9: End of Month Projection (improved logic)
+    // Separates fixed/recurring expenses from variable expenses
+    // Fixed expenses count once, variable expenses are projected by daily average
     let projection = null;
     if (isCurrentMonth) {
       const today = new Date();
@@ -235,23 +384,108 @@ export async function GET(request: NextRequest) {
       const totalDays = endDate.getDate();
       const remainingDays = totalDays - daysElapsed;
 
-      const dailyExpenseAverage = daysElapsed > 0 ? expense / daysElapsed : 0;
-      const dailyIncomeAverage = daysElapsed > 0 ? income / daysElapsed : 0;
+      // Separate fixed/recurring expenses from variable expenses
+      let fixedExpensesPaid = 0;
+      let variableExpenses = 0;
+      let fixedIncomePaid = 0;
+      let variableIncome = 0;
 
-      const projectedExpense = expense + (dailyExpenseAverage * remainingDays);
-      const projectedIncome = income + (dailyIncomeAverage * remainingDays);
+      for (const t of transactions) {
+        const isFixedOrRecurring = t.isFixed || t.recurringExpenseId !== null;
+
+        if (t.type === "EXPENSE") {
+          if (isFixedOrRecurring) {
+            fixedExpensesPaid += Math.abs(t.amount);
+          } else {
+            variableExpenses += Math.abs(t.amount);
+          }
+        } else if (t.type === "INCOME") {
+          if (isFixedOrRecurring) {
+            fixedIncomePaid += Math.abs(t.amount);
+          } else {
+            variableIncome += Math.abs(t.amount);
+          }
+        }
+      }
+
+      // Get active recurring expenses/incomes that haven't been generated this month yet
+      const activeRecurring = await prisma.recurringExpense.findMany({
+        where: {
+          isActive: true,
+        },
+      });
+
+      // Check which recurring expenses haven't been paid this month
+      let pendingRecurringExpenses = 0;
+      let pendingRecurringIncome = 0;
+
+      for (const recurring of activeRecurring) {
+        // Check if there's a transaction for this recurring expense in the current month
+        const hasTransactionThisMonth = transactions.some(
+          (t) => t.recurringExpenseId === recurring.id
+        );
+
+        if (!hasTransactionThisMonth) {
+          // Get the most recent transaction amount for this recurring (in case user edited the value)
+          const latestTransaction = await prisma.transaction.findFirst({
+            where: {
+              recurringExpenseId: recurring.id,
+            },
+            orderBy: { date: "desc" },
+            select: { amount: true },
+          });
+
+          const effectiveAmount = latestTransaction?.amount ?? recurring.defaultAmount;
+
+          if (recurring.type === "EXPENSE") {
+            pendingRecurringExpenses += Math.abs(effectiveAmount);
+          } else {
+            pendingRecurringIncome += Math.abs(effectiveAmount);
+          }
+        }
+      }
+
+      // Calculate daily average only for variable expenses
+      const dailyVariableExpenseAverage = daysElapsed > 0 ? variableExpenses / daysElapsed : 0;
+      const dailyVariableIncomeAverage = daysElapsed > 0 ? variableIncome / daysElapsed : 0;
+
+      // Project: fixed (paid + pending) + variable (current + projected)
+      const projectedExpense =
+        fixedExpensesPaid +
+        pendingRecurringExpenses +
+        variableExpenses +
+        (dailyVariableExpenseAverage * remainingDays);
+
+      const projectedIncome =
+        fixedIncomePaid +
+        pendingRecurringIncome +
+        variableIncome +
+        (dailyVariableIncomeAverage * remainingDays);
+
       const projectedBalance = projectedIncome - projectedExpense;
 
       projection = {
         currentDay: daysElapsed,
         totalDays,
         remainingDays,
-        dailyExpenseAverage,
-        dailyIncomeAverage,
+        // Keep legacy fields for backwards compatibility
+        dailyExpenseAverage: dailyVariableExpenseAverage,
+        dailyIncomeAverage: dailyVariableIncomeAverage,
         projectedExpense,
         projectedIncome,
         projectedBalance,
         isProjectionNegative: projectedBalance < 0,
+        // New detailed breakdown
+        breakdown: {
+          fixedExpensesPaid,
+          pendingRecurringExpenses,
+          variableExpenses,
+          projectedVariableExpenses: dailyVariableExpenseAverage * remainingDays,
+          fixedIncomePaid,
+          pendingRecurringIncome,
+          variableIncome,
+          projectedVariableIncome: dailyVariableIncomeAverage * remainingDays,
+        },
       };
     }
 
@@ -335,9 +569,12 @@ export async function GET(request: NextRequest) {
 
     // Get upcoming installments (next 3 months, excluding soft-deleted)
     const futureDate = new Date(targetYear, targetMonth + 2, 0);
-    const upcomingInstallments = await prisma.transaction.findMany({
+
+    // Get grouped installments (transactions that exist in the future)
+    const groupedInstallments = await prisma.transaction.findMany({
       where: {
         isInstallment: true,
+        installmentId: { not: null },
         date: {
           gt: endDate,
           lte: futureDate,
@@ -352,6 +589,50 @@ export async function GET(request: NextRequest) {
         date: "asc",
       },
     });
+
+    // Get standalone installments (manually marked) and project their future installments
+    const standaloneInstallments = await prisma.transaction.findMany({
+      where: {
+        isInstallment: true,
+        installmentId: null,
+        totalInstallments: { not: null },
+        currentInstallment: { not: null },
+        deletedAt: null,
+      },
+      include: {
+        category: true,
+      },
+    });
+
+    // Project future installments from standalone transactions
+    const projectedInstallments: typeof groupedInstallments = [];
+    for (const t of standaloneInstallments) {
+      if (!t.currentInstallment || !t.totalInstallments) continue;
+
+      const remainingInstallments = t.totalInstallments - t.currentInstallment;
+      const transactionDate = new Date(t.date);
+
+      for (let i = 1; i <= remainingInstallments; i++) {
+        const futureInstallmentDate = new Date(transactionDate);
+        futureInstallmentDate.setMonth(transactionDate.getMonth() + i);
+
+        // Only include if within the date range (after current month, before futureDate)
+        if (futureInstallmentDate > endDate && futureInstallmentDate <= futureDate) {
+          projectedInstallments.push({
+            ...t,
+            id: `${t.id}-projected-${i}`,
+            date: futureInstallmentDate,
+            description: `${t.description} (${t.currentInstallment + i}/${t.totalInstallments})`,
+            currentInstallment: t.currentInstallment + i,
+            installment: null,
+          });
+        }
+      }
+    }
+
+    // Combine and sort all upcoming installments
+    const upcomingInstallments = [...groupedInstallments, ...projectedInstallments]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return NextResponse.json({
       summary: {
@@ -384,6 +665,7 @@ export async function GET(request: NextRequest) {
       fixedExpenses,
       upcomingInstallments,
       weeklySummary,
+      weeklyBreakdown,
       projection,
     });
   } catch (error) {

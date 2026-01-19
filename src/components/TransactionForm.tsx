@@ -48,8 +48,17 @@ export function TransactionForm({
   const [origin, setOrigin] = useState(transaction?.origin || "");
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || "");
   const [isFixed, setIsFixed] = useState(transaction?.isFixed || false);
-  const [isInstallment, setIsInstallment] = useState(false);
-  const [totalInstallments, setTotalInstallments] = useState("2");
+  const [isInstallment, setIsInstallment] = useState(transaction?.isInstallment || false);
+  const [currentInstallment, setCurrentInstallment] = useState(
+    transaction?.currentInstallment ? String(transaction.currentInstallment) : "1"
+  );
+  const [totalInstallments, setTotalInstallments] = useState(
+    transaction?.totalInstallments
+      ? String(transaction.totalInstallments)
+      : transaction?.installment?.totalInstallments
+      ? String(transaction.installment.totalInstallments)
+      : "2"
+  );
   const [tagsInput, setTagsInput] = useState(
     transaction?.tags ? JSON.parse(transaction.tags).join(", ") : ""
   );
@@ -83,9 +92,10 @@ export function TransactionForm({
         origin,
         categoryId: categoryId || null,
         isFixed,
-        isInstallment: isInstallment && !transaction,
-        totalInstallments: isInstallment ? parseInt(totalInstallments) : undefined,
-        installmentAmount: isInstallment ? parseFloat(amount) : undefined,
+        isInstallment,
+        currentInstallment: isInstallment ? parseInt(currentInstallment) : null,
+        totalInstallments: isInstallment ? parseInt(totalInstallments) : null,
+        installmentAmount: isInstallment && !transaction ? parseFloat(amount) : undefined,
         tags: tagsArray.length > 0 ? tagsArray : null,
       };
 
@@ -257,23 +267,38 @@ export function TransactionForm({
         </div>
       </div>
 
-      {!transaction && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="isInstallment"
-              checked={isInstallment}
-              onCheckedChange={(checked) => {
-                setIsInstallment(checked);
-                if (checked) setIsFixed(false);
-              }}
-            />
-            <Label htmlFor="isInstallment">Compra parcelada</Label>
-          </div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="isInstallment"
+            checked={isInstallment}
+            onCheckedChange={(checked) => {
+              setIsInstallment(checked);
+              if (checked) setIsFixed(false);
+            }}
+            disabled={!!transaction?.installmentId}
+          />
+          <Label htmlFor="isInstallment">Compra parcelada</Label>
+          {transaction?.installmentId && (
+            <span className="text-xs text-gray-500">(vinculada a grupo)</span>
+          )}
+        </div>
 
-          {isInstallment && (
+        {isInstallment && (
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="totalInstallments">Numero de parcelas</Label>
+              <Label htmlFor="currentInstallment">Parcela atual</Label>
+              <Input
+                id="currentInstallment"
+                type="number"
+                min="1"
+                max={totalInstallments}
+                value={currentInstallment}
+                onChange={(e) => setCurrentInstallment(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="totalInstallments">Total de parcelas</Label>
               <Input
                 id="totalInstallments"
                 type="number"
@@ -282,7 +307,9 @@ export function TransactionForm({
                 value={totalInstallments}
                 onChange={(e) => setTotalInstallments(e.target.value)}
               />
-              <p className="mt-1 text-xs text-gray-500">
+            </div>
+            {!transaction && (
+              <p className="col-span-2 text-xs text-gray-500">
                 Serao criadas {totalInstallments} parcelas de{" "}
                 {amount
                   ? new Intl.NumberFormat("pt-BR", {
@@ -291,10 +318,15 @@ export function TransactionForm({
                     }).format(parseFloat(amount))
                   : "R$ 0,00"}
               </p>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+            {transaction && !transaction.installmentId && (
+              <p className="col-span-2 text-xs text-gray-500">
+                Parcela {currentInstallment} de {totalInstallments}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-2 pt-4">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">

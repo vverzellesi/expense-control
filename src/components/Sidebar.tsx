@@ -16,11 +16,13 @@ import {
   AlertTriangle,
   TrendingUp,
   Trash2,
+  FileText,
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Transações", href: "/transactions", icon: Receipt },
+  { name: "Faturas", href: "/bills", icon: FileText },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },
   { name: "Parcelas", href: "/installments", icon: CreditCard },
   { name: "Projecao", href: "/projection", icon: TrendingUp },
