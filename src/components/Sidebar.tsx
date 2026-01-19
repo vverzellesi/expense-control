@@ -15,6 +15,7 @@ import {
   RefreshCw,
   AlertTriangle,
   TrendingUp,
+  Trash2,
 } from "lucide-react";
 
 const navigation = [
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Categorias", href: "/categories", icon: Tags },
   { name: "Relatórios", href: "/reports", icon: BarChart3 },
+  { name: "Lixeira", href: "/trash", icon: Trash2 },
 ];
 
 export function Sidebar() {

@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target, Calendar, Calculator, Zap } from "lucide-react";
 import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
-import type { Transaction, Category } from "@/types";
+import type { Transaction, Category, WeeklySummary, EndOfMonthProjection, UnusualTransaction } from "@/types";
 
 interface BudgetAlert {
   categoryId: string;
@@ -51,6 +52,8 @@ interface SummaryData {
     categoryColor: string;
     total: number;
     percentage: number;
+    previousTotal: number | null;
+    changePercentage: number | null;
   }[];
   monthlyData: {
     month: string;
@@ -62,10 +65,13 @@ interface SummaryData {
   allBudgets: BudgetAlert[];
   fixedExpenses: (Transaction & { category: Category | null })[];
   upcomingInstallments: (Transaction & { category: Category | null })[];
+  weeklySummary: WeeklySummary | null;
+  projection: EndOfMonthProjection | null;
 }
 
 export default function Dashboard() {
   const [data, setData] = useState<SummaryData | null>(null);
+  const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   const currentDate = new Date();
@@ -75,13 +81,16 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch(
-          `/api/summary?month=${currentMonth}&year=${currentYear}`
-        );
-        const json = await res.json();
-        setData(json);
+        const [summaryRes, unusualRes] = await Promise.all([
+          fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/transactions/unusual?month=${currentMonth}&year=${currentYear}&threshold=2`),
+        ]);
+        const summaryJson = await summaryRes.json();
+        const unusualJson = await unusualRes.json();
+        setData(summaryJson);
+        setUnusualTransactions(unusualJson.transactions || []);
       } catch (error) {
-        console.error("Error fetching summary:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
@@ -195,6 +204,148 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Weekly Summary & Projection Cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Weekly Summary Card (Feature 8) */}
+        {data?.weeklySummary && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Calendar className="h-5 w-5 text-blue-500" />
+                Resumo da Semana
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {formatCurrency(data.weeklySummary.currentWeek.total)}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {data.weeklySummary.currentWeek.count} transaco{data.weeklySummary.currentWeek.count !== 1 ? "es" : ""} esta semana
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">
+                    Semana anterior: {formatCurrency(data.weeklySummary.previousWeek.total)}
+                  </span>
+                  {data.weeklySummary.changePercentage !== null && (
+                    <Badge
+                      variant={data.weeklySummary.changePercentage <= 0 ? "default" : "destructive"}
+                      className={data.weeklySummary.changePercentage <= 0 ? "bg-green-500" : ""}
+                    >
+                      {data.weeklySummary.changePercentage <= 0 ? (
+                        <TrendingDown className="mr-1 h-3 w-3" />
+                      ) : (
+                        <TrendingUp className="mr-1 h-3 w-3" />
+                      )}
+                      {data.weeklySummary.changePercentage >= 0 ? "+" : ""}
+                      {data.weeklySummary.changePercentage.toFixed(0)}%
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* End of Month Projection Card (Feature 9) */}
+        {data?.projection && (
+          <Card className={data.projection.isProjectionNegative ? "border-red-200 bg-red-50" : ""}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Calculator className="h-5 w-5 text-purple-500" />
+                Projecao Fim do Mes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <div className={`text-2xl font-bold ${
+                    data.projection.isProjectionNegative ? "text-red-600" : "text-green-600"
+                  }`}>
+                    {formatCurrency(data.projection.projectedBalance)}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Saldo projetado
+                  </div>
+                </div>
+                <Progress
+                  value={(data.projection.currentDay / data.projection.totalDays) * 100}
+                  className="h-2"
+                />
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Dia {data.projection.currentDay} de {data.projection.totalDays}</span>
+                  <span>{data.projection.remainingDays} dias restantes</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded bg-gray-100 p-2">
+                    <div className="text-xs text-gray-500">Media diaria despesas</div>
+                    <div className="font-medium text-red-600">
+                      {formatCurrency(data.projection.dailyExpenseAverage)}
+                    </div>
+                  </div>
+                  <div className="rounded bg-gray-100 p-2">
+                    <div className="text-xs text-gray-500">Despesa projetada</div>
+                    <div className="font-medium text-red-600">
+                      {formatCurrency(data.projection.projectedExpense)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Unusual Transactions Alert (Feature 2) */}
+      {unusualTransactions.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
+              <Zap className="h-5 w-5" />
+              Gastos Incomuns
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-amber-700">
+              Transacoes que excedem 2x a media historica da categoria
+            </p>
+            <div className="space-y-2">
+              {unusualTransactions.slice(0, 3).map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    {t.categoryColor && (
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: t.categoryColor }}
+                      />
+                    )}
+                    <div>
+                      <span className="font-medium">{t.description}</span>
+                      <div className="text-xs text-gray-500">
+                        Media: {formatCurrency(t.categoryAverage)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-red-600">
+                      {formatCurrency(t.amount)}
+                    </div>
+                    <Badge variant="destructive" className="text-xs">
+                      +{t.exceedsBy.toFixed(0)}%
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Budget Alerts */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
@@ -340,6 +491,59 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Category Comparison (Feature 1) */}
+      {data?.categoryBreakdown && data.categoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Variacao por Categoria
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {data.categoryBreakdown.map((category) => (
+                <div
+                  key={category.categoryId}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: category.categoryColor }}
+                    />
+                    <div>
+                      <span className="text-sm font-medium">{category.categoryName}</span>
+                      <div className="text-xs text-gray-500">
+                        {formatCurrency(category.total)}
+                      </div>
+                    </div>
+                  </div>
+                  {category.changePercentage !== null ? (
+                    <Badge
+                      variant={category.changePercentage <= 0 ? "default" : "destructive"}
+                      className={category.changePercentage <= 0 ? "bg-green-500" : ""}
+                    >
+                      {category.changePercentage <= 0 ? (
+                        <TrendingDown className="mr-1 h-3 w-3" />
+                      ) : (
+                        <TrendingUp className="mr-1 h-3 w-3" />
+                      )}
+                      {category.changePercentage >= 0 ? "+" : ""}
+                      {category.changePercentage.toFixed(0)}%
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">
+                      Novo
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Fixed Expenses & Upcoming Installments */}
       <div className="grid gap-6 md:grid-cols-2">

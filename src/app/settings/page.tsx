@@ -27,8 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank } from "lucide-react";
-import type { Category, Budget, CategoryRule } from "@/types";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History } from "lucide-react";
+import type { Category, Budget, CategoryRule, SavingsHistory } from "@/types";
 
 interface BudgetWithCategory extends Budget {
   category: Category;
@@ -66,6 +66,9 @@ export default function SettingsPage() {
   const [savingsGoal, setSavingsGoal] = useState("");
   const [savingsGoalSaving, setSavingsGoalSaving] = useState(false);
 
+  // Savings history
+  const [savingsHistory, setSavingsHistory] = useState<SavingsHistory[]>([]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -73,17 +76,19 @@ export default function SettingsPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes] = await Promise.all([
+      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes, savingsHistoryRes] = await Promise.all([
         fetch("/api/categories"),
         fetch("/api/budgets"),
         fetch("/api/rules"),
         fetch("/api/settings?key=savingsGoal"),
+        fetch("/api/savings-history?limit=12"),
       ]);
 
       const categoriesData = await categoriesRes.json();
       const budgetsData = await budgetsRes.json();
       const rulesData = await rulesRes.json();
       const savingsGoalData = await savingsGoalRes.json();
+      const savingsHistoryData = await savingsHistoryRes.json();
 
       setCategories(categoriesData);
       setBudgets(budgetsData);
@@ -91,6 +96,7 @@ export default function SettingsPage() {
       if (savingsGoalData?.value) {
         setSavingsGoal(savingsGoalData.value);
       }
+      setSavingsHistory(savingsHistoryData || []);
 
       // Fetch current month spending
       const now = new Date();
@@ -627,6 +633,79 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Savings History Section (Feature 15) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Historico de Metas
+              </CardTitle>
+              <CardDescription>
+                Acompanhe seu progresso em relacao a meta de economia ao longo dos meses
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {savingsHistory.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <History className="mx-auto h-12 w-12 text-gray-300 mb-2" />
+                  <p>Nenhum historico disponivel</p>
+                  <p className="text-sm mt-1">
+                    Navegue para meses anteriores no dashboard para registrar o historico
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savingsHistory.map((record) => {
+                    const monthNames = [
+                      "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+                      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+                    ];
+                    const monthName = monthNames[record.month - 1];
+
+                    return (
+                      <div
+                        key={record.id}
+                        className={`flex items-center justify-between rounded-lg border p-4 ${
+                          record.isAchieved
+                            ? "border-green-200 bg-green-50"
+                            : "border-red-200 bg-red-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {record.isAchieved ? (
+                            <CheckCircle className="h-6 w-6 text-green-500" />
+                          ) : (
+                            <XCircle className="h-6 w-6 text-red-500" />
+                          )}
+                          <div>
+                            <div className="font-medium">
+                              {monthName} {record.year}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Meta: {formatCurrency(record.goal)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-lg font-semibold ${
+                            record.actual >= 0 ? "text-green-600" : "text-red-600"
+                          }`}>
+                            {formatCurrency(record.actual)}
+                          </div>
+                          <div className={`text-sm ${
+                            record.isAchieved ? "text-green-600" : "text-red-600"
+                          }`}>
+                            {record.percentage >= 0 ? record.percentage.toFixed(0) : 0}% da meta
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

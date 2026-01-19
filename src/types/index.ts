@@ -17,6 +17,7 @@ export interface Transaction {
   recurringExpenseId: string | null;
   recurringExpense?: RecurringExpense | null;
   tags: string | null;
+  deletedAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -87,6 +88,8 @@ export interface CategorySummary {
   categoryColor: string;
   total: number;
   percentage: number;
+  previousTotal: number | null;
+  changePercentage: number | null;
 }
 
 export interface ImportedTransaction {
@@ -170,4 +173,57 @@ export interface ProjectionTotals {
 export interface ProjectionResponse {
   months: MonthProjection[];
   totals: ProjectionTotals;
+}
+
+// Savings History Types
+export interface SavingsHistory {
+  id: string;
+  month: number;
+  year: number;
+  goal: number;
+  actual: number;
+  isAchieved: boolean;
+  percentage: number;
+  createdAt: Date | string;
+}
+
+// Weekly Summary Types
+export interface WeeklySummary {
+  currentWeek: {
+    total: number;
+    count: number;
+    startDate: string;
+    endDate: string;
+  };
+  previousWeek: {
+    total: number;
+    count: number;
+  };
+  changePercentage: number | null;
+}
+
+// End of Month Projection Types
+export interface EndOfMonthProjection {
+  currentDay: number;
+  totalDays: number;
+  remainingDays: number;
+  dailyExpenseAverage: number;
+  dailyIncomeAverage: number;
+  projectedExpense: number;
+  projectedIncome: number;
+  projectedBalance: number;
+  isProjectionNegative: boolean;
+}
+
+// Unusual Transaction Types
+export interface UnusualTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: Date | string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryColor: string | null;
+  categoryAverage: number;
+  exceedsBy: number; // Percentage above average
 }

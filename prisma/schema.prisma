@@ -24,6 +24,7 @@ model Transaction {
   recurringExpenseId  String?
   recurringExpense    RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
   tags                String?           // JSON array: '["trabalho", "viagem"]'
+  deletedAt           DateTime?         // Soft delete - null means active
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 }
@@ -93,4 +94,17 @@ model Settings {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model SavingsHistory {
+  id         String   @id @default(cuid())
+  month      Int
+  year       Int
+  goal       Float
+  actual     Float
+  isAchieved Boolean
+  percentage Float
+  createdAt  DateTime @default(now())
+
+  @@unique([month, year])
 }

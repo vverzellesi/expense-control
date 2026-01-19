@@ -82,9 +82,21 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await prisma.transaction.delete({
-      where: { id },
-    });
+    const searchParams = request.nextUrl.searchParams;
+    const permanent = searchParams.get("permanent");
+
+    if (permanent === "true") {
+      // Permanent delete
+      await prisma.transaction.delete({
+        where: { id },
+      });
+    } else {
+      // Soft delete - set deletedAt timestamp
+      await prisma.transaction.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

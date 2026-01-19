@@ -15,8 +15,14 @@ export async function GET(request: NextRequest) {
     const isInstallment = searchParams.get("isInstallment");
     const search = searchParams.get("search");
     const tag = searchParams.get("tag");
+    const includeDeleted = searchParams.get("includeDeleted");
 
     const where: Record<string, unknown> = {};
+
+    // By default, exclude soft-deleted transactions
+    if (includeDeleted !== "true") {
+      where.deletedAt = null;
+    }
 
     // Custom date range filter takes priority
     if (startDate && endDate) {
