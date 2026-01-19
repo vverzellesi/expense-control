@@ -139,13 +139,13 @@ export async function POST(request: NextRequest) {
           totalAmount: Math.abs(amount) * totalInstallments,
           totalInstallments,
           installmentAmount: installmentAmount || Math.abs(amount),
-          startDate: new Date(date),
+          startDate: new Date(date + "T12:00:00"),
           origin,
         },
       });
 
       const transactions = [];
-      const startDate = new Date(date);
+      const startDate = new Date(date + "T12:00:00");
 
       for (let i = 0; i < totalInstallments; i++) {
         const transactionDate = new Date(startDate);
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
         data: {
           description,
           amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
-          date: new Date(date),
+          date: new Date(date + "T12:00:00"),
           type,
           origin,
           categoryId: categoryId || null,

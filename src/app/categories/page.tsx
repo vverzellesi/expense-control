@@ -27,18 +27,36 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { Category } from "@/types";
 
 const defaultColors = [
+  // Blues
   "#3B82F6",
-  "#F97316",
-  "#22C55E",
-  "#8B5CF6",
-  "#EF4444",
-  "#EC4899",
-  "#6366F1",
-  "#14B8A6",
-  "#F59E0B",
-  "#10B981",
+  "#1D4ED8",
+  "#0EA5E9",
   "#06B6D4",
+  // Greens
+  "#22C55E",
+  "#10B981",
+  "#14B8A6",
+  "#84CC16",
+  // Reds/Pinks
+  "#EF4444",
+  "#DC2626",
+  "#EC4899",
+  "#F43F5E",
+  // Purples
+  "#8B5CF6",
+  "#6366F1",
+  "#A855F7",
+  "#7C3AED",
+  // Oranges/Yellows
+  "#F97316",
+  "#F59E0B",
+  "#EAB308",
+  "#EA580C",
+  // Neutrals
   "#6B7280",
+  "#78716C",
+  "#64748B",
+  "#71717A",
 ];
 
 export default function CategoriesPage() {
@@ -208,12 +226,12 @@ export default function CategoriesPage() {
 
               <div>
                 <Label>Cor</Label>
-                <div className="mt-2 grid grid-cols-6 gap-2">
+                <div className="mt-2 grid grid-cols-8 gap-2">
                   {defaultColors.map((c) => (
                     <button
                       key={c}
                       type="button"
-                      className={`h-8 w-8 rounded-full transition-transform ${
+                      className={`h-7 w-7 rounded-full transition-transform hover:scale-110 ${
                         color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : ""
                       }`}
                       style={{ backgroundColor: c }}

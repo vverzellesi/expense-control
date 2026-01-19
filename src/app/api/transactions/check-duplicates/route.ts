@@ -67,7 +67,9 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < transactions.length; i++) {
       const t = transactions[i];
-      const transactionDate = new Date(t.date);
+      // Parse date safely to avoid timezone issues with YYYY-MM-DD format
+      const dateStr = !t.date.includes('T') ? t.date + 'T12:00:00' : t.date;
+      const transactionDate = new Date(dateStr);
 
       // Check for exact duplicates (same date, description, amount)
       const existing = await prisma.transaction.findFirst({

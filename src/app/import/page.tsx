@@ -41,6 +41,7 @@ import {
   Receipt,
   Ban,
   Link2,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment } from "@/lib/categorizer";
@@ -606,6 +607,10 @@ export default function ImportPage() {
     setTransactions((prev) => prev.map((t) => ({ ...t, selected })));
   }
 
+  function removeTransaction(index: number) {
+    setTransactions((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function getConfidenceBadge(confidence?: number) {
     if (confidence === undefined) return null;
 
@@ -922,6 +927,7 @@ export default function ImportPage() {
                         <TableHead className="w-20">Confiança</TableHead>
                       )}
                       <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1120,6 +1126,17 @@ export default function ImportPage() {
                           }`}
                         >
                           {formatCurrency(t.amount)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                            onClick={() => removeTransaction(index)}
+                            title="Remover transação"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

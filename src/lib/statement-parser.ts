@@ -358,6 +358,131 @@ function parseAmount(amountStr: string): number {
 const CREDIT_CARD_LINE_DATE_PATTERN =
   /^\s*[□●○•\-\*]?\s*(\d{1,2})\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/i;
 
+// C6 Bank statement format patterns
+// C6 extracts have format: DD/MM DD/MM Tipo Descrição Valor
+// e.g., "02/01 02/01 Saída PIX Pix enviado para VICTOR -R$ 156,00"
+// e.g., "17/01 19/01 Outros gastos SEGURO CONTA C6 -R$ 20,00"
+const C6_STATEMENT_TYPES = [
+  "Saída PIX",
+  "Entrada PIX",
+  "Outros gastos",
+  "Pagamento",
+  "Transferência",
+  "Saldo do dia",
+];
+
+// Pattern to match C6 format: DD/MM DD/MM Type Description Amount
+// Captures: date1, date2, type, rest of line
+const C6_LINE_PATTERN =
+  /^(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(Saída PIX|Entrada PIX|Outros gastos|Pagamento|Transferência)\s+(.+)$/i;
+
+/**
+ * Extract transaction from C6 bank statement format
+ * Format: DD/MM DD/MM Tipo Descrição Valor
+ * e.g., "02/01 02/01 Saída PIX Pix enviado para VICTOR -R$ 156,00"
+ */
+function extractFromC6Line(
+  line: string,
+  confidence: number
+): StatementTransaction | null {
+  const match = line.match(C6_LINE_PATTERN);
+  if (!match) return null;
+
+  const [, date1Str, date2Str, transactionType, rest] = match;
+
+  // Parse the accounting date (data contábil - second date)
+  const [day, month] = date2Str.split("/").map(Number);
+  const year = new Date().getFullYear();
+  const date = new Date(year, month - 1, day);
+
+  if (isNaN(date.getTime())) return null;
+
+  // Extract amount from the rest of the line
+  const amountRegex = new RegExp(AMOUNT_PATTERN.source, "g");
+  const amounts: number[] = [];
+  let amountMatch;
+  let lastAmountEnd = 0;
+
+  while ((amountMatch = amountRegex.exec(rest)) !== null) {
+    const amount = parseAmount(amountMatch[0]);
+    if (amount !== 0) {
+      amounts.push(amount);
+      lastAmountEnd = amountMatch.index;
+    }
+  }
+
+  if (amounts.length === 0) return null;
+
+  const amount = amounts[amounts.length - 1];
+
+  // Extract description (everything before the amount)
+  let description = rest.substring(0, lastAmountEnd).trim();
+
+  // Clean up description
+  description = description
+    .replace(/\s+/g, " ")
+    .replace(/^[:\-\s]+|[:\-\s]+$/g, "")
+    .trim();
+
+  if (!description || description.length < 2) {
+    description = transactionType;
+  }
+
+  // Determine transaction type based on C6 type column
+  let type: TransactionType;
+  const upperType = transactionType.toUpperCase();
+
+  if (upperType.includes("ENTRADA") || upperType.includes("RECEBIDO")) {
+    type = "INCOME";
+  } else if (upperType.includes("SAÍDA") || upperType.includes("SAIDA") || upperType.includes("PAGAMENTO") || upperType.includes("OUTROS GASTOS")) {
+    type = "EXPENSE";
+  } else {
+    type = amount >= 0 ? "INCOME" : "EXPENSE";
+  }
+
+  // Map C6 type to transaction kind
+  let transactionKind: string | undefined;
+  if (upperType.includes("PIX")) {
+    transactionKind = upperType.includes("ENTRADA") ? "PIX RECEBIDO" : "PIX ENVIADO";
+  } else if (upperType.includes("PAGAMENTO")) {
+    transactionKind = "BOLETO";
+  }
+
+  return {
+    date,
+    description,
+    amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
+    type,
+    transactionKind,
+    confidence,
+  };
+}
+
+/**
+ * Detect if this is a C6 Bank statement
+ */
+function isC6Statement(text: string): boolean {
+  // Check for C6 Bank header patterns
+  const c6Patterns = [
+    /C6\s*BANK/i,
+    /BANCO\s*C6/i,
+    /Agência:\s*1\s*•?\s*Conta:/i,
+    /Extrato\s+Período/i,
+  ];
+
+  // Check for characteristic C6 format: "Data lançamento" "Data contábil"
+  const hasC6Format = /Data\s+(?:de\s+)?lan[çc]amento\s*Data\s+cont[áa]bil/i.test(text) ||
+    /lan[çc]amento\s*cont[áa]bil\s*Tipo/i.test(text);
+
+  // Check if any C6 patterns match
+  const hasC6Header = c6Patterns.some(p => p.test(text));
+
+  // Also check for characteristic line format
+  const hasC6Lines = C6_LINE_PATTERN.test(text);
+
+  return hasC6Header || hasC6Format || hasC6Lines;
+}
+
 /**
  * Extract transactions from a single line
  */
@@ -492,6 +617,9 @@ export function parseStatementText(
   // Detect if this is a credit card invoice
   const isCreditCard = isCreditCardInvoice(text);
 
+  // Detect if this is a C6 Bank statement
+  const isC6 = isC6Statement(text);
+
   // For credit card invoices, try to extract the due date as reference
   const invoiceDueDate = isCreditCard ? extractInvoiceDueDate(text) : null;
 
@@ -502,12 +630,28 @@ export function parseStatementText(
     .filter((l) => l.length > 5);
 
   for (const line of lines) {
-    const transaction = extractFromLine(
-      line,
-      ocrConfidence,
-      invoiceDueDate || undefined,
-      isCreditCard
-    );
+    // Skip "Saldo do dia" lines (C6 balance summaries)
+    if (/^Saldo\s+do\s+dia/i.test(line)) {
+      continue;
+    }
+
+    let transaction: StatementTransaction | null = null;
+
+    // Try C6-specific parser first if detected as C6 statement
+    if (isC6) {
+      transaction = extractFromC6Line(line, ocrConfidence);
+    }
+
+    // Fall back to generic parser if C6 parser didn't match
+    if (!transaction) {
+      transaction = extractFromLine(
+        line,
+        ocrConfidence,
+        invoiceDueDate || undefined,
+        isCreditCard
+      );
+    }
+
     if (transaction) {
       transactions.push(transaction);
     }

@@ -65,7 +65,11 @@ export async function POST(request: NextRequest) {
         amount = Math.abs(amount);
       }
 
-      const transactionDate = new Date(t.date);
+      // Parse date safely to avoid timezone issues with YYYY-MM-DD format
+      const dateStr = typeof t.date === 'string' && !t.date.includes('T')
+        ? t.date + 'T12:00:00'
+        : t.date;
+      const transactionDate = new Date(dateStr);
       const transactionMonth = transactionDate.getMonth();
       const transactionYear = transactionDate.getFullYear();
       const transactionOrigin = origin || t.origin || "Importacao CSV";

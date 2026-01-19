@@ -65,7 +65,7 @@ export async function PUT(
       data: {
         description,
         amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
-        date: new Date(date),
+        date: new Date(date + "T12:00:00"),
         type,
         origin,
         categoryId: categoryId || null,
