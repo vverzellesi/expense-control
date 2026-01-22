@@ -374,121 +374,6 @@ export async function GET(request: NextRequest) {
     // Weekly Breakdown: gastos por semana do mês
     const weeklyBreakdown = calculateWeeklyBreakdown(transactions, startDate, endDate);
 
-    // Feature 9: End of Month Projection (improved logic)
-    // Separates fixed/recurring expenses from variable expenses
-    // Fixed expenses count once, variable expenses are projected by daily average
-    let projection = null;
-    if (isCurrentMonth) {
-      const today = new Date();
-      const daysElapsed = today.getDate();
-      const totalDays = endDate.getDate();
-      const remainingDays = totalDays - daysElapsed;
-
-      // Separate fixed/recurring expenses from variable expenses
-      let fixedExpensesPaid = 0;
-      let variableExpenses = 0;
-      let fixedIncomePaid = 0;
-      let variableIncome = 0;
-
-      for (const t of transactions) {
-        const isFixedOrRecurring = t.isFixed || t.recurringExpenseId !== null;
-
-        if (t.type === "EXPENSE") {
-          if (isFixedOrRecurring) {
-            fixedExpensesPaid += Math.abs(t.amount);
-          } else {
-            variableExpenses += Math.abs(t.amount);
-          }
-        } else if (t.type === "INCOME") {
-          if (isFixedOrRecurring) {
-            fixedIncomePaid += Math.abs(t.amount);
-          } else {
-            variableIncome += Math.abs(t.amount);
-          }
-        }
-      }
-
-      // Get active recurring expenses/incomes that haven't been generated this month yet
-      const activeRecurring = await prisma.recurringExpense.findMany({
-        where: {
-          isActive: true,
-        },
-      });
-
-      // Check which recurring expenses haven't been paid this month
-      let pendingRecurringExpenses = 0;
-      let pendingRecurringIncome = 0;
-
-      for (const recurring of activeRecurring) {
-        // Check if there's a transaction for this recurring expense in the current month
-        const hasTransactionThisMonth = transactions.some(
-          (t) => t.recurringExpenseId === recurring.id
-        );
-
-        if (!hasTransactionThisMonth) {
-          // Get the most recent transaction amount for this recurring (in case user edited the value)
-          const latestTransaction = await prisma.transaction.findFirst({
-            where: {
-              recurringExpenseId: recurring.id,
-            },
-            orderBy: { date: "desc" },
-            select: { amount: true },
-          });
-
-          const effectiveAmount = latestTransaction?.amount ?? recurring.defaultAmount;
-
-          if (recurring.type === "EXPENSE") {
-            pendingRecurringExpenses += Math.abs(effectiveAmount);
-          } else {
-            pendingRecurringIncome += Math.abs(effectiveAmount);
-          }
-        }
-      }
-
-      // Calculate daily average only for variable expenses
-      const dailyVariableExpenseAverage = daysElapsed > 0 ? variableExpenses / daysElapsed : 0;
-      const dailyVariableIncomeAverage = daysElapsed > 0 ? variableIncome / daysElapsed : 0;
-
-      // Project: fixed (paid + pending) + variable (current + projected)
-      const projectedExpense =
-        fixedExpensesPaid +
-        pendingRecurringExpenses +
-        variableExpenses +
-        (dailyVariableExpenseAverage * remainingDays);
-
-      const projectedIncome =
-        fixedIncomePaid +
-        pendingRecurringIncome +
-        variableIncome +
-        (dailyVariableIncomeAverage * remainingDays);
-
-      const projectedBalance = projectedIncome - projectedExpense;
-
-      projection = {
-        currentDay: daysElapsed,
-        totalDays,
-        remainingDays,
-        // Keep legacy fields for backwards compatibility
-        dailyExpenseAverage: dailyVariableExpenseAverage,
-        dailyIncomeAverage: dailyVariableIncomeAverage,
-        projectedExpense,
-        projectedIncome,
-        projectedBalance,
-        isProjectionNegative: projectedBalance < 0,
-        // New detailed breakdown
-        breakdown: {
-          fixedExpensesPaid,
-          pendingRecurringExpenses,
-          variableExpenses,
-          projectedVariableExpenses: dailyVariableExpenseAverage * remainingDays,
-          fixedIncomePaid,
-          pendingRecurringIncome,
-          variableIncome,
-          projectedVariableIncome: dailyVariableIncomeAverage * remainingDays,
-        },
-      };
-    }
-
     // Get savings goal
     const savingsGoalSetting = await prisma.settings.findUnique({
       where: { key: "savingsGoal" },
@@ -666,7 +551,6 @@ export async function GET(request: NextRequest) {
       upcomingInstallments,
       weeklySummary,
       weeklyBreakdown,
-      projection,
     });
   } catch (error) {
     console.error("Error fetching summary:", error);

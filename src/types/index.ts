@@ -215,31 +215,6 @@ export interface WeeklySummary {
   changePercentage: number | null;
 }
 
-// End of Month Projection Types
-export interface ProjectionBreakdown {
-  fixedExpensesPaid: number;
-  pendingRecurringExpenses: number;
-  variableExpenses: number;
-  projectedVariableExpenses: number;
-  fixedIncomePaid: number;
-  pendingRecurringIncome: number;
-  variableIncome: number;
-  projectedVariableIncome: number;
-}
-
-export interface EndOfMonthProjection {
-  currentDay: number;
-  totalDays: number;
-  remainingDays: number;
-  dailyExpenseAverage: number;
-  dailyIncomeAverage: number;
-  projectedExpense: number;
-  projectedIncome: number;
-  projectedBalance: number;
-  isProjectionNegative: boolean;
-  breakdown?: ProjectionBreakdown;
-}
-
 // Unusual Transaction Types
 export interface UnusualTransaction {
   id: string;

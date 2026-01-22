@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target, Calendar, Calculator, Zap } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target, Calendar, Zap } from "lucide-react";
 import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
-import type { Transaction, Category, WeeklySummary, EndOfMonthProjection, UnusualTransaction, WeeklyBreakdown } from "@/types";
+import type { Transaction, Category, WeeklySummary, UnusualTransaction, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
   categoryId: string;
@@ -67,7 +67,6 @@ interface SummaryData {
   upcomingInstallments: (Transaction & { category: Category | null })[];
   weeklySummary: WeeklySummary | null;
   weeklyBreakdown: WeeklyBreakdown | null;
-  projection: EndOfMonthProjection | null;
 }
 
 export default function Dashboard() {
@@ -206,99 +205,48 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Weekly Summary & Projection Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Weekly Summary Card (Feature 8) */}
-        {data?.weeklySummary && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Calendar className="h-5 w-5 text-blue-500" />
-                Resumo da Semana
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <div className="text-2xl font-bold text-red-600">
-                    {formatCurrency(data.weeklySummary.currentWeek.total)}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {data.weeklySummary.currentWeek.count} transaco{data.weeklySummary.currentWeek.count !== 1 ? "es" : ""} esta semana
-                  </div>
+      {/* Weekly Summary Card */}
+      {data?.weeklySummary && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Calendar className="h-5 w-5 text-blue-500" />
+              Resumo da Semana
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div>
+                <div className="text-2xl font-bold text-red-600">
+                  {formatCurrency(data.weeklySummary.currentWeek.total)}
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">
-                    Semana anterior: {formatCurrency(data.weeklySummary.previousWeek.total)}
-                  </span>
-                  {data.weeklySummary.changePercentage !== null && (
-                    <Badge
-                      variant={data.weeklySummary.changePercentage <= 0 ? "default" : "destructive"}
-                      className={data.weeklySummary.changePercentage <= 0 ? "bg-green-500" : ""}
-                    >
-                      {data.weeklySummary.changePercentage <= 0 ? (
-                        <TrendingDown className="mr-1 h-3 w-3" />
-                      ) : (
-                        <TrendingUp className="mr-1 h-3 w-3" />
-                      )}
-                      {data.weeklySummary.changePercentage >= 0 ? "+" : ""}
-                      {data.weeklySummary.changePercentage.toFixed(0)}%
-                    </Badge>
-                  )}
+                <div className="text-sm text-gray-500">
+                  {data.weeklySummary.currentWeek.count} transaco{data.weeklySummary.currentWeek.count !== 1 ? "es" : ""} esta semana
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* End of Month Projection Card (Feature 9) */}
-        {data?.projection && (
-          <Card className={data.projection.isProjectionNegative ? "border-red-200 bg-red-50" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Calculator className="h-5 w-5 text-purple-500" />
-                Projecao Fim do Mes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <div className={`text-2xl font-bold ${
-                    data.projection.isProjectionNegative ? "text-red-600" : "text-green-600"
-                  }`}>
-                    {formatCurrency(data.projection.projectedBalance)}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Saldo projetado
-                  </div>
-                </div>
-                <Progress
-                  value={(data.projection.currentDay / data.projection.totalDays) * 100}
-                  className="h-2"
-                />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Dia {data.projection.currentDay} de {data.projection.totalDays}</span>
-                  <span>{data.projection.remainingDays} dias restantes</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded bg-gray-100 p-2">
-                    <div className="text-xs text-gray-500">Media diaria despesas</div>
-                    <div className="font-medium text-red-600">
-                      {formatCurrency(data.projection.dailyExpenseAverage)}
-                    </div>
-                  </div>
-                  <div className="rounded bg-gray-100 p-2">
-                    <div className="text-xs text-gray-500">Despesa projetada</div>
-                    <div className="font-medium text-red-600">
-                      {formatCurrency(data.projection.projectedExpense)}
-                    </div>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">
+                  Semana anterior: {formatCurrency(data.weeklySummary.previousWeek.total)}
+                </span>
+                {data.weeklySummary.changePercentage !== null && (
+                  <Badge
+                    variant={data.weeklySummary.changePercentage <= 0 ? "default" : "destructive"}
+                    className={data.weeklySummary.changePercentage <= 0 ? "bg-green-500" : ""}
+                  >
+                    {data.weeklySummary.changePercentage <= 0 ? (
+                      <TrendingDown className="mr-1 h-3 w-3" />
+                    ) : (
+                      <TrendingUp className="mr-1 h-3 w-3" />
+                    )}
+                    {data.weeklySummary.changePercentage >= 0 ? "+" : ""}
+                    {data.weeklySummary.changePercentage.toFixed(0)}%
+                  </Badge>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Weekly Breakdown - Gastos por Semana do Mês */}
       {data?.weeklyBreakdown && data.weeklyBreakdown.weeks.length > 0 && (
