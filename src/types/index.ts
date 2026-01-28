@@ -158,13 +158,18 @@ export interface MonthProjection {
   month: number;
   year: number;
   monthLabel: string; // "fev/26"
+  isCurrentMonth: boolean;
+
+  // Gastos reais (apenas mês atual)
+  actualExpenses: number;
+  actualIncome: number;
 
   // Parcelas (do DB)
   installmentsTotal: number;
   installmentsCount: number;
   installments: ProjectionInstallmentItem[];
 
-  // Recorrentes projetados
+  // Recorrentes projetados (apenas os pendentes no mês atual)
   recurringExpenses: number;
   recurringIncome: number;
   recurringItems: ProjectionRecurringItem[];

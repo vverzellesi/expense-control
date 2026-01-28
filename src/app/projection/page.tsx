@@ -233,6 +233,11 @@ export default function ProjectionPage() {
                       <ChevronRight className="h-4 w-4 text-gray-500" />
                     )}
                     <span className="font-medium">{monthName}</span>
+                    {m.isCurrentMonth && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        Atual
+                      </span>
+                    )}
                     {m.isNegative && (
                       <AlertTriangle className="h-4 w-4 text-red-500" />
                     )}
@@ -250,8 +255,45 @@ export default function ProjectionPage() {
 
                 {isExpanded && (
                   <div className="border-t px-4 pb-4 pt-2">
-                    {/* Installments */}
-                    {m.installments.length > 0 && (
+                    {/* Current Month: Actual Expenses */}
+                    {m.isCurrentMonth && (m.actualExpenses > 0 || m.actualIncome > 0) && (
+                      <div className="mb-4">
+                        <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                          Gastos Reais (ate agora)
+                        </h4>
+                        <div className="space-y-1">
+                          {m.actualIncome > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Receitas recebidas</span>
+                              <span className="font-medium text-green-600">
+                                +{formatCurrency(m.actualIncome)}
+                              </span>
+                            </div>
+                          )}
+                          {m.actualExpenses > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Despesas realizadas</span>
+                              <span className="font-medium text-gray-900">
+                                -{formatCurrency(m.actualExpenses)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 flex justify-between border-t pt-2 text-sm">
+                          <span className="font-medium">Saldo Real</span>
+                          <span className={cn(
+                            "font-semibold",
+                            m.actualIncome - m.actualExpenses >= 0 ? "text-green-600" : "text-red-600"
+                          )}>
+                            {m.actualIncome - m.actualExpenses >= 0 ? "+" : ""}
+                            {formatCurrency(m.actualIncome - m.actualExpenses)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pending Recurring (for current month) or Installments (future months) */}
+                    {!m.isCurrentMonth && m.installments.length > 0 && (
                       <div className="mb-4">
                         <h4 className="mb-2 text-sm font-semibold text-gray-700">
                           Parcelas ({m.installmentsCount})
@@ -281,11 +323,11 @@ export default function ProjectionPage() {
                       </div>
                     )}
 
-                    {/* Recurring */}
+                    {/* Recurring - show as "Pending" for current month */}
                     {m.recurringItems.length > 0 && (
                       <div>
                         <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                          Recorrentes
+                          {m.isCurrentMonth ? "Recorrentes Pendentes" : "Recorrentes"}
                         </h4>
                         <div className="space-y-1">
                           {m.recurringItems.map((rec, idx) => (
@@ -312,13 +354,17 @@ export default function ProjectionPage() {
                         </div>
                         <div className="mt-2 space-y-1 border-t pt-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="font-medium">Receitas Recorrentes</span>
+                            <span className="font-medium">
+                              {m.isCurrentMonth ? "Receitas Pendentes" : "Receitas Recorrentes"}
+                            </span>
                             <span className="font-semibold text-green-600">
                               +{formatCurrency(m.recurringIncome)}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="font-medium">Despesas Recorrentes</span>
+                            <span className="font-medium">
+                              {m.isCurrentMonth ? "Despesas Pendentes" : "Despesas Recorrentes"}
+                            </span>
                             <span className="font-semibold">
                               -{formatCurrency(m.recurringExpenses)}
                             </span>
@@ -328,9 +374,15 @@ export default function ProjectionPage() {
                     )}
 
                     {/* No items */}
-                    {m.installments.length === 0 && m.recurringItems.length === 0 && (
+                    {!m.isCurrentMonth && m.installments.length === 0 && m.recurringItems.length === 0 && (
                       <p className="text-sm text-gray-500">
                         Nenhum compromisso projetado para este mes
+                      </p>
+                    )}
+
+                    {m.isCurrentMonth && m.actualExpenses === 0 && m.actualIncome === 0 && m.recurringItems.length === 0 && (
+                      <p className="text-sm text-gray-500">
+                        Nenhuma transacao registrada este mes
                       </p>
                     )}
                   </div>

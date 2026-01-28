@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
     const numMonths = monthsParam ? Math.min(Math.max(parseInt(monthsParam), 1), 12) : 6;
 
     const now = new Date();
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1 + numMonths, 0);
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + numMonths, 0);
 
     // Fetch future installment transactions (from grouped installments)
     const futureInstallments = await prisma.transaction.findMany({
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         isInstallment: true,
         installmentId: { not: null }, // Only grouped installments
         date: {
-          gte: startOfNextMonth,
+          gte: startOfCurrentMonth,
           lte: endDate,
         },
       },
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
         futureDate.setMonth(transactionDate.getMonth() + i);
 
         // Only include if within projection range
-        if (futureDate >= startOfNextMonth && futureDate <= endDate) {
+        if (futureDate >= startOfCurrentMonth && futureDate <= endDate) {
           projectedStandaloneInstallments.push({
             description: t.description,
             amount: Math.abs(t.amount),
@@ -119,16 +119,52 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // Fetch all actual transactions for current month (for real expenses calculation)
+    const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const currentMonthTransactions = await prisma.transaction.findMany({
+      where: {
+        date: {
+          gte: startOfCurrentMonth,
+          lte: endOfCurrentMonth,
+        },
+        deletedAt: null,
+      },
+    });
+
+    // Calculate actual expenses and income for current month
+    const actualExpenses = currentMonthTransactions
+      .filter((t) => t.type === "EXPENSE")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    const actualIncome = currentMonthTransactions
+      .filter((t) => t.type === "INCOME")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    // Find which recurring expenses have already been charged this month
+    const chargedRecurringIds = new Set(
+      currentMonthTransactions
+        .filter((t) => t.recurringExpenseId !== null)
+        .map((t) => t.recurringExpenseId)
+    );
+
+    // Filter recurring to only include those NOT yet charged (for current month projection)
+    const pendingRecurring = recurringWithLatestAmount.filter(
+      (r) => !chargedRecurringIds.has(r.id)
+    );
+
     // Build monthly projections
     const months: MonthProjection[] = [];
     let totalInstallmentsSum = 0;
     let totalRecurringExpensesSum = 0;
     let totalRecurringIncomeSum = 0;
+    let totalActualExpensesSum = 0;
+    let totalActualIncomeSum = 0;
 
     for (let i = 0; i < numMonths; i++) {
-      const projMonth = now.getMonth() + 1 + i;
-      const projYear = now.getFullYear() + Math.floor((projMonth - 1) / 12);
-      const normalizedMonth = ((projMonth - 1) % 12) + 1;
+      const isCurrentMonth = i === 0;
+      const projMonth = now.getMonth() + i;
+      const projYear = now.getFullYear() + Math.floor(projMonth / 12);
+      const normalizedMonth = (projMonth % 12) + 1;
 
       const monthLabel = `${MONTH_LABELS[normalizedMonth - 1]}/${String(projYear).slice(-2)}`;
 
@@ -165,37 +201,65 @@ export async function GET(request: NextRequest) {
         monthStandaloneInstallments.reduce((sum, t) => sum + t.amount, 0);
       totalInstallmentsSum += installmentsTotal;
 
-      // Calculate recurring for this month (using effective amount from latest transaction)
-      const recurringItems: ProjectionRecurringItem[] = recurringWithLatestAmount.map((r) => ({
+      // For current month: use only pending recurring (not yet charged)
+      // For future months: use all recurring
+      const recurringToUse = isCurrentMonth ? pendingRecurring : recurringWithLatestAmount;
+
+      const recurringItems: ProjectionRecurringItem[] = recurringToUse.map((r) => ({
         description: r.description,
         amount: Math.abs(r.effectiveAmount),
         type: r.type as "INCOME" | "EXPENSE",
       }));
 
-      const recurringExpenses = recurringWithLatestAmount
+      const recurringExpensesPending = recurringToUse
         .filter((r) => r.type === "EXPENSE")
         .reduce((sum, r) => sum + Math.abs(r.effectiveAmount), 0);
 
-      const recurringIncome = recurringWithLatestAmount
+      const recurringIncomePending = recurringToUse
         .filter((r) => r.type === "INCOME")
         .reduce((sum, r) => sum + Math.abs(r.effectiveAmount), 0);
 
-      totalRecurringExpensesSum += recurringExpenses;
-      totalRecurringIncomeSum += recurringIncome;
+      // For current month: actual + pending recurring
+      // For future months: just projected recurring
+      const monthActualExpenses = isCurrentMonth ? actualExpenses : 0;
+      const monthActualIncome = isCurrentMonth ? actualIncome : 0;
 
-      const totalExpenses = installmentsTotal + recurringExpenses;
-      const totalIncome = recurringIncome;
+      totalActualExpensesSum += monthActualExpenses;
+      totalActualIncomeSum += monthActualIncome;
+      totalRecurringExpensesSum += recurringExpensesPending;
+      totalRecurringIncomeSum += recurringIncomePending;
+
+      // Total expenses = actual expenses (current month) + pending recurring expenses
+      // For current month, installments are already included in actual expenses if they exist
+      // For future months, we add installments separately
+      let totalExpenses: number;
+      let totalIncome: number;
+
+      if (isCurrentMonth) {
+        // Actual already includes what was spent (including any installments/recurring already charged)
+        // Add only pending recurring
+        totalExpenses = monthActualExpenses + recurringExpensesPending;
+        totalIncome = monthActualIncome + recurringIncomePending;
+      } else {
+        // Future months: installments + all recurring
+        totalExpenses = installmentsTotal + recurringExpensesPending;
+        totalIncome = recurringIncomePending;
+      }
+
       const projectedBalance = totalIncome - totalExpenses;
 
       months.push({
         month: normalizedMonth,
         year: projYear,
         monthLabel,
+        isCurrentMonth,
+        actualExpenses: monthActualExpenses,
+        actualIncome: monthActualIncome,
         installmentsTotal,
         installmentsCount: monthInstallments.length + monthStandaloneInstallments.length,
         installments: installmentItems,
-        recurringExpenses,
-        recurringIncome,
+        recurringExpenses: recurringExpensesPending,
+        recurringIncome: recurringIncomePending,
         recurringItems,
         totalExpenses,
         totalIncome,
