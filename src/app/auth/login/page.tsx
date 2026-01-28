@@ -53,7 +53,7 @@ function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full">
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Entrar</CardTitle>
         <CardDescription className="text-center">
@@ -113,7 +113,7 @@ function LoginForm() {
 
 function LoginFormFallback() {
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full">
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Entrar</CardTitle>
         <CardDescription className="text-center">
@@ -126,10 +126,19 @@ function LoginFormFallback() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <Suspense fallback={<LoginFormFallback />}>
-        <LoginForm />
-      </Suspense>
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 px-4 overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-emerald-100 opacity-40 blur-3xl" />
+      <div className="absolute -right-20 bottom-20 h-96 w-96 rounded-full bg-emerald-50 opacity-60 blur-3xl" />
+
+      <div className="relative z-10 w-full max-w-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-semibold text-gray-900">MyPocket</h1>
+        </div>
+        <Suspense fallback={<LoginFormFallback />}>
+          <LoginForm />
+        </Suspense>
+      </div>
     </div>
   )
 }

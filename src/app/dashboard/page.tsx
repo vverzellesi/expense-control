@@ -512,7 +512,7 @@ export default function Dashboard() {
                         ? "[&>div]:bg-red-500"
                         : budget.percentage >= 80
                         ? "[&>div]:bg-orange-500"
-                        : "[&>div]:bg-blue-500"
+                        : "[&>div]:bg-emerald-500"
                     }`}
                   />
                   <div className="mt-2 flex justify-between text-xs">
@@ -737,7 +737,7 @@ export default function Dashboard() {
                     className={`h-3 ${
                       data.savingsGoal.isAchieved
                         ? "[&>div]:bg-green-500"
-                        : "[&>div]:bg-blue-500"
+                        : "[&>div]:bg-emerald-500"
                     }`}
                   />
                 </div>
