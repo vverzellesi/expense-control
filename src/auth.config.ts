@@ -12,9 +12,10 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user
       const isOnAuthPage = nextUrl.pathname.startsWith("/auth")
       const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth")
+      const isLandingPage = nextUrl.pathname === "/"
 
-      // Allow auth pages and auth API routes
-      if (isOnAuthPage || isApiAuthRoute) {
+      // Allow landing page, auth pages, and auth API routes without authentication
+      if (isLandingPage || isOnAuthPage || isApiAuthRoute) {
         return true
       }
 
