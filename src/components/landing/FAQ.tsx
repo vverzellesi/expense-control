@@ -37,7 +37,7 @@ export function FAQ() {
             Perguntas Frequentes
           </h2>
           <p className="mt-4 text-lg text-gray-600">
-            Tire suas dúvidas sobre o Finanças
+            Tire suas dúvidas sobre o MyPocket
           </p>
         </div>
 

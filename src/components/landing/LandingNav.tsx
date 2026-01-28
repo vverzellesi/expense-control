@@ -11,7 +11,7 @@ export function LandingNav() {
     <header className="sticky top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="text-xl font-semibold text-gray-900">
-          Finanças
+          MyPocket
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
