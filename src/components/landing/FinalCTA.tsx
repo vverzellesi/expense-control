@@ -22,7 +22,7 @@ export function FinalCTA() {
           <Button
             size="lg"
             asChild
-            className="bg-emerald-600 px-8 text-base hover:bg-emerald-700"
+            className="px-8 text-base"
           >
             <Link href="/auth/register">Criar Conta</Link>
           </Button>
