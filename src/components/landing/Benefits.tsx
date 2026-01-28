@@ -39,7 +39,7 @@ export function Benefits() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-gray-900 md:text-4xl">
-            Por que escolher o Finanças?
+            Por que escolher o MyPocket?
           </h2>
           <p className="mt-4 text-lg text-gray-600">
             Simplicidade e poder em um só lugar
