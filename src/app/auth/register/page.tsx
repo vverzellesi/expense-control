@@ -118,15 +118,23 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Criar Conta</CardTitle>
-          <CardDescription className="text-center">
-            Preencha os dados abaixo para criar sua conta
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8 overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-emerald-100 opacity-40 blur-3xl" />
+      <div className="absolute -right-20 bottom-20 h-96 w-96 rounded-full bg-emerald-50 opacity-60 blur-3xl" />
+
+      <div className="relative z-10 w-full max-w-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-semibold text-gray-900">MyPocket</h1>
+        </div>
+        <Card className="w-full">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl text-center">Criar Conta</CardTitle>
+            <CardDescription className="text-center">
+              Preencha os dados abaixo para criar sua conta
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
               <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
@@ -223,8 +231,9 @@ export default function RegisterPage() {
               </Link>
             </p>
           </CardFooter>
-        </form>
-      </Card>
+          </form>
+        </Card>
+      </div>
     </div>
   )
 }

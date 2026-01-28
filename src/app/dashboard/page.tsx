@@ -111,6 +111,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -124,7 +125,7 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Summary Cards */}
+      {/* 1. Summary Cards - Top-level KPIs */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -205,7 +206,199 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Weekly Summary Card */}
+      {/* 2. Charts - Visual overview */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Despesas por Categoria</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.categoryBreakdown && data.categoryBreakdown.length > 0 ? (
+              <CategoryPieChart data={data.categoryBreakdown} />
+            ) : (
+              <div className="flex h-64 items-center justify-center text-gray-500">
+                Nenhuma despesa neste mes
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Ultimos 6 Meses</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.monthlyData && data.monthlyData.length > 0 ? (
+              <MonthlyBarChart data={data.monthlyData} />
+            ) : (
+              <div className="flex h-64 items-center justify-center text-gray-500">
+                Sem dados para exibir
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 3. Savings Goal - Key motivator */}
+      {data?.savingsGoal && (
+        <Card className={`border-2 ${
+          data.savingsGoal.isAchieved
+            ? "border-green-200 bg-green-50"
+            : "border-blue-200 bg-blue-50"
+        }`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${
+              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
+            }`}>
+              <PiggyBank className="h-5 w-5" />
+              Meta de Economia
+              {data.savingsGoal.isAchieved && (
+                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
+                  Atingida!
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <div className={`text-3xl font-bold ${
+                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
+                }`}>
+                  {formatCurrency(data.savingsGoal.current)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  de {formatCurrency(data.savingsGoal.goal)} meta
+                </div>
+                <div className="mt-3">
+                  <Progress
+                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
+                    className={`h-3 ${
+                      data.savingsGoal.isAchieved
+                        ? "[&>div]:bg-green-500"
+                        : "[&>div]:bg-emerald-500"
+                    }`}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {data.savingsGoal.percentage !== null
+                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
+                    : "0% da meta"}
+                </div>
+              </div>
+              <Link href="/settings">
+                <Button variant="outline" size="sm">
+                  <Target className="mr-2 h-4 w-4" />
+                  Editar Meta
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 3. Alerts Section - High priority items need immediate attention */}
+      {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-orange-800">
+              <AlertTriangle className="h-5 w-5" />
+              Alertas de Orcamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.budgetAlerts.map((alert) => (
+                <div
+                  key={alert.categoryId}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: alert.categoryColor }}
+                      />
+                      <span className="font-medium">{alert.categoryName}</span>
+                    </div>
+                    <span className={`text-sm font-semibold ${
+                      alert.isOver ? "text-red-600" : "text-orange-600"
+                    }`}>
+                      {alert.percentage.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <Progress
+                      value={Math.min(alert.percentage, 100)}
+                      className={`h-2 ${
+                        alert.isOver ? "[&>div]:bg-red-500" : "[&>div]:bg-orange-500"
+                      }`}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-gray-500">
+                    <span>{formatCurrency(alert.spent)} gastos</span>
+                    <span>Limite: {formatCurrency(alert.budgetAmount)}</span>
+                  </div>
+                  {alert.isOver && (
+                    <div className="mt-1 text-xs text-red-600">
+                      Excedido em {formatCurrency(alert.spent - alert.budgetAmount)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {unusualTransactions.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
+              <Zap className="h-5 w-5" />
+              Gastos Incomuns
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-amber-700">
+              Transacoes que excedem 2x a media historica da categoria
+            </p>
+            <div className="space-y-2">
+              {unusualTransactions.slice(0, 3).map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    {t.categoryColor && (
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: t.categoryColor }}
+                      />
+                    )}
+                    <div>
+                      <span className="font-medium">{t.description}</span>
+                      <div className="text-xs text-gray-500">
+                        Media: {formatCurrency(t.categoryAverage)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-red-600">
+                      {formatCurrency(t.amount)}
+                    </div>
+                    <Badge variant="destructive" className="text-xs">
+                      +{t.exceedsBy.toFixed(0)}%
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 4. Weekly Summary - Quick snapshot of current week */}
       {data?.weeklySummary && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -248,7 +441,193 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Weekly Breakdown - Gastos por Semana do Mês */}
+      {/* 5. Category Variation - Relates to pie chart */}
+      {data?.categoryBreakdown && data.categoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Variacao por Categoria
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {data.categoryBreakdown.map((category) => (
+                <div
+                  key={category.categoryId}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: category.categoryColor }}
+                    />
+                    <div>
+                      <span className="text-sm font-medium">{category.categoryName}</span>
+                      <div className="text-xs text-gray-500">
+                        {formatCurrency(category.total)}
+                      </div>
+                    </div>
+                  </div>
+                  {category.changePercentage !== null ? (
+                    <Badge
+                      variant={category.changePercentage <= 0 ? "default" : "destructive"}
+                      className={category.changePercentage <= 0 ? "bg-green-500" : ""}
+                    >
+                      {category.changePercentage <= 0 ? (
+                        <TrendingDown className="mr-1 h-3 w-3" />
+                      ) : (
+                        <TrendingUp className="mr-1 h-3 w-3" />
+                      )}
+                      {category.changePercentage >= 0 ? "+" : ""}
+                      {category.changePercentage.toFixed(0)}%
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">
+                      Novo
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 7. Budget Progress Cards - Detailed budget tracking */}
+      {data?.allBudgets && data.allBudgets.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">Metas por Categoria</h2>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {data.allBudgets.map((budget) => (
+              <Card
+                key={budget.categoryId}
+                className={`${
+                  budget.isOver
+                    ? "border-red-200 bg-red-50"
+                    : budget.percentage >= 80
+                    ? "border-orange-200 bg-orange-50"
+                    : "border-gray-200"
+                }`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: budget.categoryColor }}
+                    />
+                    <span className="text-sm font-medium truncate">{budget.categoryName}</span>
+                  </div>
+                  <Progress
+                    value={Math.min(budget.percentage, 100)}
+                    className={`h-2 ${
+                      budget.isOver
+                        ? "[&>div]:bg-red-500"
+                        : budget.percentage >= 80
+                        ? "[&>div]:bg-orange-500"
+                        : "[&>div]:bg-emerald-500"
+                    }`}
+                  />
+                  <div className="mt-2 flex justify-between text-xs">
+                    <span className={budget.isOver ? "text-red-600 font-medium" : "text-gray-600"}>
+                      {formatCurrency(budget.spent)}
+                    </span>
+                    <span className="text-gray-500">
+                      {formatCurrency(budget.budgetAmount)}
+                    </span>
+                  </div>
+                  <div className={`text-xs mt-1 ${
+                    budget.isOver
+                      ? "text-red-600"
+                      : budget.percentage >= 80
+                      ? "text-orange-600"
+                      : "text-gray-500"
+                  }`}>
+                    {budget.percentage.toFixed(0)}% utilizado
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 8. Fixed Expenses & Upcoming Installments - Recurring items */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Despesas Fixas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.fixedExpenses && data.fixedExpenses.length > 0 ? (
+              <div className="space-y-3">
+                {data.fixedExpenses.slice(0, 5).map((expense) => (
+                  <div
+                    key={expense.id}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      {expense.category && (
+                        <div
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: expense.category.color }}
+                        />
+                      )}
+                      <span className="text-sm">{expense.description}</span>
+                    </div>
+                    <span className="text-sm font-medium text-red-600">
+                      {formatCurrency(Math.abs(expense.amount))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">
+                Nenhuma despesa fixa cadastrada
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              Parcelas Futuras
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.upcomingInstallments && data.upcomingInstallments.length > 0 ? (
+              <div className="space-y-3">
+                {data.upcomingInstallments.slice(0, 5).map((installment) => (
+                  <div
+                    key={installment.id}
+                    className="flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="text-sm">{installment.description}</span>
+                      <span className="ml-2 text-xs text-gray-500">
+                        {new Date(installment.date).toLocaleDateString("pt-BR", {
+                          month: "short",
+                        })}
+                      </span>
+                    </div>
+                    <span className="text-sm font-medium text-red-600">
+                      {formatCurrency(Math.abs(installment.amount))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">
+                Nenhuma parcela futura
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 9. Weekly Breakdown - Detailed view, moved to bottom for power users */}
       {data?.weeklyBreakdown && data.weeklyBreakdown.weeks.length > 0 && (
         <Card>
           <CardHeader>
@@ -374,385 +753,6 @@ export default function Dashboard() {
                   {formatCurrency(data.weeklyBreakdown.averagePerWeek)}
                 </span>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Unusual Transactions Alert (Feature 2) */}
-      {unusualTransactions.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
-              <Zap className="h-5 w-5" />
-              Gastos Incomuns
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-3 text-sm text-amber-700">
-              Transacoes que excedem 2x a media historica da categoria
-            </p>
-            <div className="space-y-2">
-              {unusualTransactions.slice(0, 3).map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    {t.categoryColor && (
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: t.categoryColor }}
-                      />
-                    )}
-                    <div>
-                      <span className="font-medium">{t.description}</span>
-                      <div className="text-xs text-gray-500">
-                        Media: {formatCurrency(t.categoryAverage)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-red-600">
-                      {formatCurrency(t.amount)}
-                    </div>
-                    <Badge variant="destructive" className="text-xs">
-                      +{t.exceedsBy.toFixed(0)}%
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Budget Alerts */}
-      {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg text-orange-800">
-              <AlertTriangle className="h-5 w-5" />
-              Alertas de Orcamento
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {data.budgetAlerts.map((alert) => (
-                <div
-                  key={alert.categoryId}
-                  className="rounded-lg bg-white p-3 shadow-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: alert.categoryColor }}
-                      />
-                      <span className="font-medium">{alert.categoryName}</span>
-                    </div>
-                    <span className={`text-sm font-semibold ${
-                      alert.isOver ? "text-red-600" : "text-orange-600"
-                    }`}>
-                      {alert.percentage.toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="mt-2">
-                    <Progress
-                      value={Math.min(alert.percentage, 100)}
-                      className={`h-2 ${
-                        alert.isOver ? "[&>div]:bg-red-500" : "[&>div]:bg-orange-500"
-                      }`}
-                    />
-                  </div>
-                  <div className="mt-1 flex justify-between text-xs text-gray-500">
-                    <span>{formatCurrency(alert.spent)} gastos</span>
-                    <span>Limite: {formatCurrency(alert.budgetAmount)}</span>
-                  </div>
-                  {alert.isOver && (
-                    <div className="mt-1 text-xs text-red-600">
-                      Excedido em {formatCurrency(alert.spent - alert.budgetAmount)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Budget Progress Cards */}
-      {data?.allBudgets && data.allBudgets.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-lg font-semibold text-gray-900">Metas por Categoria</h2>
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {data.allBudgets.map((budget) => (
-              <Card
-                key={budget.categoryId}
-                className={`${
-                  budget.isOver
-                    ? "border-red-200 bg-red-50"
-                    : budget.percentage >= 80
-                    ? "border-orange-200 bg-orange-50"
-                    : "border-gray-200"
-                }`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: budget.categoryColor }}
-                    />
-                    <span className="text-sm font-medium truncate">{budget.categoryName}</span>
-                  </div>
-                  <Progress
-                    value={Math.min(budget.percentage, 100)}
-                    className={`h-2 ${
-                      budget.isOver
-                        ? "[&>div]:bg-red-500"
-                        : budget.percentage >= 80
-                        ? "[&>div]:bg-orange-500"
-                        : "[&>div]:bg-blue-500"
-                    }`}
-                  />
-                  <div className="mt-2 flex justify-between text-xs">
-                    <span className={budget.isOver ? "text-red-600 font-medium" : "text-gray-600"}>
-                      {formatCurrency(budget.spent)}
-                    </span>
-                    <span className="text-gray-500">
-                      {formatCurrency(budget.budgetAmount)}
-                    </span>
-                  </div>
-                  <div className={`text-xs mt-1 ${
-                    budget.isOver
-                      ? "text-red-600"
-                      : budget.percentage >= 80
-                      ? "text-orange-600"
-                      : "text-gray-500"
-                  }`}>
-                    {budget.percentage.toFixed(0)}% utilizado
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Charts */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Despesas por Categoria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.categoryBreakdown && data.categoryBreakdown.length > 0 ? (
-              <CategoryPieChart data={data.categoryBreakdown} />
-            ) : (
-              <div className="flex h-64 items-center justify-center text-gray-500">
-                Nenhuma despesa neste mes
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Ultimos 6 Meses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.monthlyData && data.monthlyData.length > 0 ? (
-              <MonthlyBarChart data={data.monthlyData} />
-            ) : (
-              <div className="flex h-64 items-center justify-center text-gray-500">
-                Sem dados para exibir
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Category Comparison (Feature 1) */}
-      {data?.categoryBreakdown && data.categoryBreakdown.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              Variacao por Categoria
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-              {data.categoryBreakdown.map((category) => (
-                <div
-                  key={category.categoryId}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: category.categoryColor }}
-                    />
-                    <div>
-                      <span className="text-sm font-medium">{category.categoryName}</span>
-                      <div className="text-xs text-gray-500">
-                        {formatCurrency(category.total)}
-                      </div>
-                    </div>
-                  </div>
-                  {category.changePercentage !== null ? (
-                    <Badge
-                      variant={category.changePercentage <= 0 ? "default" : "destructive"}
-                      className={category.changePercentage <= 0 ? "bg-green-500" : ""}
-                    >
-                      {category.changePercentage <= 0 ? (
-                        <TrendingDown className="mr-1 h-3 w-3" />
-                      ) : (
-                        <TrendingUp className="mr-1 h-3 w-3" />
-                      )}
-                      {category.changePercentage >= 0 ? "+" : ""}
-                      {category.changePercentage.toFixed(0)}%
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">
-                      Novo
-                    </Badge>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Fixed Expenses & Upcoming Installments */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Despesas Fixas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.fixedExpenses && data.fixedExpenses.length > 0 ? (
-              <div className="space-y-3">
-                {data.fixedExpenses.slice(0, 5).map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expense.category && (
-                        <div
-                          className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: expense.category.color }}
-                        />
-                      )}
-                      <span className="text-sm">{expense.description}</span>
-                    </div>
-                    <span className="text-sm font-medium text-red-600">
-                      {formatCurrency(Math.abs(expense.amount))}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">
-                Nenhuma despesa fixa cadastrada
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <AlertCircle className="h-4 w-4 text-amber-500" />
-              Parcelas Futuras
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.upcomingInstallments && data.upcomingInstallments.length > 0 ? (
-              <div className="space-y-3">
-                {data.upcomingInstallments.slice(0, 5).map((installment) => (
-                  <div
-                    key={installment.id}
-                    className="flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="text-sm">{installment.description}</span>
-                      <span className="ml-2 text-xs text-gray-500">
-                        {new Date(installment.date).toLocaleDateString("pt-BR", {
-                          month: "short",
-                        })}
-                      </span>
-                    </div>
-                    <span className="text-sm font-medium text-red-600">
-                      {formatCurrency(Math.abs(installment.amount))}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">
-                Nenhuma parcela futura
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Savings Goal Card */}
-      {data?.savingsGoal && (
-        <Card className={`border-2 ${
-          data.savingsGoal.isAchieved
-            ? "border-green-200 bg-green-50"
-            : "border-blue-200 bg-blue-50"
-        }`}>
-          <CardHeader className="pb-3">
-            <CardTitle className={`flex items-center gap-2 text-lg ${
-              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
-            }`}>
-              <PiggyBank className="h-5 w-5" />
-              Meta de Economia
-              {data.savingsGoal.isAchieved && (
-                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
-                  Atingida!
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
-                <div className={`text-3xl font-bold ${
-                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
-                }`}>
-                  {formatCurrency(data.savingsGoal.current)}
-                </div>
-                <div className="mt-1 text-sm text-gray-600">
-                  de {formatCurrency(data.savingsGoal.goal)} meta
-                </div>
-                <div className="mt-3">
-                  <Progress
-                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
-                    className={`h-3 ${
-                      data.savingsGoal.isAchieved
-                        ? "[&>div]:bg-green-500"
-                        : "[&>div]:bg-blue-500"
-                    }`}
-                  />
-                </div>
-                <div className="mt-1 text-xs text-gray-500">
-                  {data.savingsGoal.percentage !== null
-                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
-                    : "0% da meta"}
-                </div>
-              </div>
-              <Link href="/settings">
-                <Button variant="outline" size="sm">
-                  <Target className="mr-2 h-4 w-4" />
-                  Editar Meta
-                </Button>
-              </Link>
             </div>
           </CardContent>
         </Card>

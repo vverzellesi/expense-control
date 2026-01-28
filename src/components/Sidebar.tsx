@@ -78,8 +78,8 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-gray-100 text-gray-900"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-emerald-50 text-emerald-700 border-l-2 border-emerald-600 -ml-[2px]"
+                  : "text-gray-600 hover:bg-emerald-50/50 hover:text-gray-900"
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -96,7 +96,7 @@ export function Sidebar() {
       <div className="border-t p-3">
         <Link
           href="/settings"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-emerald-50/50 hover:text-gray-900"
         >
           <Settings className="h-5 w-5" />
           Configurações
@@ -107,7 +107,7 @@ export function Sidebar() {
       {session?.user && (
         <div className="border-t p-3">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
               {session.user.image ? (
                 <img
                   src={session.user.image}
@@ -115,7 +115,7 @@ export function Sidebar() {
                   className="h-8 w-8 rounded-full"
                 />
               ) : (
-                <User className="h-4 w-4 text-gray-600" />
+                <User className="h-4 w-4 text-emerald-600" />
               )}
             </div>
             <div className="flex-1 min-w-0">
@@ -129,7 +129,7 @@ export function Sidebar() {
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/auth/login" })}
-            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-emerald-50/50 hover:text-gray-900"
           >
             <LogOut className="h-5 w-5" />
             Sair
