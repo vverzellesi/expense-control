@@ -37,22 +37,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Validate input
         const parsed = credentialsSchema.safeParse(credentials)
         if (!parsed.success) {
+          console.log("[AUTH DEBUG] Credentials validation failed:", parsed.error.flatten())
           return null
         }
 
         const { email, password } = parsed.data
+        console.log("[AUTH DEBUG] Attempting login for:", email.toLowerCase())
 
         // Find user
         const user = await prisma.user.findUnique({
           where: { email: email.toLowerCase() },
         })
 
+        console.log("[AUTH DEBUG] User found:", !!user, user ? `hasPassword: ${!!user.hashedPassword}` : "")
+
         if (!user || !user.hashedPassword) {
+          console.log("[AUTH DEBUG] No user or no hashed password")
           return null
         }
 
         // Verify password
         const passwordMatch = await bcrypt.compare(password, user.hashedPassword)
+        console.log("[AUTH DEBUG] Password match:", passwordMatch)
         if (!passwordMatch) {
           return null
         }
