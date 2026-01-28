@@ -14,6 +14,7 @@ npm run db:generate   # Generate Prisma client after schema changes
 npm run db:migrate    # Create and run database migrations
 npm run db:push       # Push schema changes directly (no migration)
 npm run db:seed       # Seed database with default categories and rules
+npm run db:seed-demo  # Seed demo account with sample data
 ```
 
 ## Tech Stack
@@ -28,12 +29,20 @@ npm run db:seed       # Seed database with default categories and rules
 
 ## Architecture Overview
 
-This is a personal finance management app with smart transaction categorization.
+**MyPocket** is a personal finance management app with smart transaction categorization. The UI uses emerald color branding throughout.
+
+### Route Structure
+
+- `/` - Public landing page (unauthenticated)
+- `/dashboard` - Main authenticated dashboard
+- `/auth/login`, `/auth/register` - Authentication pages
+- All other routes require authentication
 
 ### Directory Structure
 
 - `/src/app` - Next.js App Router pages and API routes
 - `/src/components` - React components (UI primitives in `/ui`)
+- `/src/components/landing` - Landing page sections (HeroSection, FAQ, etc.)
 - `/src/lib` - Core utilities: database singleton, formatters, smart categorization
 - `/src/types` - TypeScript interfaces for all domain models
 - `/prisma` - Database schema and migrations
