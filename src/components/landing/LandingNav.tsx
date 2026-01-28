@@ -37,7 +37,7 @@ export function LandingNav() {
 
         <div className="flex items-center gap-3">
           {session?.user ? (
-            <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
+            <Button asChild>
               <Link href="/dashboard">Ir para Dashboard</Link>
             </Button>
           ) : (
@@ -45,7 +45,7 @@ export function LandingNav() {
               <Button variant="ghost" asChild>
                 <Link href="/auth/login">Entrar</Link>
               </Button>
-              <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
+              <Button asChild>
                 <Link href="/auth/register">Começar Grátis</Link>
               </Button>
             </>

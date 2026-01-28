@@ -27,7 +27,7 @@ export function HeroSection() {
             <Button
               asChild
               size="lg"
-              className="bg-emerald-600 px-8 text-base hover:bg-emerald-700"
+              className="px-8 text-base"
             >
               <Link href="/auth/register">Começar Grátis</Link>
             </Button>
