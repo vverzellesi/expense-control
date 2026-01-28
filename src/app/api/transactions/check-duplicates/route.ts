@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 interface TransactionToCheck {
   description: string;
@@ -52,6 +53,8 @@ function detectInstallmentFromDescription(description: string): { current: numbe
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const body = await request.json();
     const { transactions } = body as { transactions: TransactionToCheck[] };
 
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
       // Check for exact duplicates (same date, description, amount)
       const existing = await prisma.transaction.findFirst({
         where: {
+          userId,
           description: {
             contains: t.description.slice(0, 50),
           },
@@ -109,6 +113,7 @@ export async function POST(request: NextRequest) {
         // Search for transactions with similar base description that are installments
         const relatedTransaction = await prisma.transaction.findFirst({
           where: {
+            userId,
             isInstallment: true,
             currentInstallment: previousInstallment,
             totalInstallments: installmentInfo.total,
@@ -124,6 +129,7 @@ export async function POST(request: NextRequest) {
         if (!relatedTransaction) {
           const similarTransactions = await prisma.transaction.findMany({
             where: {
+              userId,
               isInstallment: true,
               totalInstallments: installmentInfo.total,
               amount: {
@@ -170,6 +176,9 @@ export async function POST(request: NextRequest) {
       hasRelatedInstallments: relatedInstallments.length > 0,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error checking duplicates:", error);
     return NextResponse.json(
       { error: "Erro ao verificar duplicatas" },

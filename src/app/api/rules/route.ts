@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { invalidateRulesCache } from "@/lib/categorizer";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const rules = await prisma.categoryRule.findMany({
+      where: {
+        userId,
+      },
       include: {
         category: true,
       },
@@ -15,6 +21,9 @@ export async function GET() {
 
     return NextResponse.json(rules);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching rules:", error);
     return NextResponse.json(
       { error: "Erro ao buscar regras" },
@@ -25,6 +34,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const body = await request.json();
     const { keyword, categoryId } = body;
 
@@ -39,6 +50,7 @@ export async function POST(request: NextRequest) {
       data: {
         keyword: keyword.toUpperCase(),
         categoryId,
+        userId,
       },
       include: {
         category: true,
@@ -49,6 +61,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(rule, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error creating rule:", error);
     return NextResponse.json(
       { error: "Erro ao criar regra" },
@@ -59,6 +74,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
 
@@ -70,13 +87,16 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.categoryRule.delete({
-      where: { id },
+      where: { id, userId },
     });
 
     invalidateRulesCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error deleting rule:", error);
     return NextResponse.json(
       { error: "Erro ao excluir regra" },

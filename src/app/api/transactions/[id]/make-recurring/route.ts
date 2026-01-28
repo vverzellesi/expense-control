@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const { id } = await params;
     const body = await request.json();
     const { dayOfMonth, autoGenerate = true } = body;
 
     // Fetch the transaction
     const transaction = await prisma.transaction.findUnique({
-      where: { id },
+      where: { id, userId },
       include: { category: true },
     });
 
@@ -56,12 +59,13 @@ export async function POST(
           categoryId: transaction.categoryId,
           isActive: true,
           autoGenerate,
+          userId,
         },
       });
 
       // Update the transaction to link it to the recurring expense and mark as fixed
       const updatedTransaction = await tx.transaction.update({
-        where: { id },
+        where: { id, userId },
         data: {
           recurringExpenseId: recurringExpense.id,
           isFixed: true,
@@ -77,6 +81,9 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error making transaction recurring:", error);
     return NextResponse.json(
       { error: "Erro ao criar despesa recorrente" },

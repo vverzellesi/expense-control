@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const active = searchParams.get("active");
     const origin = searchParams.get("origin");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { userId };
     if (origin) {
       where.origin = origin;
     }
@@ -40,6 +43,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(installments);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching installments:", error);
     return NextResponse.json(
       { error: "Erro ao buscar parcelas" },
@@ -50,6 +56,8 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
 
@@ -62,15 +70,18 @@ export async function DELETE(request: NextRequest) {
 
     // Delete all transactions and the installment
     await prisma.transaction.deleteMany({
-      where: { installmentId: id },
+      where: { installmentId: id, userId },
     });
 
     await prisma.installment.delete({
-      where: { id },
+      where: { id, userId },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error deleting installment:", error);
     return NextResponse.json(
       { error: "Erro ao excluir parcelamento" },

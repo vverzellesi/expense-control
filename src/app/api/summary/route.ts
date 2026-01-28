@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 // Helper to get Monday of a given week
 function getMondayOfWeek(date: Date): Date {
@@ -155,6 +156,7 @@ function calculateWeeklyBreakdown(
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -173,6 +175,7 @@ export async function GET(request: NextRequest) {
     // Get transactions for the month (excluding soft-deleted)
     const transactions = await prisma.transaction.findMany({
       where: {
+        userId,
         date: {
           gte: startDate,
           lte: endDate,
@@ -189,6 +192,7 @@ export async function GET(request: NextRequest) {
     const prevMonthEnd = new Date(targetYear, targetMonth - 1, 0);
     const prevTransactions = await prisma.transaction.findMany({
       where: {
+        userId,
         date: {
           gte: prevMonthStart,
           lte: prevMonthEnd,
@@ -285,6 +289,7 @@ export async function GET(request: NextRequest) {
 
       const monthTransactions = await prisma.transaction.findMany({
         where: {
+          userId,
           date: {
             gte: monthStart,
             lte: monthEnd,
@@ -341,6 +346,7 @@ export async function GET(request: NextRequest) {
       // Previous week transactions (need to query since might be previous month)
       const prevWeekTransactions = await prisma.transaction.findMany({
         where: {
+          userId,
           date: {
             gte: prevWeekStart,
             lte: prevWeekEnd,
@@ -376,7 +382,7 @@ export async function GET(request: NextRequest) {
 
     // Get savings goal
     const savingsGoalSetting = await prisma.settings.findUnique({
-      where: { key: "savingsGoal" },
+      where: { key_userId: { key: "savingsGoal", userId } },
     });
     const savingsGoal = savingsGoalSetting ? parseFloat(savingsGoalSetting.value) : null;
     const currentSavings = income - expense;
@@ -389,9 +395,10 @@ export async function GET(request: NextRequest) {
       try {
         await prisma.savingsHistory.upsert({
           where: {
-            month_year: {
+            month_year_userId: {
               month: targetMonth,
               year: targetYear,
+              userId,
             },
           },
           update: {
@@ -401,6 +408,7 @@ export async function GET(request: NextRequest) {
             percentage: (currentSavings / savingsGoal) * 100,
           },
           create: {
+            userId,
             month: targetMonth,
             year: targetYear,
             goal: savingsGoal,
@@ -417,7 +425,7 @@ export async function GET(request: NextRequest) {
 
     // Get budget alerts (categories at 80% or more of budget)
     const budgets = await prisma.budget.findMany({
-      where: { isActive: true },
+      where: { userId, isActive: true },
       include: { category: true },
     });
 
@@ -442,6 +450,7 @@ export async function GET(request: NextRequest) {
     // Get fixed expenses (excluding soft-deleted)
     const fixedExpenses = await prisma.transaction.findMany({
       where: {
+        userId,
         isFixed: true,
         type: "EXPENSE",
         deletedAt: null,
@@ -458,6 +467,7 @@ export async function GET(request: NextRequest) {
     // Get grouped installments (transactions that exist in the future)
     const groupedInstallments = await prisma.transaction.findMany({
       where: {
+        userId,
         isInstallment: true,
         installmentId: { not: null },
         date: {
@@ -478,6 +488,7 @@ export async function GET(request: NextRequest) {
     // Get standalone installments (manually marked) and project their future installments
     const standaloneInstallments = await prisma.transaction.findMany({
       where: {
+        userId,
         isInstallment: true,
         installmentId: null,
         totalInstallments: { not: null },
@@ -553,6 +564,9 @@ export async function GET(request: NextRequest) {
       weeklyBreakdown,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching summary:", error);
     return NextResponse.json(
       { error: "Erro ao buscar resumo" },

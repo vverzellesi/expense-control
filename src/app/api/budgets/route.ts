@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const budgets = await prisma.budget.findMany({
+      where: {
+        userId,
+      },
       include: {
         category: true,
       },
@@ -16,6 +22,9 @@ export async function GET() {
 
     return NextResponse.json(budgets);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching budgets:", error);
     return NextResponse.json(
       { error: "Erro ao buscar orcamentos" },
@@ -26,6 +35,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const body = await request.json();
     const { categoryId, amount, isActive } = body;
 
@@ -36,15 +47,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if budget already exists for this category
+    // Check if budget already exists for this category and user
     const existing = await prisma.budget.findUnique({
-      where: { categoryId },
+      where: {
+        categoryId_userId: {
+          categoryId,
+          userId,
+        },
+      },
     });
 
     let budget;
     if (existing) {
       budget = await prisma.budget.update({
-        where: { categoryId },
+        where: {
+          categoryId_userId: {
+            categoryId,
+            userId,
+          },
+        },
         data: { amount, isActive: isActive ?? true },
         include: { category: true },
       });
@@ -54,6 +75,7 @@ export async function POST(request: NextRequest) {
           categoryId,
           amount,
           isActive: isActive ?? true,
+          userId,
         },
         include: { category: true },
       });
@@ -61,6 +83,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(budget, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error creating/updating budget:", error);
     return NextResponse.json(
       { error: "Erro ao salvar orcamento" },
@@ -71,6 +96,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
 
@@ -81,12 +108,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await prisma.budget.delete({
-      where: { id },
+    await prisma.budget.deleteMany({
+      where: {
+        id,
+        userId,
+      },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error deleting budget:", error);
     return NextResponse.json(
       { error: "Erro ao excluir orcamento" },

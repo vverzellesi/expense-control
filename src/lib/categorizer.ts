@@ -5,27 +5,36 @@ interface RuleWithCategory extends CategoryRule {
   category: Category;
 }
 
-let rulesCache: RuleWithCategory[] | null = null;
+// Cache rules per user
+const rulesCacheByUser: Map<string, RuleWithCategory[]> = new Map();
 
-export async function getRules(): Promise<RuleWithCategory[]> {
-  if (rulesCache) return rulesCache;
+export async function getRules(userId?: string): Promise<RuleWithCategory[]> {
+  const cacheKey = userId || "_global";
+  const cached = rulesCacheByUser.get(cacheKey);
+  if (cached) return cached;
 
   const rules = await prisma.categoryRule.findMany({
+    where: userId ? { userId } : undefined,
     include: { category: true },
   });
 
-  rulesCache = rules as RuleWithCategory[];
-  return rulesCache;
+  rulesCacheByUser.set(cacheKey, rules as RuleWithCategory[]);
+  return rules as RuleWithCategory[];
 }
 
-export function invalidateRulesCache() {
-  rulesCache = null;
+export function invalidateRulesCache(userId?: string) {
+  if (userId) {
+    rulesCacheByUser.delete(userId);
+  } else {
+    rulesCacheByUser.clear();
+  }
 }
 
 export async function suggestCategory(
-  description: string
+  description: string,
+  userId?: string
 ): Promise<Category | null> {
-  const rules = await getRules();
+  const rules = await getRules(userId);
   const upperDesc = description.toUpperCase();
 
   for (const rule of rules) {

@@ -3,6 +3,7 @@ import { processFile } from "@/lib/ocr-parser";
 import { parseStatementText, suggestCategoryForStatement } from "@/lib/statement-parser";
 import { suggestCategory, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 import type { ImportedTransaction } from "@/types";
 
 export const runtime = "nodejs";
@@ -10,6 +11,7 @@ export const maxDuration = 60; // Allow up to 60 seconds for OCR processing
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -65,12 +67,12 @@ export async function POST(request: NextRequest) {
 
     // Get default category "Outros" for when no rule matches
     const defaultCategory = await prisma.category.findFirst({
-      where: { name: "Outros" },
+      where: { userId, name: "Outros" },
     });
 
     for (const t of parseResult.transactions) {
       // Try to find category from rules
-      const suggestedCat = await suggestCategory(t.description);
+      const suggestedCat = await suggestCategory(t.description, userId);
 
       // If no rule matched, use default category "Outros"
       let categoryId = suggestedCat?.id || defaultCategory?.id;
@@ -106,6 +108,9 @@ export async function POST(request: NextRequest) {
       rawText: ocrResult.text,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("OCR processing error:", error);
     return NextResponse.json(
       {

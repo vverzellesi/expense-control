@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 interface PatternMatch {
   description: string;
@@ -33,6 +34,8 @@ function normalizeDescription(desc: string): string {
 
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId();
+
     // Get the last 6 months of transactions
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -43,6 +46,7 @@ export async function GET() {
         type: "EXPENSE",
         isInstallment: false,
         recurringExpenseId: null,
+        userId,
       },
       include: {
         category: true,
@@ -54,6 +58,7 @@ export async function GET() {
 
     // Get existing recurring expenses to exclude from suggestions
     const existingRecurring = await prisma.recurringExpense.findMany({
+      where: { userId },
       select: { description: true },
     });
     const existingDescriptions = new Set(
@@ -128,11 +133,7 @@ export async function GET() {
     suggestions.sort((a, b) => b.occurrences - a.occurrences);
 
     return NextResponse.json(suggestions.slice(0, 10));
-  } catch (error) {
-    console.error("Error getting recurring suggestions:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar sugestoes" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }

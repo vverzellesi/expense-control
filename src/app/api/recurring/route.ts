@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const recurringExpenses = await prisma.recurringExpense.findMany({
+      where: { userId },
       include: {
         category: true,
         transactions: {
@@ -15,17 +19,15 @@ export async function GET() {
     });
 
     return NextResponse.json(recurringExpenses);
-  } catch (error) {
-    console.error("Error fetching recurring expenses:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar despesas recorrentes" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const body = await request.json();
     const { description, defaultAmount, dayOfMonth, type, origin, categoryId, autoGenerate } = body;
 
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
         categoryId: categoryId || null,
         isActive: true,
         autoGenerate: autoGenerate ?? true,
+        userId,
       },
       include: {
         category: true,
@@ -53,11 +56,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(recurringExpense, { status: 201 });
-  } catch (error) {
-    console.error("Error creating recurring expense:", error);
-    return NextResponse.json(
-      { error: "Erro ao criar despesa recorrente" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }

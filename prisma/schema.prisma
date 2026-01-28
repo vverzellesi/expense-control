@@ -7,54 +7,139 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==========================================
+// AUTH.JS MODELS
+// ==========================================
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  hashedPassword String?
+  image          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  transactions      Transaction[]
+  categories        Category[]
+  recurringExpenses RecurringExpense[]
+  installments      Installment[]
+  origins           Origin[]
+  budgets           Budget[]
+  categoryRules     CategoryRule[]
+  settings          Settings[]
+  savingsHistories  SavingsHistory[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// DOMAIN MODELS
+// ==========================================
+
 model Transaction {
-  id                  String            @id @default(cuid())
-  description         String
-  amount              Float
-  date                DateTime
-  type                String            // "INCOME" or "EXPENSE"
-  origin              String
-  categoryId          String?
-  category            Category?         @relation(fields: [categoryId], references: [id])
-  isFixed             Boolean           @default(false)
-  isInstallment       Boolean           @default(false)
-  installmentId       String?
-  installment         Installment?      @relation(fields: [installmentId], references: [id])
-  currentInstallment  Int?
-  totalInstallments   Int?              // Total de parcelas (para transacoes avulsas sem grupo)
-  recurringExpenseId  String?
-  recurringExpense    RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
-  tags                String?           // JSON array: '["trabalho", "viagem"]'
-  deletedAt           DateTime?         // Soft delete - null means active
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  description        String
+  amount             Float
+  date               DateTime
+  type               String // "INCOME" or "EXPENSE"
+  origin             String
+  categoryId         String?
+  category           Category?         @relation(fields: [categoryId], references: [id])
+  isFixed            Boolean           @default(false)
+  isInstallment      Boolean           @default(false)
+  installmentId      String?
+  installment        Installment?      @relation(fields: [installmentId], references: [id])
+  currentInstallment Int?
+  totalInstallments  Int? // Total de parcelas (para transacoes avulsas sem grupo)
+  recurringExpenseId String?
+  recurringExpense   RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+  tags               String? // JSON array: '["trabalho", "viagem"]'
+  deletedAt          DateTime? // Soft delete - null means active
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, date])
 }
 
 model RecurringExpense {
-  id           String        @id @default(cuid())
-  description  String
-  defaultAmount Float        // Valor padrao
-  dayOfMonth   Int           // Dia do mes para gerar (1-31)
-  type         String        // "INCOME" or "EXPENSE"
-  origin       String
-  categoryId   String?
-  category     Category?     @relation(fields: [categoryId], references: [id])
-  isActive     Boolean       @default(true)
-  autoGenerate Boolean       @default(true) // false = aguarda importacao e vincula
-  transactions Transaction[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  description   String
+  defaultAmount Float // Valor padrao
+  dayOfMonth    Int // Dia do mes para gerar (1-31)
+  type          String // "INCOME" or "EXPENSE"
+  origin        String
+  categoryId    String?
+  category      Category?     @relation(fields: [categoryId], references: [id])
+  isActive      Boolean       @default(true)
+  autoGenerate  Boolean       @default(true) // false = aguarda importacao e vincula
+  transactions  Transaction[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Category {
   id                String             @id @default(cuid())
-  name              String             @unique
+  name              String
   color             String
   icon              String?
   transactions      Transaction[]
   budgets           Budget[]
   categoryRules     CategoryRule[]
   recurringExpenses RecurringExpense[]
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, userId])
+  @@index([userId])
 }
 
 model Installment {
@@ -66,19 +151,39 @@ model Installment {
   startDate         DateTime
   origin            String
   transactions      Transaction[]
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Origin {
   id   String @id @default(cuid())
-  name String @unique
+  name String
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, userId])
+  @@index([userId])
 }
 
 model Budget {
   id         String   @id @default(cuid())
-  categoryId String   @unique
+  categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
   amount     Float
   isActive   Boolean  @default(true)
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, userId])
+  @@index([userId])
 }
 
 model CategoryRule {
@@ -87,14 +192,26 @@ model CategoryRule {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
 
-  @@unique([keyword, categoryId])
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([keyword, categoryId, userId])
+  @@index([userId])
 }
 
 model Settings {
   id        String   @id @default(cuid())
-  key       String   @unique
+  key       String
   value     String
   updatedAt DateTime @updatedAt
+
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([key, userId])
+  @@index([userId])
 }
 
 model SavingsHistory {
@@ -107,5 +224,10 @@ model SavingsHistory {
   percentage Float
   createdAt  DateTime @default(now())
 
-  @@unique([month, year])
+  // User relationship
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([month, year, userId])
+  @@index([userId])
 }

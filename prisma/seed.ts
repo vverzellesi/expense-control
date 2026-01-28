@@ -115,12 +115,13 @@ const defaultOrigins = [
 async function main() {
   console.log("Seeding database...");
 
-  // Create categories
+  // Create categories (without userId for seed data - these are global defaults)
   const categoryMap = new Map<string, string>();
 
   for (const cat of defaultCategories) {
-    const existing = await prisma.category.findUnique({
-      where: { name: cat.name },
+    // Use findFirst since unique constraint now includes userId
+    const existing = await prisma.category.findFirst({
+      where: { name: cat.name, userId: null },
     });
 
     if (existing) {
@@ -135,7 +136,7 @@ async function main() {
     }
   }
 
-  // Create rules
+  // Create rules (without userId for seed data)
   for (const rule of defaultRules) {
     const categoryId = categoryMap.get(rule.category);
     if (!categoryId) {
@@ -147,6 +148,7 @@ async function main() {
       where: {
         keyword: rule.keyword,
         categoryId,
+        userId: null,
       },
     });
 
@@ -161,10 +163,11 @@ async function main() {
     }
   }
 
-  // Create origins
+  // Create origins (without userId for seed data)
   for (const origin of defaultOrigins) {
-    const existing = await prisma.origin.findUnique({
-      where: { name: origin.name },
+    // Use findFirst since unique constraint now includes userId
+    const existing = await prisma.origin.findFirst({
+      where: { name: origin.name, userId: null },
     });
 
     if (!existing) {

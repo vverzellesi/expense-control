@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 // Normalize text for matching (lowercase, remove accents)
 function normalizeText(text: string): string {
@@ -27,6 +28,7 @@ function matchesRecurring(
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const body = await request.json();
     const { transactions, origin } = body;
 
@@ -40,6 +42,7 @@ export async function POST(request: NextRequest) {
     // Fetch recurring expenses that await import linking
     const recurringToMatch = await prisma.recurringExpense.findMany({
       where: {
+        userId,
         autoGenerate: false,
         isActive: true,
       },
@@ -119,6 +122,7 @@ export async function POST(request: NextRequest) {
 
       const transaction = await prisma.transaction.create({
         data: {
+          userId,
           description: t.description,
           amount,
           date: transactionDate,
@@ -148,6 +152,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error importing transactions:", error);
     return NextResponse.json(
       { error: "Erro ao importar transacoes" },

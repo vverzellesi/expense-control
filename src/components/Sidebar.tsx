@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -16,6 +17,8 @@ import {
   TrendingUp,
   Trash2,
   FileText,
+  LogOut,
+  User,
 } from "lucide-react";
 
 const navigation = [
@@ -33,6 +36,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => {
@@ -98,6 +102,40 @@ export function Sidebar() {
           Configurações
         </Link>
       </div>
+
+      {/* User section */}
+      {session?.user && (
+        <div className="border-t p-3">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
+              {session.user.image ? (
+                <img
+                  src={session.user.image}
+                  alt={session.user.name || ""}
+                  className="h-8 w-8 rounded-full"
+                />
+              ) : (
+                <User className="h-4 w-4 text-gray-600" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {session.user.name || "Usuário"}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {session.user.email}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/auth/login" })}
+            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          >
+            <LogOut className="h-5 w-5" />
+            Sair
+          </button>
+        </div>
+      )}
     </div>
   );
 }

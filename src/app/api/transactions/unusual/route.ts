@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -19,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     const currentMonthTransactions = await prisma.transaction.findMany({
       where: {
+        userId,
         date: {
           gte: startDate,
           lte: endDate,
@@ -37,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     const historicalTransactions = await prisma.transaction.findMany({
       where: {
+        userId,
         date: {
           gte: sixMonthsAgo,
           lte: lastMonthEnd,
@@ -128,6 +133,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching unusual transactions:", error);
     return NextResponse.json(
       { error: "Erro ao buscar transacoes incomuns" },

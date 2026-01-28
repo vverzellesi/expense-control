@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 // GET - List deleted transactions
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const transactions = await prisma.transaction.findMany({
       where: {
+        userId,
         deletedAt: { not: null },
       },
       include: {
@@ -19,6 +23,9 @@ export async function GET() {
 
     return NextResponse.json(transactions);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching deleted transactions:", error);
     return NextResponse.json(
       { error: "Erro ao buscar transacoes excluidas" },
@@ -30,6 +37,8 @@ export async function GET() {
 // PUT - Restore a transaction
 export async function PUT(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const body = await request.json();
     const { id } = body;
 
@@ -41,7 +50,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const transaction = await prisma.transaction.update({
-      where: { id },
+      where: { id, userId },
       data: { deletedAt: null },
       include: {
         category: true,
@@ -51,6 +60,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(transaction);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error restoring transaction:", error);
     return NextResponse.json(
       { error: "Erro ao restaurar transacao" },
@@ -62,6 +74,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - Permanently delete items older than 30 days or specific item
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
     const cleanOld = searchParams.get("cleanOld");
@@ -69,7 +83,7 @@ export async function DELETE(request: NextRequest) {
     if (id) {
       // Delete specific transaction permanently
       await prisma.transaction.delete({
-        where: { id },
+        where: { id, userId },
       });
       return NextResponse.json({ success: true, message: "Transacao excluida permanentemente" });
     }
@@ -81,6 +95,7 @@ export async function DELETE(request: NextRequest) {
 
       const result = await prisma.transaction.deleteMany({
         where: {
+          userId,
           deletedAt: {
             not: null,
             lt: thirtyDaysAgo,
@@ -100,6 +115,9 @@ export async function DELETE(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error permanently deleting transactions:", error);
     return NextResponse.json(
       { error: "Erro ao excluir transacoes permanentemente" },

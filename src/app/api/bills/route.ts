@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 interface BillPeriod {
   label: string;
@@ -46,6 +47,8 @@ function getBillPeriods(closingDay: number, count: number = 6): BillPeriod[] {
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const searchParams = request.nextUrl.searchParams;
     const closingDay = parseInt(searchParams.get("closingDay") || "13");
     const origin = searchParams.get("origin"); // Optional: filter by card/origin
@@ -57,6 +60,7 @@ export async function GET(request: NextRequest) {
     const bills = await Promise.all(
       periods.map(async (period) => {
         const where: Record<string, unknown> = {
+          userId,
           date: {
             gte: period.startDate,
             lte: period.endDate,
@@ -141,6 +145,7 @@ export async function GET(request: NextRequest) {
 
     // Get available origins for filtering
     const origins = await prisma.origin.findMany({
+      where: { userId },
       orderBy: { name: "asc" },
     });
 
@@ -164,6 +169,9 @@ export async function GET(request: NextRequest) {
       origins,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching bills:", error);
     return NextResponse.json(
       { error: "Erro ao buscar faturas" },

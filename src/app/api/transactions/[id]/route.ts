@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
     const { id } = await params;
-    const transaction = await prisma.transaction.findUnique({
-      where: { id },
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId },
       include: {
         category: true,
         installment: true,
@@ -24,6 +26,9 @@ export async function GET(
 
     return NextResponse.json(transaction);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching transaction:", error);
     return NextResponse.json(
       { error: "Erro ao buscar transacao" },
@@ -37,6 +42,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
     const { id } = await params;
     const body = await request.json();
     const {
@@ -59,6 +65,18 @@ export async function PUT(
         ? JSON.stringify(tags)
         : tags
       : null;
+
+    // Verify transaction belongs to user before updating
+    const existingTransaction = await prisma.transaction.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existingTransaction) {
+      return NextResponse.json(
+        { error: "Transacao nao encontrada" },
+        { status: 404 }
+      );
+    }
 
     const transaction = await prisma.transaction.update({
       where: { id },
@@ -83,6 +101,9 @@ export async function PUT(
 
     return NextResponse.json(transaction);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error updating transaction:", error);
     return NextResponse.json(
       { error: "Erro ao atualizar transacao" },
@@ -96,9 +117,22 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
     const { id } = await params;
     const searchParams = request.nextUrl.searchParams;
     const permanent = searchParams.get("permanent");
+
+    // Verify transaction belongs to user before deleting
+    const existingTransaction = await prisma.transaction.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existingTransaction) {
+      return NextResponse.json(
+        { error: "Transacao nao encontrada" },
+        { status: 404 }
+      );
+    }
 
     if (permanent === "true") {
       // Permanent delete
@@ -115,6 +149,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error deleting transaction:", error);
     return NextResponse.json(
       { error: "Erro ao excluir transacao" },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 import type {
   MonthProjection,
   ProjectionResponse,
@@ -24,6 +25,7 @@ const MONTH_LABELS = [
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const monthsParam = searchParams.get("months");
     const numMonths = monthsParam ? Math.min(Math.max(parseInt(monthsParam), 1), 12) : 6;
@@ -35,6 +37,7 @@ export async function GET(request: NextRequest) {
     // Fetch future installment transactions (from grouped installments)
     const futureInstallments = await prisma.transaction.findMany({
       where: {
+        userId,
         isInstallment: true,
         installmentId: { not: null }, // Only grouped installments
         date: {
@@ -52,6 +55,7 @@ export async function GET(request: NextRequest) {
     // These need to have their future installments projected
     const standaloneInstallments = await prisma.transaction.findMany({
       where: {
+        userId,
         isInstallment: true,
         installmentId: null,
         totalInstallments: { not: null },
@@ -95,6 +99,7 @@ export async function GET(request: NextRequest) {
     // Fetch active recurring expenses/incomes
     const activeRecurring = await prisma.recurringExpense.findMany({
       where: {
+        userId,
         isActive: true,
       },
     });
@@ -105,6 +110,7 @@ export async function GET(request: NextRequest) {
       activeRecurring.map(async (recurring) => {
         const latestTransaction = await prisma.transaction.findFirst({
           where: {
+            userId,
             recurringExpenseId: recurring.id,
           },
           orderBy: { date: "desc" },
@@ -123,6 +129,7 @@ export async function GET(request: NextRequest) {
     const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const currentMonthTransactions = await prisma.transaction.findMany({
       where: {
+        userId,
         date: {
           gte: startOfCurrentMonth,
           lte: endOfCurrentMonth,
@@ -280,6 +287,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching projection:", error);
     return NextResponse.json(
       { error: "Erro ao buscar projecao financeira" },

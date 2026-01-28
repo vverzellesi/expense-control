@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const { id } = await params;
     const recurringExpense = await prisma.recurringExpense.findUnique({
-      where: { id },
+      where: { id, userId },
       include: {
         category: true,
         transactions: {
@@ -26,12 +29,8 @@ export async function GET(
     }
 
     return NextResponse.json(recurringExpense);
-  } catch (error) {
-    console.error("Error fetching recurring expense:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar despesa recorrente" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }
 
@@ -40,12 +39,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const { id } = await params;
     const body = await request.json();
     const { description, defaultAmount, dayOfMonth, type, origin, categoryId, isActive, autoGenerate } = body;
 
     const recurringExpense = await prisma.recurringExpense.update({
-      where: { id },
+      where: { id, userId },
       data: {
         description,
         defaultAmount: Math.abs(defaultAmount),
@@ -62,12 +63,8 @@ export async function PUT(
     });
 
     return NextResponse.json(recurringExpense);
-  } catch (error) {
-    console.error("Error updating recurring expense:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar despesa recorrente" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }
 
@@ -76,25 +73,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId();
+
     const { id } = await params;
 
     // First, unlink all transactions from this recurring expense
     await prisma.transaction.updateMany({
-      where: { recurringExpenseId: id },
+      where: { recurringExpenseId: id, userId },
       data: { recurringExpenseId: null },
     });
 
     // Then delete the recurring expense
     await prisma.recurringExpense.delete({
-      where: { id },
+      where: { id, userId },
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting recurring expense:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir despesa recorrente" },
-      { status: 500 }
-    );
+  } catch {
+    return unauthorizedResponse();
   }
 }

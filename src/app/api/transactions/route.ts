@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -17,7 +19,9 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get("tag");
     const includeDeleted = searchParams.get("includeDeleted");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      userId,
+    };
 
     // By default, exclude soft-deleted transactions
     if (includeDeleted !== "true") {
@@ -99,6 +103,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(transactions);
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
       { error: "Erro ao buscar transacoes" },
@@ -109,6 +116,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const body = await request.json();
     const {
       description,
@@ -141,6 +149,7 @@ export async function POST(request: NextRequest) {
           installmentAmount: installmentAmount || Math.abs(amount),
           startDate: new Date(date + "T12:00:00"),
           origin,
+          userId,
         },
       });
 
@@ -164,6 +173,7 @@ export async function POST(request: NextRequest) {
             installmentId: installment.id,
             currentInstallment: i + 1,
             tags: processedTags,
+            userId,
           },
           include: {
             category: true,
@@ -186,6 +196,7 @@ export async function POST(request: NextRequest) {
           isFixed: isFixed || false,
           isInstallment: false,
           tags: processedTags,
+          userId,
         },
         include: {
           category: true,
@@ -195,6 +206,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(transaction, { status: 201 });
     }
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error creating transaction:", error);
     return NextResponse.json(
       { error: "Erro ao criar transacao" },

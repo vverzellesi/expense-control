@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const categoryId = searchParams.get("categoryId");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { userId };
 
     if (month && year) {
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
@@ -62,6 +64,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
     console.error("Error exporting transactions:", error);
     return NextResponse.json(
       { error: "Erro ao exportar transacoes" },
