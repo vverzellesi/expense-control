@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Transações", href: "/transactions", icon: Receipt },
   { name: "Faturas", href: "/bills", icon: FileText },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },
@@ -68,8 +68,8 @@ export function Sidebar() {
         {navigation.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href));
-          const showAlertBadge = item.href === "/" && alertCount > 0;
+            pathname.startsWith(item.href + "/");
+          const showAlertBadge = item.href === "/dashboard" && alertCount > 0;
 
           return (
             <Link
