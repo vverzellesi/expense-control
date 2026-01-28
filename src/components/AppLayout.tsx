@@ -6,8 +6,10 @@ import { Sidebar } from "@/components/Sidebar"
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthPage = pathname.startsWith("/auth")
+  const isLandingPage = pathname === "/"
 
-  if (isAuthPage) {
+  // Landing page and auth pages render without sidebar
+  if (isLandingPage || isAuthPage) {
     return <>{children}</>
   }
 
