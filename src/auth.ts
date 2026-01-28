@@ -34,48 +34,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Senha", type: "password" },
       },
       async authorize(credentials) {
-        console.log("[AUTH] authorize() called")
-        try {
-          // Validate input
-          const parsed = credentialsSchema.safeParse(credentials)
-          if (!parsed.success) {
-            console.log("[AUTH] Validation failed:", parsed.error.issues)
-            return null
-          }
+        // Validate input
+        const parsed = credentialsSchema.safeParse(credentials)
+        if (!parsed.success) {
+          return null
+        }
 
-          const { email, password } = parsed.data
-          console.log("[AUTH] Looking for user:", email.toLowerCase())
+        const { email, password } = parsed.data
 
-          // Find user
-          const user = await prisma.user.findUnique({
-            where: { email: email.toLowerCase() },
-          })
-          console.log("[AUTH] User found:", !!user, user ? `ID: ${user.id}` : "")
+        // Find user
+        const user = await prisma.user.findUnique({
+          where: { email: email.toLowerCase() },
+        })
 
-          if (!user || !user.hashedPassword) {
-            console.log("[AUTH] No user or no hashedPassword")
-            return null
-          }
+        if (!user || !user.hashedPassword) {
+          return null
+        }
 
-          // Verify password
-          console.log("[AUTH] Comparing passwords...")
-          const passwordMatch = await bcrypt.compare(password, user.hashedPassword)
-          console.log("[AUTH] Password match:", passwordMatch)
+        // Verify password
+        const passwordMatch = await bcrypt.compare(password, user.hashedPassword)
+        if (!passwordMatch) {
+          return null
+        }
 
-          if (!passwordMatch) {
-            return null
-          }
-
-          console.log("[AUTH] Success! Returning user")
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            image: user.image,
-          }
-        } catch (error) {
-          console.error("[AUTH] Error in authorize:", error)
-          throw error
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
         }
       },
     }),
