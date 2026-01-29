@@ -288,3 +288,51 @@ export const defaultRules = [
   { keyword: "MAGALU", category: "Compras" },
   { keyword: "CASAS BAHIA", category: "Compras" },
 ];
+
+/**
+ * Initialize default categories and rules for a new user.
+ * This should be called after user registration.
+ */
+export async function initializeUserDefaults(userId: string): Promise<void> {
+  // Check if user already has categories
+  const existingCategories = await prisma.category.count({
+    where: { userId },
+  });
+
+  if (existingCategories > 0) {
+    return; // User already has categories, skip initialization
+  }
+
+  // Create a map to store category name -> id for rule creation
+  const categoryMap = new Map<string, string>();
+
+  // Create default categories for the user
+  for (const category of defaultCategories) {
+    const created = await prisma.category.create({
+      data: {
+        name: category.name,
+        color: category.color,
+        icon: category.icon,
+        userId,
+      },
+    });
+    categoryMap.set(category.name, created.id);
+  }
+
+  // Create default rules for the user
+  for (const rule of defaultRules) {
+    const categoryId = categoryMap.get(rule.category);
+    if (categoryId) {
+      await prisma.categoryRule.create({
+        data: {
+          keyword: rule.keyword.toUpperCase(),
+          categoryId,
+          userId,
+        },
+      });
+    }
+  }
+
+  // Invalidate cache for this user
+  invalidateRulesCache(userId);
+}
