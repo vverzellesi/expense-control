@@ -9,7 +9,7 @@ export function FinalCTA() {
 
       <div className="relative mx-auto max-w-4xl px-6 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-gray-900 md:text-4xl">
-          Pronto para organizar suas finanças?
+          Pronto para colocar suas finanças no bolso?
         </h2>
         <p className="mt-4 text-lg text-gray-600">
           Crie sua conta gratuita e comece a ter controle do seu dinheiro hoje.

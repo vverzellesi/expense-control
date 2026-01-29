@@ -19,7 +19,7 @@ const faqs = [
   {
     question: "Posso usar no celular?",
     answer:
-      "O app é otimizado para desktop, mas funciona em navegadores mobile também.",
+      "Sim! O MyPocket é totalmente responsivo e funciona perfeitamente em celulares, tablets e desktops. Use onde e quando quiser.",
   },
   {
     question: "Como funciona a categorização automática?",
