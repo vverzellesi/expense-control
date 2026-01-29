@@ -79,8 +79,11 @@ async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
   }
 
   // Calculate current totals and save as previous month's snapshot
-  // This assumes the current totals represent the end-of-previous-month state
-  // (which is a reasonable approximation for lazy generation)
+  // NOTE: This is an approximation - it uses current values for the previous month.
+  // If user made changes in the current month before this snapshot was generated,
+  // those changes will be reflected in the previous month's snapshot.
+  // This trade-off was chosen for simplicity over precise historical tracking.
+  // For accurate historical data, users should update values at month-end.
   const totals = await calculateCurrentTotals(userId);
 
   // Only create snapshot if user has investments

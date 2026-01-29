@@ -32,13 +32,22 @@ export async function POST(
       );
     }
 
-    // Find "Investimentos" category for the user
-    const investmentCategory = await prisma.category.findFirst({
+    // Find "Investimentos" category - first try user's own, then global default
+    let investmentCategory = await prisma.category.findFirst({
       where: {
         userId,
         name: { contains: "Investimento", mode: "insensitive" },
       },
     });
+
+    if (!investmentCategory) {
+      investmentCategory = await prisma.category.findFirst({
+        where: {
+          userId: null,
+          name: { contains: "Investimento", mode: "insensitive" },
+        },
+      });
+    }
 
     const transactionDate = date ? new Date(date + "T12:00:00") : new Date();
 

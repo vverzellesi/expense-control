@@ -383,7 +383,7 @@ export default function InvestmentsPage() {
         </Card>
 
         {/* Rendimento Total */}
-        <Card className={`border-${isPositiveReturn ? "green" : "red"}-200 bg-${isPositiveReturn ? "green" : "red"}-50`}>
+        <Card className={isPositiveReturn ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={`text-sm font-medium ${isPositiveReturn ? "text-green-800" : "text-red-800"}`}>
               Rendimento Total

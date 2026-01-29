@@ -283,7 +283,7 @@ model Investment {
   description String?
 
   categoryId String
-  category   InvestmentCategory @relation(fields: [categoryId], references: [id])
+  category   InvestmentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   currentValue   Float // Valor atual
   totalInvested  Float // Total aportado
@@ -323,6 +323,7 @@ model InvestmentTransaction {
   createdAt DateTime @default(now())
 
   @@index([investmentId])
+  @@index([linkedTransactionId])
 }
 
 model InvestmentSnapshot {
