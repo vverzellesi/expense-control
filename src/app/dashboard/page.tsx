@@ -11,6 +11,7 @@ import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
+import { InvestmentDashboardCard } from "@/components/InvestmentDashboardCard";
 import type { Transaction, Category, WeeklySummary, UnusualTransaction, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
@@ -329,7 +330,10 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* 3. Alerts Section - High priority items need immediate attention */}
+      {/* 3.5. Investments Card */}
+      <InvestmentDashboardCard />
+
+      {/* 4. Alerts Section - High priority items need immediate attention */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader className="pb-3">

@@ -255,3 +255,81 @@ export interface WeeklyBreakdown {
   lowestWeek: number; // semana com menos gastos
   averagePerWeek: number;
 }
+
+// ==========================================
+// INVESTMENT TYPES
+// ==========================================
+
+export type InvestmentTransactionType = "DEPOSIT" | "WITHDRAWAL";
+
+export interface InvestmentCategory {
+  id: string;
+  name: string;
+  color: string;
+  icon?: string | null;
+  isDefault: boolean;
+}
+
+export interface Investment {
+  id: string;
+  name: string;
+  description?: string | null;
+  category: InvestmentCategory;
+  categoryId: string;
+  currentValue: number;
+  totalInvested: number;
+  totalWithdrawn: number;
+  totalReturn: number; // Calculated: currentValue - totalInvested + totalWithdrawn
+  totalReturnPercent: number; // Calculated: (totalReturn / totalInvested) * 100
+  goalAmount?: number | null;
+  goalProgress?: number | null; // Calculated: goalAmount ? (currentValue / goalAmount) * 100 : null
+  broker?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  investmentId: string;
+  type: InvestmentTransactionType;
+  amount: number;
+  date: Date | string;
+  notes?: string | null;
+  linkedTransactionId?: string | null;
+  createdAt: Date | string;
+}
+
+export interface InvestmentSnapshot {
+  month: number;
+  year: number;
+  totalValue: number;
+  totalInvested: number;
+  totalWithdrawn: number;
+}
+
+export interface InvestmentSummary {
+  totalValue: number;
+  totalInvested: number;
+  totalWithdrawn: number;
+  totalReturn: number;
+  totalReturnPercent: number;
+  byCategory: {
+    id: string;
+    name: string;
+    color: string;
+    value: number;
+    percent: number;
+  }[];
+  goalsProgress: {
+    investmentId: string;
+    name: string;
+    current: number;
+    goal: number;
+    percent: number;
+  }[];
+  investmentCount: number;
+}
+
+export interface InvestmentWithTransactions extends Investment {
+  transactions: InvestmentTransaction[];
+}
