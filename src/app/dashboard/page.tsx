@@ -10,6 +10,7 @@ import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, Pig
 import Link from "next/link";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
+import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import type { Transaction, Category, WeeklySummary, UnusualTransaction, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
@@ -73,6 +74,7 @@ export default function Dashboard() {
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1;
@@ -98,6 +100,36 @@ export default function Dashboard() {
 
     fetchData();
   }, [currentMonth, currentYear]);
+
+  // Check if user has seen onboarding tutorial
+  useEffect(() => {
+    async function checkOnboarding() {
+      try {
+        const res = await fetch("/api/settings?key=hasSeenOnboarding");
+        const data = await res.json();
+        if (data.value === null || data.value === undefined) {
+          setShowOnboarding(true);
+        }
+      } catch (error) {
+        console.error("Error checking onboarding status:", error);
+      }
+    }
+
+    checkOnboarding();
+  }, []);
+
+  const handleOnboardingComplete = async () => {
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "hasSeenOnboarding", value: "true" }),
+      });
+    } catch (error) {
+      console.error("Error saving onboarding status:", error);
+    }
+    setShowOnboarding(false);
+  };
 
   if (loading) {
     return (
@@ -757,6 +789,12 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        open={showOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
     </div>
   );
 }

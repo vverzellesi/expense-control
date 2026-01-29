@@ -22,7 +22,9 @@ import {
   LogOut,
   User,
   X,
+  HelpCircle,
 } from "lucide-react";
+import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -46,6 +48,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [alertCount, setAlertCount] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     async function fetchAlerts() {
@@ -126,6 +129,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         })}
       </nav>
       <div className="border-t p-3">
+        <button
+          onClick={() => {
+            setShowOnboarding(true);
+            handleNavClick();
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-emerald-50/50 hover:text-gray-900"
+          title="Ver tutorial"
+        >
+          <HelpCircle className="h-5 w-5" />
+          Ajuda
+        </button>
         <Link
           href="/settings"
           onClick={handleNavClick}
@@ -201,6 +215,12 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           {sidebarContent}
         </aside>
       </div>
+
+      {/* Onboarding Modal - opened via Help button */}
+      <OnboardingModal
+        open={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
+      />
     </>
   );
 }
