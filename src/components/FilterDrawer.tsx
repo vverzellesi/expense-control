@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { X, Tag } from "lucide-react";
+import { useScrollLock } from "@/lib/hooks";
 import type { Category, Origin } from "@/types";
 
 interface FilterValues {
@@ -77,27 +78,7 @@ export function FilterDrawer({
   }
 
   // Prevent body scroll when drawer is open
-  // Uses a counter to handle multiple overlays safely
-  useEffect(() => {
-    if (!isOpen) return;
-
-    // Increment the scroll lock counter
-    const currentCount = parseInt(document.body.dataset.scrollLockCount || "0", 10);
-    document.body.dataset.scrollLockCount = String(currentCount + 1);
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      // Decrement the counter and only restore scroll if no other locks remain
-      const count = parseInt(document.body.dataset.scrollLockCount || "1", 10);
-      const newCount = Math.max(0, count - 1);
-      document.body.dataset.scrollLockCount = String(newCount);
-
-      if (newCount === 0) {
-        document.body.style.overflow = "";
-        delete document.body.dataset.scrollLockCount;
-      }
-    };
-  }, [isOpen]);
+  useScrollLock(isOpen);
 
   if (!isOpen) return null;
 
@@ -107,6 +88,7 @@ export function FilterDrawer({
       <div
         className="fixed inset-0 z-40 bg-black/50"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Drawer */}

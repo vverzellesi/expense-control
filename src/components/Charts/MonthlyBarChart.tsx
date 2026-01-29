@@ -59,7 +59,7 @@ export function MonthlyBarChart({ data }: Props) {
           }}
         />
         <Legend
-          layout={isMobile ? "horizontal" : "horizontal"}
+          layout="horizontal"
           verticalAlign={isMobile ? "bottom" : "top"}
           align="center"
           wrapperStyle={isMobile ? { fontSize: '12px' } : undefined}

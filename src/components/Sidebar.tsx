@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/lib/hooks";
 import {
   LayoutDashboard,
   Receipt,
@@ -66,27 +67,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   }, []);
 
   // Prevent body scroll when mobile drawer is open
-  // Uses a counter to handle multiple overlays safely
-  useEffect(() => {
-    if (!isOpen) return;
-
-    // Increment the scroll lock counter
-    const currentCount = parseInt(document.body.dataset.scrollLockCount || "0", 10);
-    document.body.dataset.scrollLockCount = String(currentCount + 1);
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      // Decrement the counter and only restore scroll if no other locks remain
-      const count = parseInt(document.body.dataset.scrollLockCount || "1", 10);
-      const newCount = Math.max(0, count - 1);
-      document.body.dataset.scrollLockCount = String(newCount);
-
-      if (newCount === 0) {
-        document.body.style.overflow = "";
-        delete document.body.dataset.scrollLockCount;
-      }
-    };
-  }, [isOpen]);
+  useScrollLock(isOpen);
 
   const handleNavClick = () => {
     if (onClose) {
