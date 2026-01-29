@@ -1,4 +1,4 @@
-import { Clock, Eye, Shield, Building2, Gift } from "lucide-react"
+import { Clock, Eye, Shield, Building2, Gift, Smartphone } from "lucide-react"
 
 const benefits = [
   {
@@ -18,6 +18,12 @@ const benefits = [
     title: "Controle Total",
     description:
       "Defina orçamentos, receba alertas e nunca mais estoure o limite.",
+  },
+  {
+    icon: Smartphone,
+    title: "Sempre no Seu Bolso",
+    description:
+      "Totalmente responsivo. Acesse do celular, tablet ou desktop — suas finanças sempre com você.",
   },
   {
     icon: Building2,

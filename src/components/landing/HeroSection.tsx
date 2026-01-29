@@ -14,13 +14,13 @@ export function HeroSection() {
       <div className="relative mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="text-center">
           <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-gray-900 md:text-5xl lg:text-6xl">
-            Suas finanças sob controle,{" "}
-            <span className="text-emerald-600">sem complicação</span>
+            Suas finanças no bolso,{" "}
+            <span className="text-emerald-600">sob controle</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 md:text-xl">
             Categorize automaticamente, acompanhe orçamentos e visualize para onde
-            vai seu dinheiro — tudo em um só lugar.
+            vai seu dinheiro — tudo no seu bolso.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
