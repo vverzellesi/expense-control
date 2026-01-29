@@ -188,8 +188,8 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 px-4 md:px-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Categorias</h1>
           <p className="text-gray-500">Gerencie suas categorias de gastos</p>
@@ -202,7 +202,7 @@ export default function CategoriesPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto min-h-[44px]">
               <Plus className="mr-2 h-4 w-4" />
               Nova Categoria
             </Button>
@@ -267,7 +267,7 @@ export default function CategoriesPage() {
           <CardTitle>{categories.length} categorias</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((category) => (
               <div
                 key={category.id}
@@ -275,15 +275,16 @@ export default function CategoriesPage() {
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className="h-6 w-6 rounded-full"
+                    className="h-6 w-6 rounded-full flex-shrink-0"
                     style={{ backgroundColor: category.color }}
                   />
-                  <span className="font-medium">{category.name}</span>
+                  <span className="font-medium truncate">{category.name}</span>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="min-h-[44px] min-w-[44px]"
                     onClick={() => {
                       setEditingCategory(category);
                       setIsFormOpen(true);
@@ -294,6 +295,7 @@ export default function CategoriesPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="min-h-[44px] min-w-[44px]"
                     onClick={() => setDeletingId(category.id)}
                   >
                     <Trash2 className="h-4 w-4 text-red-500" />

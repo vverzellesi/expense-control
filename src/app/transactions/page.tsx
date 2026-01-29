@@ -37,6 +37,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Plus, Pencil, Trash2, Filter, Search, X, Tag, Repeat } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import type { Transaction, Category, Origin } from "@/types";
 
 function TransactionsContent() {
@@ -64,6 +65,7 @@ function TransactionsContent() {
   const [filterInstallment, setFilterInstallment] = useState(false);
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterTag, setFilterTag] = useState("");
@@ -200,6 +202,41 @@ function TransactionsContent() {
     setSearchQuery("");
   }
 
+  // Count active filters for badge
+  function getActiveFilterCount() {
+    let count = 0;
+    if (filterCategory && filterCategory !== "all") count++;
+    if (filterType && filterType !== "all") count++;
+    if (filterOrigin && filterOrigin !== "all") count++;
+    if (filterFixed) count++;
+    if (filterInstallment) count++;
+    if (filterTag) count++;
+    return count;
+  }
+
+  // Handle mobile filter drawer apply
+  function handleFilterDrawerApply(filters: {
+    startDate: string;
+    endDate: string;
+    category: string;
+    type: string;
+    origin: string;
+    isFixed: boolean;
+    isInstallment: boolean;
+    tag: string;
+  }) {
+    setFilterStartDate(filters.startDate);
+    setFilterEndDate(filters.endDate);
+    setFilterCategory(filters.category);
+    setFilterType(filters.type);
+    setFilterOrigin(filters.origin);
+    setFilterFixed(filters.isFixed);
+    setFilterInstallment(filters.isInstallment);
+    setFilterTag(filters.tag);
+  }
+
+  const activeFilterCount = getActiveFilterCount();
+
   // Group transactions by date range
   function groupTransactionsByDateRange(txs: Transaction[]) {
     const now = new Date();
@@ -246,18 +283,18 @@ function TransactionsContent() {
   const groupedTransactions = groupTransactionsByDateRange(transactions);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 overflow-x-hidden">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <form onSubmit={handleSearch} className="relative flex">
-            <div className="relative">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Buscar por descricao..."
-                className="w-64 pl-9 pr-8"
+                className="w-full md:w-64 pl-9 pr-8"
               />
               {searchInput && (
                 <button
@@ -270,41 +307,63 @@ function TransactionsContent() {
               )}
             </div>
           </form>
-          <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
-            <Filter className="mr-2 h-4 w-4" />
-            Filtros
-          </Button>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Nova Transação
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingTransaction ? "Editar Transação" : "Nova Transação"}
-                </DialogTitle>
-              </DialogHeader>
-              <TransactionForm
-                categories={categories}
-                origins={origins}
-                transaction={editingTransaction}
-                onSuccess={handleFormSuccess}
-                onCancel={() => {
-                  setIsFormOpen(false);
-                  setEditingTransaction(null);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            {/* Mobile filter button with badge */}
+            <Button
+              variant="outline"
+              onClick={() => setShowFilterDrawer(true)}
+              className="md:hidden relative"
+            >
+              <Filter className="mr-2 h-4 w-4" />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+            {/* Desktop filter button */}
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="hidden md:flex"
+            >
+              <Filter className="mr-2 h-4 w-4" />
+              Filtros
+            </Button>
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Nova Transação</span>
+                  <span className="sm:hidden">Nova</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingTransaction ? "Editar Transação" : "Nova Transação"}
+                  </DialogTitle>
+                </DialogHeader>
+                <TransactionForm
+                  categories={categories}
+                  origins={origins}
+                  transaction={editingTransaction}
+                  onSuccess={handleFormSuccess}
+                  onCancel={() => {
+                    setIsFormOpen(false);
+                    setEditingTransaction(null);
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Desktop Filters */}
       {showFilters && (
-        <Card>
+        <Card className="hidden md:block">
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-end gap-4">
               <div>
@@ -459,103 +518,121 @@ function TransactionsContent() {
                     {group.transactions.map((transaction) => (
                       <div
                         key={transaction.id}
-                        className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
+                        className="rounded-lg border p-4 hover:bg-gray-50"
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-start gap-3">
+                          {/* Category dot */}
                           {transaction.category && (
                             <div
-                              className="h-4 w-4 rounded-full"
+                              className="mt-1 h-4 w-4 flex-shrink-0 rounded-full"
                               style={{ backgroundColor: transaction.category.color }}
                             />
                           )}
-                          <div>
-                            <div className="font-medium">{transaction.description}</div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
+
+                          {/* Main content - grows to fill space */}
+                          <div className="min-w-0 flex-1">
+                            {/* Top row: description + amount */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium truncate">{transaction.description}</div>
+                              </div>
+                              <div
+                                className={`flex-shrink-0 font-semibold ${
+                                  transaction.type === "INCOME"
+                                    ? "text-green-600"
+                                    : transaction.type === "TRANSFER"
+                                    ? "text-gray-400"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {transaction.type === "INCOME" ? "+" : ""}
+                                {formatCurrency(transaction.amount)}
+                              </div>
+                            </div>
+
+                            {/* Middle row: metadata */}
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
                               <span>{formatDate(transaction.date)}</span>
-                              <span>-</span>
-                              <span>{transaction.origin}</span>
+                              <span className="hidden sm:inline">-</span>
+                              <span className="hidden sm:inline">{transaction.origin}</span>
                               {transaction.category && (
                                 <>
-                                  <span>-</span>
-                                  <span>{transaction.category.name}</span>
+                                  <span className="hidden sm:inline">-</span>
+                                  <span className="hidden sm:inline">{transaction.category.name}</span>
                                 </>
                               )}
+                              {/* Mobile: show origin and category as badges */}
+                              <span className="sm:hidden text-xs bg-gray-100 px-1.5 py-0.5 rounded">{transaction.origin}</span>
+                              {transaction.category && (
+                                <span className="sm:hidden text-xs bg-gray-100 px-1.5 py-0.5 rounded">{transaction.category.name}</span>
+                              )}
                             </div>
-                          </div>
-                        </div>
 
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-wrap gap-1">
-                            {transaction.isFixed && (
-                              <Badge variant="secondary">Fixa</Badge>
-                            )}
-                            {transaction.isInstallment && (
-                              <Badge variant="outline">
-                                {transaction.currentInstallment}/
-                                {transaction.totalInstallments || transaction.installment?.totalInstallments}
-                              </Badge>
-                            )}
-                            {transaction.tags && (() => {
-                              try {
-                                const tags = JSON.parse(transaction.tags);
-                                return tags.map((tag: string) => (
-                                  <Badge
-                                    key={tag}
-                                    variant="outline"
-                                    className="cursor-pointer bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                                    onClick={() => setFilterTag(tag)}
-                                  >
-                                    <Tag className="mr-1 h-3 w-3" />
-                                    {tag}
+                            {/* Bottom row: badges + actions */}
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-1">
+                                {transaction.isInstallment && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {transaction.currentInstallment}/
+                                    {transaction.totalInstallments || transaction.installment?.totalInstallments}
                                   </Badge>
-                                ));
-                              } catch {
-                                return null;
-                              }
-                            })()}
-                          </div>
+                                )}
+                                {transaction.isFixed && (
+                                  <Badge variant="secondary" className="text-xs">Fixa</Badge>
+                                )}
+                                {transaction.tags && (() => {
+                                  try {
+                                    const tags = JSON.parse(transaction.tags);
+                                    return tags.slice(0, 2).map((tag: string) => (
+                                      <Badge
+                                        key={tag}
+                                        variant="outline"
+                                        className="cursor-pointer bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 text-xs"
+                                        onClick={() => setFilterTag(tag)}
+                                      >
+                                        <Tag className="mr-1 h-3 w-3" />
+                                        {tag}
+                                      </Badge>
+                                    ));
+                                  } catch {
+                                    return null;
+                                  }
+                                })()}
+                              </div>
 
-                          <div
-                            className={`min-w-[100px] text-right font-semibold ${
-                              transaction.type === "INCOME"
-                                ? "text-green-600"
-                                : transaction.type === "TRANSFER"
-                                ? "text-gray-400"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {transaction.type === "INCOME" ? "+" : ""}
-                            {formatCurrency(transaction.amount)}
-                          </div>
-
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditingTransaction(transaction);
-                                setIsFormOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            {!transaction.recurringExpenseId && !transaction.isInstallment && !transaction.installmentId && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setMakingRecurring(transaction)}
-                                title="Tornar recorrente"
-                              >
-                                <Repeat className="h-4 w-4 text-blue-500" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeletingId(transaction.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
+                              <div className="flex flex-shrink-0 gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    setEditingTransaction(transaction);
+                                    setIsFormOpen(true);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                {!transaction.recurringExpenseId && !transaction.isInstallment && !transaction.installmentId && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setMakingRecurring(transaction)}
+                                    title="Tornar recorrente"
+                                  >
+                                    <Repeat className="h-4 w-4 text-blue-500" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => setDeletingId(transaction.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -619,6 +696,26 @@ function TransactionsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Mobile Filter Drawer */}
+      <FilterDrawer
+        isOpen={showFilterDrawer}
+        onClose={() => setShowFilterDrawer(false)}
+        filters={{
+          startDate: filterStartDate,
+          endDate: filterEndDate,
+          category: filterCategory,
+          type: filterType,
+          origin: filterOrigin,
+          isFixed: filterFixed,
+          isInstallment: filterInstallment,
+          tag: filterTag,
+        }}
+        onApply={handleFilterDrawerApply}
+        categories={categories}
+        origins={origins}
+        allTags={allTags}
+      />
     </div>
   );
 }

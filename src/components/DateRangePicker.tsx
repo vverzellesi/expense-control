@@ -80,7 +80,7 @@ export function DateRangePicker({
 
   const displayText = startDate && endDate
     ? `${formatDate(startDate)} - ${formatDate(endDate)}`
-    : "Selecione o periodo";
+    : "Selecione o período";
 
   return (
     <div className="flex items-center gap-1">
@@ -117,27 +117,27 @@ export function DateRangePicker({
                   size="sm"
                   onClick={() => setQuickRange(3)}
                 >
-                  Ultimos 3 meses
+                  Últimos 3 meses
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setQuickRange(6)}
                 >
-                  Ultimos 6 meses
+                  Últimos 6 meses
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setQuickRange(12)}
                 >
-                  Ultimo ano
+                  Último ano
                 </Button>
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Periodo personalizado</Label>
+              <Label className="text-sm font-medium">Período personalizado</Label>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-gray-500">De</Label>
