@@ -22,7 +22,7 @@ export async function sendPasswordResetEmail(email: string, code: string) {
     from: FROM_EMAIL,
     to: email,
     subject: 'Seu código de redefinição de senha - MyPocket',
-    react: PasswordResetEmail({ code }),
+    react: <PasswordResetEmail code={code} />,
   })
 
   if (error) {
@@ -42,7 +42,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
     from: FROM_EMAIL,
     to: email,
     subject: 'Bem-vindo ao MyPocket!',
-    react: WelcomeEmail({ name }),
+    react: <WelcomeEmail name={name} />,
   })
 
   if (error) {
