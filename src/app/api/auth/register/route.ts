@@ -4,6 +4,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { passwordSchema } from "@/auth"
 import { sendWelcomeEmail } from "@/lib/email"
+import { initializeUserDefaults } from "@/lib/categorizer"
 
 const registerSchema = z.object({
   name: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
@@ -51,6 +52,14 @@ export async function POST(request: NextRequest) {
         hashedPassword,
       },
     })
+
+    // Initialize default categories and rules for the new user
+    try {
+      await initializeUserDefaults(user.id)
+    } catch (initError) {
+      console.error("Failed to initialize user defaults:", initError)
+      // Don't fail registration if initialization fails
+    }
 
     // Send welcome email (don't fail registration if email fails)
     try {
