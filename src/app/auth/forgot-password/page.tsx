@@ -98,12 +98,12 @@ export default function ForgotPasswordPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || "Erro ao enviar codigo")
+        setError(data.error || "Erro ao enviar código")
         setIsLoading(false)
         return
       }
 
-      setSuccessMessage("Codigo enviado para seu email")
+      setSuccessMessage("Código enviado para seu e-mail")
       setStep("code")
     } catch {
       setError("Ocorreu um erro. Tente novamente.")
@@ -119,7 +119,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/auth/verify-code", {
+      const response = await fetch("/api/auth/verify-reset-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
@@ -128,7 +128,7 @@ export default function ForgotPasswordPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || "Codigo invalido")
+        setError(data.error || "Código inválido")
         setIsLoading(false)
         return
       }
@@ -156,12 +156,12 @@ export default function ForgotPasswordPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || "Erro ao reenviar codigo")
+        setError(data.error || "Erro ao reenviar código")
         setIsLoading(false)
         return
       }
 
-      setSuccessMessage("Codigo reenviado para seu email")
+      setSuccessMessage("Código reenviado para seu e-mail")
     } catch {
       setError("Ocorreu um erro. Tente novamente.")
     } finally {
@@ -175,12 +175,12 @@ export default function ForgotPasswordPage() {
     setSuccessMessage("")
 
     if (!isPasswordValid) {
-      setError("A senha nao atende aos requisitos minimos")
+      setError("A senha não atende aos requisitos mínimos")
       return
     }
 
     if (!doPasswordsMatch) {
-      setError("As senhas nao coincidem")
+      setError("As senhas não coincidem")
       return
     }
 
@@ -214,7 +214,7 @@ export default function ForgotPasswordPage() {
       case "email":
         return "Recuperar Senha"
       case "code":
-        return "Verificar Codigo"
+        return "Verificar Código"
       case "password":
         return "Nova Senha"
     }
@@ -223,9 +223,9 @@ export default function ForgotPasswordPage() {
   function getStepDescription(): string {
     switch (step) {
       case "email":
-        return "Digite seu email para receber o codigo de recuperacao"
+        return "Digite seu e-mail para receber o código de recuperação"
       case "code":
-        return "Digite o codigo de 6 digitos enviado para seu email"
+        return "Digite o código de 6 dígitos enviado para seu e-mail"
       case "password":
         return "Digite sua nova senha"
     }
@@ -278,7 +278,7 @@ export default function ForgotPasswordPage() {
               </CardContent>
               <CardFooter className="flex flex-col space-y-4">
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Enviando..." : "Enviar codigo"}
+                  {isLoading ? "Enviando..." : "Enviar código"}
                 </Button>
                 <p className="text-sm text-center text-muted-foreground">
                   Lembrou sua senha?{" "}
@@ -305,7 +305,7 @@ export default function ForgotPasswordPage() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="code">Codigo de verificacao</Label>
+                  <Label htmlFor="code">Código de verificação</Label>
                   <Input
                     id="code"
                     type="text"
@@ -321,7 +321,7 @@ export default function ForgotPasswordPage() {
               </CardContent>
               <CardFooter className="flex flex-col space-y-4">
                 <Button type="submit" className="w-full" disabled={isLoading || code.length !== 6}>
-                  {isLoading ? "Verificando..." : "Verificar codigo"}
+                  {isLoading ? "Verificando..." : "Verificar código"}
                 </Button>
                 <button
                   type="button"
@@ -329,7 +329,7 @@ export default function ForgotPasswordPage() {
                   disabled={isLoading}
                   className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline disabled:opacity-50"
                 >
-                  Reenviar codigo
+                  Reenviar código
                 </button>
                 <p className="text-sm text-center text-muted-foreground">
                   <Link href="/auth/login" className="text-primary hover:underline">
@@ -364,15 +364,15 @@ export default function ForgotPasswordPage() {
                     <div className="mt-2 p-3 bg-gray-50 rounded-md space-y-1">
                       <PasswordRequirement
                         met={passwordValidation.minLength}
-                        text="Minimo 8 caracteres"
+                        text="Mínimo 8 caracteres"
                       />
                       <PasswordRequirement
                         met={passwordValidation.hasUppercase}
-                        text="Uma letra maiuscula"
+                        text="Uma letra maiúscula"
                       />
                       <PasswordRequirement
                         met={passwordValidation.hasNumber}
-                        text="Um numero"
+                        text="Um número"
                       />
                       <PasswordRequirement
                         met={passwordValidation.hasSpecial}
@@ -393,7 +393,7 @@ export default function ForgotPasswordPage() {
                     disabled={isLoading}
                   />
                   {confirmPassword.length > 0 && !doPasswordsMatch && (
-                    <p className="text-sm text-red-500">As senhas nao coincidem</p>
+                    <p className="text-sm text-red-500">As senhas não coincidem</p>
                   )}
                   {doPasswordsMatch && (
                     <p className="text-sm text-green-500">Senhas coincidem</p>

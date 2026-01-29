@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomInt } from "crypto"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/email"
@@ -8,10 +9,10 @@ const forgotPasswordSchema = z.object({
 })
 
 /**
- * Generates a random 6-digit code for password reset.
+ * Generates a cryptographically secure random 6-digit code for password reset.
  */
 function generateResetCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  return randomInt(100000, 999999).toString()
 }
 
 export async function POST(request: NextRequest) {
