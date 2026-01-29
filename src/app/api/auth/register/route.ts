@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { passwordSchema } from "@/auth"
+import { sendWelcomeEmail } from "@/lib/email"
 
 const registerSchema = z.object({
   name: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest) {
         hashedPassword,
       },
     })
+
+    // Send welcome email (don't fail registration if email fails)
+    try {
+      await sendWelcomeEmail(normalizedEmail, name)
+    } catch (emailError) {
+      console.error("Failed to send welcome email:", emailError)
+    }
 
     return NextResponse.json(
       {

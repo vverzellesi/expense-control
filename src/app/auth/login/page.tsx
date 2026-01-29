@@ -90,6 +90,14 @@ function LoginForm() {
               required
               disabled={isLoading}
             />
+            <div className="text-right">
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
+              >
+                Esqueci minha senha
+              </Link>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
