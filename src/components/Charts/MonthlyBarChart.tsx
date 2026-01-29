@@ -11,6 +11,7 @@ import {
   Legend,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/hooks";
 
 interface MonthData {
   month: string;
@@ -24,20 +25,24 @@ interface Props {
 }
 
 export function MonthlyBarChart({ data }: Props) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data}>
+    <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
+      <BarChart data={data} margin={isMobile ? { left: -10, right: 5 } : undefined}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
           dataKey="month"
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: isMobile ? 9 : 12 }}
           tickLine={false}
           axisLine={false}
+          interval={0}
         />
         <YAxis
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: isMobile ? 10 : 12 }}
           tickLine={false}
           axisLine={false}
+          width={isMobile ? 40 : 60}
           tickFormatter={(value) =>
             new Intl.NumberFormat("pt-BR", {
               notation: "compact",
@@ -53,7 +58,12 @@ export function MonthlyBarChart({ data }: Props) {
             borderRadius: "8px",
           }}
         />
-        <Legend />
+        <Legend
+          layout="horizontal"
+          verticalAlign={isMobile ? "bottom" : "top"}
+          align="center"
+          wrapperStyle={isMobile ? { fontSize: '12px' } : undefined}
+        />
         <Bar
           dataKey="income"
           name="Receitas"

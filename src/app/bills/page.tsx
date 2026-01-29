@@ -121,11 +121,11 @@ export default function BillsPage() {
   const averageBill = bills.length > 0 ? totalLast6Months / bills.length : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-6 px-4 md:px-6 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Faturas</h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 text-sm sm:text-base">
             Visualize seus gastos por ciclo de fatura do cartao
           </p>
         </div>
@@ -133,6 +133,7 @@ export default function BillsPage() {
           variant="outline"
           size="sm"
           onClick={() => setShowSettings(!showSettings)}
+          className="w-full sm:w-auto min-h-[44px]"
         >
           <Settings2 className="h-4 w-4 mr-2" />
           Configurar
@@ -339,12 +340,70 @@ export default function BillsPage() {
                     </div>
                   </div>
 
-                  {/* Transactions Table */}
+                  {/* Transactions Table - Desktop */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-3">
                       Transacoes ({bill.transactionCount})
                     </h4>
-                    <div className="max-h-[400px] overflow-auto rounded-md border">
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden space-y-3 max-h-[400px] overflow-auto">
+                      {bill.transactions.map((t) => (
+                        <div
+                          key={t.id}
+                          className="rounded-lg border bg-white p-4"
+                        >
+                          {/* Row 1: Category dot + Description */}
+                          <div className="flex items-start gap-2 mb-2">
+                            <div
+                              className="h-3 w-3 rounded-full mt-1 flex-shrink-0"
+                              style={{ backgroundColor: t.categoryColor }}
+                            />
+                            <p className="font-medium text-gray-900 truncate flex-1">
+                              {t.description}
+                            </p>
+                          </div>
+
+                          {/* Row 2: Date and Amount */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-gray-500">
+                              {formatDate(t.date)}
+                            </span>
+                            <span className="font-semibold text-red-600">
+                              {formatCurrency(t.amount)}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Badges */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                              style={{
+                                backgroundColor: t.categoryColor
+                                  ? `${t.categoryColor}15`
+                                  : undefined,
+                                borderColor: t.categoryColor || undefined,
+                                color: t.categoryColor || undefined,
+                              }}
+                            >
+                              {t.categoryName}
+                            </Badge>
+                            {t.isInstallment && t.currentInstallment && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                              >
+                                Parcela {t.currentInstallment}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block max-h-[400px] overflow-auto rounded-md border">
                       <Table>
                         <TableHeader>
                           <TableRow>

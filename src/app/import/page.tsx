@@ -42,6 +42,8 @@ import {
   Ban,
   Link2,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment } from "@/lib/categorizer";
@@ -168,6 +170,7 @@ export default function ImportPage() {
   const [fileType, setFileType] = useState<"csv" | "ocr" | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
+  const [expandedCard, setExpandedCard] = useState<number | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -912,7 +915,225 @@ export default function ImportPage() {
                 )}
               </div>
 
-              <div className="max-h-[500px] overflow-auto rounded-md border">
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 max-h-[500px] overflow-auto">
+                {transactions.map((t, index) => {
+                  const isExpanded = expandedCard === index;
+                  const amountColor =
+                    t.type === "INCOME"
+                      ? "text-green-600"
+                      : t.type === "TRANSFER"
+                      ? "text-gray-400"
+                      : "text-red-600";
+                  const category = categories.find((c) => c.id === t.categoryId);
+
+                  return (
+                    <div
+                      key={index}
+                      className={`rounded-lg border bg-white p-4 ${
+                        t.selected ? "" : "opacity-50"
+                      }`}
+                    >
+                      {/* Header with checkbox */}
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={t.selected}
+                          onChange={(e) =>
+                            updateTransaction(index, {
+                              selected: e.target.checked,
+                            })
+                          }
+                          className="h-4 w-4 mt-1"
+                        />
+                        <div
+                          className="flex-1 cursor-pointer"
+                          onClick={() => setExpandedCard(isExpanded ? null : index)}
+                        >
+                          {/* Row 1: Category dot + Description */}
+                          <div className="flex items-start gap-2 mb-2">
+                            {category && (
+                              <div
+                                className="h-3 w-3 rounded-full mt-1 flex-shrink-0"
+                                style={{ backgroundColor: category.color }}
+                              />
+                            )}
+                            <p className="font-medium text-gray-900 truncate flex-1">
+                              {t.description}
+                            </p>
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-gray-400" />
+                            )}
+                          </div>
+
+                          {/* Row 2: Date and Amount */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex flex-col">
+                              <span className="text-sm text-gray-500">
+                                {formatDate(t.date)}
+                              </span>
+                              {t.isInstallment && t.originalDate && (
+                                <span className="text-xs text-gray-400">
+                                  Compra: {formatDate(t.originalDate)}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`font-semibold ${amountColor}`}>
+                              {formatCurrency(t.amount)}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Badges */}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {t.isDuplicate && (
+                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Duplicata
+                              </Badge>
+                            )}
+                            {t.isInstallment && (
+                              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                <Repeat className="h-3 w-3 mr-1" />
+                                {t.currentInstallment && t.totalInstallments
+                                  ? `${t.currentInstallment}/${t.totalInstallments}`
+                                  : "Parcela"}
+                              </Badge>
+                            )}
+                            {t.isRecurring && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Recorrente
+                              </Badge>
+                            )}
+                            {t.specialType === "BILL_PAYMENT" && (
+                              <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300">
+                                <CreditCard className="h-3 w-3 mr-1" />
+                                Pag. Fatura
+                              </Badge>
+                            )}
+                            {t.specialType === "FINANCING" && (
+                              <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Parcelamento
+                              </Badge>
+                            )}
+                            {t.specialType === "REFUND" && (
+                              <Badge variant="outline" className="text-xs bg-green-100 text-green-800 border-green-300">
+                                <ArrowDownCircle className="h-3 w-3 mr-1" />
+                                Estorno
+                              </Badge>
+                            )}
+                            {fileType === "ocr" && t.confidence !== undefined && (
+                              getConfidenceBadge(t.confidence)
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded content */}
+                      {isExpanded && (
+                        <div className="mt-4 pt-3 border-t space-y-3">
+                          {/* Category selector */}
+                          <div>
+                            <Label className="text-xs text-gray-500 mb-1 block">
+                              Categoria
+                            </Label>
+                            <Select
+                              value={t.categoryId || ""}
+                              onValueChange={(value) =>
+                                updateTransaction(index, {
+                                  categoryId: value || undefined,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categories.map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="h-3 w-3 rounded-full"
+                                        style={{ backgroundColor: c.color }}
+                                      />
+                                      {c.name}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Edit description for OCR */}
+                          {fileType === "ocr" && (
+                            <div>
+                              <Label className="text-xs text-gray-500 mb-1 block">
+                                Descricao
+                              </Label>
+                              {t.isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={t.editedDescription}
+                                    onChange={(e) =>
+                                      updateTransaction(index, {
+                                        editedDescription: e.target.value,
+                                      })
+                                    }
+                                    className="h-8"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => saveEdit(index)}
+                                  >
+                                    OK
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => cancelEdit(index)}
+                                  >
+                                    X
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => startEditing(index)}
+                                >
+                                  <Pencil className="h-3 w-3 mr-1" />
+                                  Editar descricao
+                                </Button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => removeTransaction(index)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Remover
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block max-h-[500px] overflow-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>

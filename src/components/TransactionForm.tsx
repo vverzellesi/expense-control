@@ -136,7 +136,7 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div
           className={`cursor-pointer rounded-lg border-2 p-3 text-center transition-colors ${
             type === "EXPENSE"
@@ -179,7 +179,7 @@ export function TransactionForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="amount">Valor *</Label>
           <Input
@@ -190,6 +190,7 @@ export function TransactionForm({
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0,00"
+            className="w-full"
           />
         </div>
 
@@ -200,6 +201,7 @@ export function TransactionForm({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            className="w-full"
           />
         </div>
       </div>

@@ -312,25 +312,28 @@ export default function SettingsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 md:px-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
         <p className="text-gray-500">Gerencie orçamentos e regras de categorização</p>
       </div>
 
       <Tabs defaultValue="budgets">
-        <TabsList>
-          <TabsTrigger value="budgets">
+        <TabsList className="w-full flex-wrap h-auto gap-1 sm:w-auto sm:flex-nowrap overflow-x-auto">
+          <TabsTrigger value="budgets" className="min-h-[44px] flex-1 sm:flex-initial">
             <Target className="mr-2 h-4 w-4" />
-            Orçamentos
+            <span className="hidden sm:inline">Orçamentos</span>
+            <span className="sm:hidden">Orçam.</span>
           </TabsTrigger>
-          <TabsTrigger value="rules">
+          <TabsTrigger value="rules" className="min-h-[44px] flex-1 sm:flex-initial">
             <Tag className="mr-2 h-4 w-4" />
-            Regras de Categorizacao
+            <span className="hidden sm:inline">Regras de Categorizacao</span>
+            <span className="sm:hidden">Regras</span>
           </TabsTrigger>
-          <TabsTrigger value="goals">
+          <TabsTrigger value="goals" className="min-h-[44px] flex-1 sm:flex-initial">
             <PiggyBank className="mr-2 h-4 w-4" />
-            Meta de Economia
+            <span className="hidden sm:inline">Meta de Economia</span>
+            <span className="sm:hidden">Metas</span>
           </TabsTrigger>
         </TabsList>
 
@@ -344,14 +347,14 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSaveBudget} className="flex gap-4">
+              <form onSubmit={handleSaveBudget} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label>Categoria</Label>
                   <Select
                     value={budgetCategoryId}
                     onValueChange={setBudgetCategoryId}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="min-h-[44px]">
                       <SelectValue placeholder="Selecione uma categoria" />
                     </SelectTrigger>
                     <SelectContent>
@@ -369,7 +372,7 @@ export default function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-40">
+                <div className="w-full sm:w-40">
                   <Label>Limite Mensal</Label>
                   <Input
                     type="number"
@@ -378,10 +381,11 @@ export default function SettingsPage() {
                     value={budgetAmount}
                     onChange={(e) => setBudgetAmount(e.target.value)}
                     placeholder="0,00"
+                    className="min-h-[44px]"
                   />
                 </div>
                 <div className="flex items-end">
-                  <Button type="submit" disabled={budgetSaving}>
+                  <Button type="submit" disabled={budgetSaving} className="w-full sm:w-auto min-h-[44px]">
                     <Plus className="mr-2 h-4 w-4" />
                     Adicionar
                   </Button>
@@ -417,19 +421,19 @@ export default function SettingsPage() {
                           !budget.isActive ? "opacity-50" : ""
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
                             <div
-                              className="h-4 w-4 rounded-full"
+                              className="h-4 w-4 rounded-full flex-shrink-0"
                               style={{
                                 backgroundColor: budget.category.color,
                               }}
                             />
-                            <span className="font-medium">
+                            <span className="font-medium truncate">
                               {budget.category.name}
                             </span>
                           </div>
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 flex-shrink-0">
                             <div className="text-right">
                               <span
                                 className={
@@ -450,6 +454,7 @@ export default function SettingsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="min-h-[44px] min-w-[44px]"
                               onClick={() => setDeletingBudgetId(budget.id)}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
@@ -494,13 +499,14 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSaveRule} className="flex gap-4">
+              <form onSubmit={handleSaveRule} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label>Palavra-chave</Label>
                   <Input
                     value={ruleKeyword}
                     onChange={(e) => setRuleKeyword(e.target.value)}
                     placeholder="Ex: UBER, IFOOD, NETFLIX"
+                    className="min-h-[44px]"
                   />
                 </div>
                 <div className="flex-1">
@@ -509,7 +515,7 @@ export default function SettingsPage() {
                     value={ruleCategoryId}
                     onValueChange={setRuleCategoryId}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="min-h-[44px]">
                       <SelectValue placeholder="Selecione uma categoria" />
                     </SelectTrigger>
                     <SelectContent>
@@ -528,7 +534,7 @@ export default function SettingsPage() {
                   </Select>
                 </div>
                 <div className="flex items-end">
-                  <Button type="submit" disabled={ruleSaving}>
+                  <Button type="submit" disabled={ruleSaving} className="w-full sm:w-auto min-h-[44px]">
                     <Plus className="mr-2 h-4 w-4" />
                     Adicionar
                   </Button>
@@ -548,30 +554,31 @@ export default function SettingsPage() {
                   Nenhuma regra configurada
                 </div>
               ) : (
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {rules.map((rule) => (
                     <div
                       key={rule.id}
                       className="flex items-center justify-between rounded-lg border p-3"
                     >
-                      <div className="flex items-center gap-2">
-                        <code className="rounded bg-gray-100 px-2 py-1 text-sm">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <code className="rounded bg-gray-100 px-2 py-1 text-sm truncate">
                           {rule.keyword}
                         </code>
-                        <span className="text-gray-400">-&gt;</span>
-                        <div className="flex items-center gap-1">
+                        <span className="text-gray-400 flex-shrink-0">-&gt;</span>
+                        <div className="flex items-center gap-1 min-w-0">
                           <div
-                            className="h-3 w-3 rounded-full"
+                            className="h-3 w-3 rounded-full flex-shrink-0"
                             style={{
                               backgroundColor: rule.category.color,
                             }}
                           />
-                          <span className="text-sm">{rule.category.name}</span>
+                          <span className="text-sm truncate">{rule.category.name}</span>
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="min-h-[44px] min-w-[44px] flex-shrink-0"
                         onClick={() => setDeletingRuleId(rule.id)}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
@@ -596,7 +603,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSaveSavingsGoal} className="flex gap-4">
+              <form onSubmit={handleSaveSavingsGoal} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label>Meta Mensal (R$)</Label>
                   <Input
@@ -606,13 +613,14 @@ export default function SettingsPage() {
                     value={savingsGoal}
                     onChange={(e) => setSavingsGoal(e.target.value)}
                     placeholder="Ex: 1000.00"
+                    className="min-h-[44px]"
                   />
                   <p className="mt-1 text-xs text-gray-500">
                     A economia e calculada como: Receitas - Despesas
                   </p>
                 </div>
                 <div className="flex items-end">
-                  <Button type="submit" disabled={savingsGoalSaving}>
+                  <Button type="submit" disabled={savingsGoalSaving} className="w-full sm:w-auto min-h-[44px]">
                     {savingsGoalSaving ? "Salvando..." : "Salvar Meta"}
                   </Button>
                 </div>
@@ -666,7 +674,7 @@ export default function SettingsPage() {
                     return (
                       <div
                         key={record.id}
-                        className={`flex items-center justify-between rounded-lg border p-4 ${
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border p-4 gap-3 ${
                           record.isAchieved
                             ? "border-green-200 bg-green-50"
                             : "border-red-200 bg-red-50"
@@ -674,9 +682,9 @@ export default function SettingsPage() {
                       >
                         <div className="flex items-center gap-3">
                           {record.isAchieved ? (
-                            <CheckCircle className="h-6 w-6 text-green-500" />
+                            <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
                           ) : (
-                            <XCircle className="h-6 w-6 text-red-500" />
+                            <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />
                           )}
                           <div>
                             <div className="font-medium">
@@ -687,7 +695,7 @@ export default function SettingsPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right sm:text-right text-left ml-9 sm:ml-0">
                           <div className={`text-lg font-semibold ${
                             record.actual >= 0 ? "text-green-600" : "text-red-600"
                           }`}>
