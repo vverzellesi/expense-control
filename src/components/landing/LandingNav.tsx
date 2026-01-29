@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 
@@ -10,8 +11,9 @@ export function LandingNav() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="text-xl font-semibold text-gray-900">
-          MyPocket
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/logo-icon.svg" alt="MyPocket" width={32} height={32} />
+          <span className="text-xl font-semibold text-gray-900">MyPocket</span>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
