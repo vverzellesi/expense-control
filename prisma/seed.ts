@@ -112,6 +112,13 @@ const defaultOrigins = [
   { name: "Extrato Bancario" },
 ];
 
+const defaultInvestmentCategories = [
+  { name: "Renda Fixa", color: "#3B82F6", icon: "landmark" },
+  { name: "Renda Variável", color: "#8B5CF6", icon: "trending-up" },
+  { name: "Cripto", color: "#F97316", icon: "bitcoin" },
+  { name: "Previdência", color: "#10B981", icon: "shield" },
+];
+
 async function main() {
   console.log("Seeding database...");
 
@@ -175,6 +182,25 @@ async function main() {
         data: origin,
       });
       console.log(`Created origin: ${origin.name}`);
+    }
+  }
+
+  // Create investment categories (default global categories)
+  for (const cat of defaultInvestmentCategories) {
+    const existing = await prisma.investmentCategory.findFirst({
+      where: { name: cat.name, userId: null },
+    });
+
+    if (!existing) {
+      await prisma.investmentCategory.create({
+        data: {
+          ...cat,
+          isDefault: true,
+        },
+      });
+      console.log(`Created investment category: ${cat.name}`);
+    } else {
+      console.log(`Investment category "${cat.name}" already exists`);
     }
   }
 

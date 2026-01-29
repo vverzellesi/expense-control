@@ -23,19 +23,21 @@ import {
   User,
   X,
   HelpCircle,
+  PieChart,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Transações", href: "/transactions", icon: Receipt },
+  { name: "Investimentos", href: "/investments", icon: TrendingUp },
   { name: "Faturas", href: "/bills", icon: FileText },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },
   { name: "Parcelas", href: "/installments", icon: CreditCard },
-  { name: "Projeção", href: "/projection", icon: TrendingUp },
+  { name: "Projeção", href: "/projection", icon: BarChart3 },
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Categorias", href: "/categories", icon: Tags },
-  { name: "Relatórios", href: "/reports", icon: BarChart3 },
+  { name: "Relatórios", href: "/reports", icon: PieChart },
   { name: "Lixeira", href: "/trash", icon: Trash2 },
 ];
 
