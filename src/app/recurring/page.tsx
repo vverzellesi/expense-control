@@ -697,7 +697,7 @@ export default function RecurringPage() {
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">{suggestion.description}</div>
                       <div className="text-sm text-gray-500">
-                        {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth}
+                        {suggestion.occurrences}x nos últimos 6 meses - Dia ~{suggestion.avgDayOfMonth}
                       </div>
                       <div className="text-sm text-gray-500 truncate">
                         {suggestion.origin}

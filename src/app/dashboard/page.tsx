@@ -225,7 +225,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Ultimos 6 Meses</CardTitle>
+            <CardTitle>Últimos 6 Meses</CardTitle>
           </CardHeader>
           <CardContent>
             {data?.monthlyData && data.monthlyData.length > 0 ? (
