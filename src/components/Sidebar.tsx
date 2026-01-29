@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -79,15 +80,20 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     <div className="flex h-full w-64 flex-col border-r bg-white">
       {/* Header with close button on mobile */}
       <div className="flex h-16 items-center justify-between border-b px-6">
-        <h1 className="text-xl font-bold text-gray-900">MyPocket</h1>
+        <div className="flex items-center gap-2">
+          <Image src="/logo-icon.svg" alt="MyPocket" width={28} height={28} />
+          <h1 className="text-xl font-bold text-gray-900">MyPocket</h1>
+        </div>
         {/* Close button - only visible in mobile drawer */}
-        <button
-          onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 md:hidden"
-          aria-label="Fechar menu"
-        >
-          <X className="h-5 w-5 text-gray-600" />
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 md:hidden"
+            aria-label="Fechar menu"
+          >
+            <X className="h-5 w-5 text-gray-600" />
+          </button>
+        )}
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navigation.map((item) => {

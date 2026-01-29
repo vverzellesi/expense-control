@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { User } from "lucide-react";
 
@@ -24,7 +25,10 @@ export function MobileHeader({ onMenuToggle }: MobileHeaderProps) {
       </button>
 
       {/* App name */}
-      <h1 className="text-lg font-bold text-gray-900">MyPocket</h1>
+      <div className="flex items-center gap-2">
+        <Image src="/logo-icon.svg" alt="MyPocket" width={24} height={24} />
+        <h1 className="text-lg font-bold text-gray-900">MyPocket</h1>
+      </div>
 
       {/* User avatar */}
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">

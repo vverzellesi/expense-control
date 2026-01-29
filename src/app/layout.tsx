@@ -8,8 +8,8 @@ import { AppLayout } from "@/components/AppLayout";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Controle de Despesas",
-  description: "Aplicativo de controle de financas pessoais",
+  title: "MyPocket - Suas finanças sob controle",
+  description: "Aplicativo de controle de finanças pessoais. Organize suas despesas, receitas e orçamentos de forma simples e inteligente.",
 };
 
 export default function RootLayout({

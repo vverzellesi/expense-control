@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useState } from "react"
+import Image from "next/image"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -140,8 +141,8 @@ export default function LoginPage() {
       <div className="absolute -right-20 bottom-20 h-96 w-96 rounded-full bg-emerald-50 opacity-60 blur-3xl" />
 
       <div className="relative z-10 w-full max-w-md">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold text-gray-900">MyPocket</h1>
+        <div className="mb-8 flex justify-center">
+          <Image src="/logo.svg" alt="MyPocket" width={200} height={50} priority />
         </div>
         <Suspense fallback={<LoginFormFallback />}>
           <LoginForm />
