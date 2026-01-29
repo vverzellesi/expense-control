@@ -329,8 +329,8 @@ export default function RecurringPage() {
   const monthName = currentDate.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 px-4 md:px-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Despesas Recorrentes</h1>
           <p className="text-gray-500">
@@ -345,7 +345,7 @@ export default function RecurringPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto min-h-[44px]">
               <Plus className="mr-2 h-4 w-4" />
               Nova Recorrente
             </Button>
@@ -505,19 +505,19 @@ export default function RecurringPage() {
               return (
                 <div
                   key={expense.id}
-                  className={`flex items-center justify-between rounded-lg border p-3 ${
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border p-3 gap-3 ${
                     hasThisMonth ? "bg-green-50" : ""
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {expense.category && (
                       <div
-                        className="h-4 w-4 rounded-full"
+                        className="h-4 w-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: expense.category.color }}
                       />
                     )}
-                    <div>
-                      <span className="font-medium">{expense.description}</span>
+                    <div className="min-w-0">
+                      <span className="font-medium block truncate">{expense.description}</span>
                       <div className="text-sm text-gray-500">
                         Padrao: {formatCurrency(expense.defaultAmount)}
                         {lastAmount && lastAmount !== expense.defaultAmount && (
@@ -528,19 +528,19 @@ export default function RecurringPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {hasThisMonth ? (
-                      <Badge className="bg-green-500">
+                      <Badge className="bg-green-500 min-h-[44px] px-3">
                         <Check className="mr-1 h-3 w-3" />
                         {expense.autoGenerate ? "Gerado" : "Vinculado"}
                       </Badge>
                     ) : !expense.autoGenerate ? (
-                      <Badge variant="outline" className="text-gray-500">
+                      <Badge variant="outline" className="text-gray-500 min-h-[44px] px-3">
                         <CreditCard className="mr-1 h-3 w-3" />
                         Aguardando fatura
                       </Badge>
                     ) : generatingId === expense.id ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                         <Input
                           type="number"
                           step="0.01"
@@ -548,14 +548,15 @@ export default function RecurringPage() {
                           placeholder={String(expense.defaultAmount)}
                           value={generateAmount}
                           onChange={(e) => setGenerateAmount(e.target.value)}
-                          className="w-28"
+                          className="w-full sm:w-28 min-h-[44px]"
                         />
-                        <Button size="sm" onClick={() => handleGenerate(expense)}>
+                        <Button size="sm" className="min-h-[44px]" onClick={() => handleGenerate(expense)}>
                           OK
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
+                          className="min-h-[44px]"
                           onClick={() => {
                             setGeneratingId(null);
                             setGenerateAmount("");
@@ -568,6 +569,7 @@ export default function RecurringPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        className="min-h-[44px]"
                         onClick={() => setGeneratingId(expense.id)}
                       >
                         <RefreshCw className="mr-1 h-3 w-3" />
@@ -597,19 +599,19 @@ export default function RecurringPage() {
               {recurringExpenses.map((expense) => (
                 <div
                   key={expense.id}
-                  className={`flex items-center justify-between rounded-lg border p-4 ${
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border p-4 gap-4 ${
                     !expense.isActive ? "opacity-50" : ""
                   }`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
                     {expense.category && (
                       <div
-                        className="h-5 w-5 rounded-full"
+                        className="h-5 w-5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: expense.category.color }}
                       />
                     )}
-                    <div>
-                      <div className="font-medium">{expense.description}</div>
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{expense.description}</div>
                       <div className="text-sm text-gray-500">
                         Dia {expense.dayOfMonth} - {expense.origin}
                         {expense.category && ` - ${expense.category.name}`}
@@ -617,7 +619,7 @@ export default function RecurringPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap justify-end">
                     {!expense.autoGenerate && (
                       <Badge variant="outline" className="text-xs">
                         <CreditCard className="mr-1 h-3 w-3" />
@@ -641,11 +643,13 @@ export default function RecurringPage() {
                     <Switch
                       checked={expense.isActive}
                       onCheckedChange={() => handleToggleActive(expense)}
+                      className="min-h-[44px]"
                     />
 
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="min-h-[44px] min-w-[44px]"
                       onClick={() => {
                         setEditingExpense(expense);
                         setIsFormOpen(true);
@@ -657,6 +661,7 @@ export default function RecurringPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="min-h-[44px] min-w-[44px]"
                       onClick={() => setDeletingId(expense.id)}
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
@@ -686,32 +691,45 @@ export default function RecurringPage() {
               {suggestions.map((suggestion) => (
                 <div
                   key={suggestion.normalizedDescription}
-                  className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm"
+                  className="rounded-lg bg-white p-3 shadow-sm"
                 >
-                  <div>
-                    <div className="font-medium">{suggestion.description}</div>
-                    <div className="text-sm text-gray-500">
-                      {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth} - {suggestion.origin}
-                      {suggestion.categoryName && ` - ${suggestion.categoryName}`}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="font-semibold text-red-600">
-                        ~{formatCurrency(suggestion.avgAmount)}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{suggestion.description}</div>
+                      <div className="text-sm text-gray-500">
+                        {suggestion.occurrences}x nos ultimos 6 meses - Dia ~{suggestion.avgDayOfMonth}
                       </div>
-                      <div className="text-xs text-gray-500">media</div>
+                      <div className="text-sm text-gray-500 truncate">
+                        {suggestion.origin}
+                        {suggestion.categoryName && ` - ${suggestion.categoryName}`}
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => createFromSuggestion(suggestion)}
-                      disabled={creatingSuggestion === suggestion.normalizedDescription}
-                    >
-                      <Sparkles className="mr-1 h-4 w-4" />
-                      {creatingSuggestion === suggestion.normalizedDescription
-                        ? "Criando..."
-                        : "Adicionar"}
-                    </Button>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0">
+                      <div className="text-left sm:text-right">
+                        <div className="font-semibold text-red-600">
+                          ~{formatCurrency(suggestion.avgAmount)}
+                        </div>
+                        <div className="text-xs text-gray-500">media</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="min-h-[44px]"
+                        onClick={() => createFromSuggestion(suggestion)}
+                        disabled={creatingSuggestion === suggestion.normalizedDescription}
+                      >
+                        <Sparkles className="mr-1 h-4 w-4" />
+                        <span className="hidden sm:inline">
+                          {creatingSuggestion === suggestion.normalizedDescription
+                            ? "Criando..."
+                            : "Adicionar"}
+                        </span>
+                        <span className="sm:hidden">
+                          {creatingSuggestion === suggestion.normalizedDescription
+                            ? "..."
+                            : "+"}
+                        </span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

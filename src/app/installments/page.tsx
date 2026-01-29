@@ -190,16 +190,16 @@ export default function InstallmentsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 px-4 md:px-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Parcelas</h1>
           <p className="text-gray-500">Gerencie suas compras parceladas</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Label>Origem</Label>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Label className="whitespace-nowrap">Origem</Label>
           <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40 min-h-[44px]">
               <SelectValue placeholder="Todas" />
             </SelectTrigger>
             <SelectContent>
@@ -224,7 +224,7 @@ export default function InstallmentsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-6">
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
               {sortedMonths.slice(0, 6).map((month) => {
                 const [year, m] = month.split("-");
                 const date = new Date(parseInt(year), parseInt(m) - 1);
@@ -274,10 +274,10 @@ export default function InstallmentsPage() {
 
                 return (
                   <div key={inst.id} className="rounded-lg border p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold">{inst.description}</h3>
-                        <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold truncate">{inst.description}</h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                           <span>{inst.origin}</span>
                           <span>-</span>
                           <span>
@@ -285,7 +285,7 @@ export default function InstallmentsPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-shrink-0">
                         <div className="text-right">
                           <div className="font-semibold">
                             {formatCurrency(inst.installmentAmount)} / parcela
@@ -297,6 +297,7 @@ export default function InstallmentsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="min-h-[44px] min-w-[44px]"
                           onClick={() => setDeletingId(inst.id)}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
@@ -321,13 +322,13 @@ export default function InstallmentsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-12">
+                    <div className="mt-4 grid grid-cols-4 sm:grid-cols-6 gap-2 md:grid-cols-12">
                       {inst.transactions.map((t) => {
                         const isPast = new Date(t.date) < now;
                         return (
                           <div
                             key={t.id}
-                            className={`rounded p-2 text-center text-xs ${
+                            className={`rounded p-2 text-center text-xs min-h-[36px] flex items-center justify-center ${
                               isPast
                                 ? "bg-green-100 text-green-700"
                                 : "bg-gray-100 text-gray-600"
@@ -352,17 +353,17 @@ export default function InstallmentsPage() {
 
                 return (
                   <div key={t.id} className="rounded-lg border p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
                         {t.category && (
                           <div
-                            className="h-4 w-4 rounded-full"
+                            className="h-4 w-4 rounded-full flex-shrink-0"
                             style={{ backgroundColor: t.category.color }}
                           />
                         )}
-                        <div>
-                          <h3 className="font-semibold">{t.description}</h3>
-                          <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold truncate">{t.description}</h3>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                             <span>{t.origin}</span>
                             <span>-</span>
                             <span>Parcela atual: {formatDate(t.date)}</span>
@@ -375,7 +376,7 @@ export default function InstallmentsPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-shrink-0">
                         <div className="text-right">
                           <div className="font-semibold">
                             {formatCurrency(Math.abs(t.amount))} / parcela
@@ -387,6 +388,7 @@ export default function InstallmentsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="min-h-[44px] min-w-[44px]"
                           onClick={() => openEditStandalone(t)}
                         >
                           <Pencil className="h-4 w-4 text-gray-500" />
@@ -411,7 +413,7 @@ export default function InstallmentsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-12">
+                    <div className="mt-4 grid grid-cols-4 sm:grid-cols-6 gap-2 md:grid-cols-12">
                       {Array.from({ length: total }, (_, i) => {
                         const installmentNum = i + 1;
                         const isPaid = installmentNum <= paidCount;
@@ -423,7 +425,7 @@ export default function InstallmentsPage() {
                         return (
                           <div
                             key={installmentNum}
-                            className={`rounded p-2 text-center text-xs ${
+                            className={`rounded p-2 text-center text-xs min-h-[36px] flex items-center justify-center ${
                               isPaid
                                 ? "bg-green-100 text-green-700"
                                 : "bg-gray-100 text-gray-600"

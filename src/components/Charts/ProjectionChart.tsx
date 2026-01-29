@@ -13,6 +13,7 @@ import {
   LabelList,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/hooks";
 import type { MonthProjection } from "@/types";
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
 }
 
 export function ProjectionChart({ data }: Props) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
   const chartData = data.map((m) => ({
     monthLabel: m.monthLabel,
     income: m.totalIncome,
@@ -35,19 +38,21 @@ export function ProjectionChart({ data }: Props) {
     }).format(value);
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={chartData}>
+    <ResponsiveContainer width="100%" height={isMobile ? 260 : 300}>
+      <BarChart data={chartData} margin={isMobile ? { left: -10, right: 5, top: 15 } : { top: 15 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
           dataKey="monthLabel"
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: isMobile ? 10 : 12 }}
           tickLine={false}
           axisLine={false}
+          interval={isMobile ? 1 : 0}
         />
         <YAxis
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: isMobile ? 10 : 12 }}
           tickLine={false}
           axisLine={false}
+          width={isMobile ? 40 : 60}
           tickFormatter={(value) =>
             new Intl.NumberFormat("pt-BR", {
               notation: "compact",
@@ -68,6 +73,9 @@ export function ProjectionChart({ data }: Props) {
           labelFormatter={(label) => `Mês: ${label}`}
         />
         <Legend
+          verticalAlign={isMobile ? "bottom" : "top"}
+          align="center"
+          wrapperStyle={isMobile ? { fontSize: '11px' } : undefined}
           formatter={(value) =>
             value === "income" ? "Receitas" : value === "expense" ? "Despesas" : "Saldo"
           }
@@ -79,13 +87,15 @@ export function ProjectionChart({ data }: Props) {
           fill="#22c55e"
           radius={[4, 4, 0, 0]}
         >
-          <LabelList
-            dataKey="income"
-            position="top"
-            formatter={formatCompact}
-            fontSize={10}
-            fill="#16a34a"
-          />
+          {!isMobile && (
+            <LabelList
+              dataKey="income"
+              position="top"
+              formatter={formatCompact}
+              fontSize={10}
+              fill="#16a34a"
+            />
+          )}
         </Bar>
         <Bar
           dataKey="expense"
@@ -93,13 +103,15 @@ export function ProjectionChart({ data }: Props) {
           fill="#ef4444"
           radius={[4, 4, 0, 0]}
         >
-          <LabelList
-            dataKey="expense"
-            position="top"
-            formatter={formatCompact}
-            fontSize={10}
-            fill="#dc2626"
-          />
+          {!isMobile && (
+            <LabelList
+              dataKey="expense"
+              position="top"
+              formatter={formatCompact}
+              fontSize={10}
+              fill="#dc2626"
+            />
+          )}
         </Bar>
         <Bar
           dataKey="balance"
@@ -107,13 +119,15 @@ export function ProjectionChart({ data }: Props) {
           fill="#3b82f6"
           radius={[4, 4, 0, 0]}
         >
-          <LabelList
-            dataKey="balance"
-            position="top"
-            formatter={formatCompact}
-            fontSize={10}
-            fill="#2563eb"
-          />
+          {!isMobile && (
+            <LabelList
+              dataKey="balance"
+              position="top"
+              formatter={formatCompact}
+              fontSize={10}
+              fill="#2563eb"
+            />
+          )}
         </Bar>
       </BarChart>
     </ResponsiveContainer>

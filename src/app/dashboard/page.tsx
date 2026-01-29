@@ -110,15 +110,15 @@ export default function Dashboard() {
   const monthName = currentDate.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 md:px-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-500 capitalize">{monthName} {currentYear}</p>
         </div>
-        <Link href="/transactions?new=true">
-          <Button>
+        <Link href="/transactions?new=true" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto min-h-[44px]">
             <Plus className="mr-2 h-4 w-4" />
             Nova Transação
           </Button>

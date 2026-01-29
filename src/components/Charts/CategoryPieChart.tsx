@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/hooks";
 
 interface CategoryData {
   categoryId: string;
@@ -16,6 +17,8 @@ interface Props {
 }
 
 export function CategoryPieChart({ data }: Props) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
   const chartData = data.map((item) => ({
     name: item.categoryName,
     value: item.total,
@@ -24,14 +27,14 @@ export function CategoryPieChart({ data }: Props) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={isMobile ? 200 : 280}>
       <PieChart>
         <Pie
           data={chartData}
           cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={100}
+          cy={isMobile ? "40%" : "50%"}
+          innerRadius={isMobile ? 40 : 60}
+          outerRadius={isMobile ? 70 : 100}
           paddingAngle={2}
           dataKey="value"
         >
@@ -51,11 +54,11 @@ export function CategoryPieChart({ data }: Props) {
           }}
         />
         <Legend
-          layout="vertical"
-          align="right"
-          verticalAlign="middle"
+          layout={isMobile ? "horizontal" : "vertical"}
+          align={isMobile ? "center" : "right"}
+          verticalAlign={isMobile ? "bottom" : "middle"}
           formatter={(value) => (
-            <span className="text-sm text-gray-600">{value}</span>
+            <span className={isMobile ? "text-xs text-gray-600" : "text-sm text-gray-600"}>{value}</span>
           )}
         />
       </PieChart>

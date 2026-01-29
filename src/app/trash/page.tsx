@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Trash2, RotateCcw, AlertTriangle } from "lucide-react";
+import { Trash2, RotateCcw, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { Transaction } from "@/types";
 
 export default function TrashPage() {
@@ -25,6 +26,7 @@ export default function TrashPage() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cleaningOld, setCleaningOld] = useState(false);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -176,90 +178,215 @@ export default function TrashPage() {
               A lixeira esta vazia
             </div>
           ) : (
-            <div className="space-y-2">
-              {transactions.map((transaction) => {
-                const daysAgo = getDaysAgo(transaction.deletedAt);
-                const isOld = daysAgo >= 30;
+            <>
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {transactions.map((transaction) => {
+                  const daysAgo = getDaysAgo(transaction.deletedAt);
+                  const isOld = daysAgo >= 30;
+                  const isExpanded = expandedCard === transaction.id;
+                  const amountColor =
+                    transaction.type === "INCOME"
+                      ? "text-green-600"
+                      : transaction.type === "TRANSFER"
+                      ? "text-gray-400"
+                      : "text-red-600";
 
-                return (
-                  <div
-                    key={transaction.id}
-                    className={`flex items-center justify-between rounded-lg border p-4 ${
-                      isOld ? "bg-red-50 border-red-200" : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      {transaction.category && (
-                        <div
-                          className="h-4 w-4 rounded-full opacity-50"
-                          style={{ backgroundColor: transaction.category.color }}
-                        />
-                      )}
-                      <div>
-                        <div className="font-medium text-gray-600">
-                          {transaction.description}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <span>{formatDate(transaction.date)}</span>
-                          <span>-</span>
-                          <span>{transaction.origin}</span>
+                  return (
+                    <div
+                      key={transaction.id}
+                      className={`rounded-lg border bg-white p-4 opacity-75 ${
+                        isOld ? "bg-red-50 border-red-200" : ""
+                      }`}
+                    >
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => setExpandedCard(isExpanded ? null : transaction.id)}
+                      >
+                        {/* Row 1: Category dot + Description */}
+                        <div className="flex items-start gap-2 mb-2">
                           {transaction.category && (
-                            <>
-                              <span>-</span>
-                              <span>{transaction.category.name}</span>
-                            </>
+                            <div
+                              className="h-3 w-3 rounded-full mt-1 flex-shrink-0 opacity-50"
+                              style={{ backgroundColor: transaction.category.color }}
+                            />
+                          )}
+                          <p className="font-medium text-gray-600 truncate flex-1">
+                            {transaction.description}
+                          </p>
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
                           )}
                         </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          Excluido ha {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+
+                        {/* Row 2: Date and Amount */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-500">
+                            {formatDate(transaction.date)}
+                          </span>
+                          <span className={`font-semibold opacity-50 ${amountColor}`}>
+                            {transaction.type === "INCOME" ? "+" : ""}
+                            {formatCurrency(transaction.amount)}
+                          </span>
+                        </div>
+
+                        {/* Row 3: Badges */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {transaction.origin && (
+                            <Badge variant="outline" className="text-xs bg-gray-50">
+                              {transaction.origin}
+                            </Badge>
+                          )}
+                          {transaction.category && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                              style={{
+                                backgroundColor: transaction.category.color
+                                  ? `${transaction.category.color}15`
+                                  : undefined,
+                                borderColor: transaction.category.color || undefined,
+                                color: transaction.category.color || undefined,
+                              }}
+                            >
+                              {transaction.category.name}
+                            </Badge>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            Excluido ha {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+                          </span>
                           {isOld && (
-                            <span className="ml-2 text-red-500 font-medium">
-                              <AlertTriangle className="inline h-3 w-3 mr-1" />
-                              Sera removido em breve
+                            <span className="text-xs text-red-500 font-medium flex items-center">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Sera removido
                             </span>
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`min-w-[100px] text-right font-semibold opacity-50 ${
-                          transaction.type === "INCOME"
-                            ? "text-green-600"
-                            : transaction.type === "TRANSFER"
-                            ? "text-gray-400"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {transaction.type === "INCOME" ? "+" : ""}
-                        {formatCurrency(transaction.amount)}
+                      {/* Expanded Actions */}
+                      {isExpanded && (
+                        <div className="mt-4 pt-3 border-t flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestore(transaction.id);
+                            }}
+                            disabled={restoringId === transaction.id}
+                            className="flex-1"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Restaurar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingId(transaction.id);
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Excluir
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop List View */}
+              <div className="hidden md:block space-y-2">
+                {transactions.map((transaction) => {
+                  const daysAgo = getDaysAgo(transaction.deletedAt);
+                  const isOld = daysAgo >= 30;
+
+                  return (
+                    <div
+                      key={transaction.id}
+                      className={`flex items-center justify-between rounded-lg border p-4 ${
+                        isOld ? "bg-red-50 border-red-200" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {transaction.category && (
+                          <div
+                            className="h-4 w-4 rounded-full opacity-50"
+                            style={{ backgroundColor: transaction.category.color }}
+                          />
+                        )}
+                        <div>
+                          <div className="font-medium text-gray-600">
+                            {transaction.description}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-400">
+                            <span>{formatDate(transaction.date)}</span>
+                            <span>-</span>
+                            <span>{transaction.origin}</span>
+                            {transaction.category && (
+                              <>
+                                <span>-</span>
+                                <span>{transaction.category.name}</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Excluido ha {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+                            {isOld && (
+                              <span className="ml-2 text-red-500 font-medium">
+                                <AlertTriangle className="inline h-3 w-3 mr-1" />
+                                Sera removido em breve
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRestore(transaction.id)}
-                          disabled={restoringId === transaction.id}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={`min-w-[100px] text-right font-semibold opacity-50 ${
+                            transaction.type === "INCOME"
+                              ? "text-green-600"
+                              : transaction.type === "TRANSFER"
+                              ? "text-gray-400"
+                              : "text-red-600"
+                          }`}
                         >
-                          <RotateCcw className="mr-1 h-4 w-4" />
-                          Restaurar
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeletingId(transaction.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          {transaction.type === "INCOME" ? "+" : ""}
+                          {formatCurrency(transaction.amount)}
+                        </div>
+
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRestore(transaction.id)}
+                            disabled={restoringId === transaction.id}
+                          >
+                            <RotateCcw className="mr-1 h-4 w-4" />
+                            Restaurar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingId(transaction.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
