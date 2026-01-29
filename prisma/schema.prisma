@@ -70,6 +70,17 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model PasswordResetCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+}
+
 // ==========================================
 // DOMAIN MODELS
 // ==========================================
