@@ -34,6 +34,11 @@ model User {
   categoryRules     CategoryRule[]
   settings          Settings[]
   savingsHistories  SavingsHistory[]
+
+  // Investment models
+  investmentCategories  InvestmentCategory[]
+  investments           Investment[]
+  investmentSnapshots   InvestmentSnapshot[]
 }
 
 model Account {
@@ -110,6 +115,9 @@ model Transaction {
   // User relationship
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Investment transaction link (reverse relation)
+  investmentTransaction InvestmentTransaction?
 
   @@index([userId])
   @@index([userId, date])
@@ -240,6 +248,99 @@ model SavingsHistory {
   // User relationship
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([month, year, userId])
+  @@index([userId])
+}
+
+// ==========================================
+// INVESTMENT MODELS
+// ==========================================
+
+model InvestmentCategory {
+  id        String  @id @default(cuid())
+  name      String
+  color     String  // Hex color
+  icon      String? // Lucide icon name
+  isDefault Boolean @default(false)
+
+  // User relationship (null for default categories)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  investments Investment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, userId])
+  @@index([userId])
+}
+
+model Investment {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+
+  categoryId String
+  category   InvestmentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  currentValue   Float // Valor atual
+  totalInvested  Float // Total aportado
+  totalWithdrawn Float @default(0) // Total resgatado
+
+  goalAmount Float?  // Meta (opcional)
+  broker     String? // Corretora/banco (opcional)
+
+  // User relationship
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions InvestmentTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([categoryId])
+}
+
+model InvestmentTransaction {
+  id String @id @default(cuid())
+
+  investmentId String
+  investment   Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+
+  type   String // "DEPOSIT" | "WITHDRAWAL"
+  amount Float
+  date   DateTime
+  notes  String?
+
+  // Link with cash flow Transaction
+  linkedTransactionId String?      @unique
+  linkedTransaction   Transaction? @relation(fields: [linkedTransactionId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([investmentId])
+  @@index([linkedTransactionId])
+}
+
+model InvestmentSnapshot {
+  id String @id @default(cuid())
+
+  month Int // 1-12
+  year  Int
+
+  totalValue     Float // Soma de todos currentValue
+  totalInvested  Float // Soma de todos totalInvested
+  totalWithdrawn Float // Soma de todos totalWithdrawn
+
+  // User relationship
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   @@unique([month, year, userId])
   @@index([userId])
