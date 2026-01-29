@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { render } from '@react-email/render'
 import PasswordResetEmail from '@/components/emails/PasswordResetEmail'
 import WelcomeEmail from '@/components/emails/WelcomeEmail'
 
@@ -18,11 +19,13 @@ function getResendClient() {
  */
 export async function sendPasswordResetEmail(email: string, code: string) {
   const resend = getResendClient()
+  const html = await render(<PasswordResetEmail code={code} />)
+
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: 'Seu código de redefinição de senha - MyPocket',
-    react: <PasswordResetEmail code={code} />,
+    html,
   })
 
   if (error) {
@@ -38,11 +41,13 @@ export async function sendPasswordResetEmail(email: string, code: string) {
  */
 export async function sendWelcomeEmail(email: string, name: string) {
   const resend = getResendClient()
+  const html = await render(<WelcomeEmail name={name} />)
+
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: 'Bem-vindo ao MyPocket!',
-    react: <WelcomeEmail name={name} />,
+    html,
   })
 
   if (error) {
