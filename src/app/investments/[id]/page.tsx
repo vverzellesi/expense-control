@@ -159,7 +159,7 @@ export default function InvestmentDetailPage() {
       const res = await fetch(`/api/investments/${investmentId}/value`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: parseFloat(newValue) }),
+        body: JSON.stringify({ currentValue: parseFloat(newValue) }),
       });
 
       if (!res.ok) throw new Error("Erro ao atualizar valor");
