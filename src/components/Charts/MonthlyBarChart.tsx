@@ -33,10 +33,10 @@ export function MonthlyBarChart({ data }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
           dataKey="month"
-          tick={{ fontSize: isMobile ? 10 : 12 }}
+          tick={{ fontSize: isMobile ? 9 : 12 }}
           tickLine={false}
           axisLine={false}
-          interval={isMobile ? 1 : 0}
+          interval={0}
         />
         <YAxis
           tick={{ fontSize: isMobile ? 10 : 12 }}

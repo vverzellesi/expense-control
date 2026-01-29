@@ -27,14 +27,14 @@ export function CategoryPieChart({ data }: Props) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={isMobile ? 200 : 280}>
+    <ResponsiveContainer width="100%" height={isMobile ? 320 : 280}>
       <PieChart>
         <Pie
           data={chartData}
           cx="50%"
-          cy={isMobile ? "40%" : "50%"}
-          innerRadius={isMobile ? 40 : 60}
-          outerRadius={isMobile ? 70 : 100}
+          cy={isMobile ? "30%" : "50%"}
+          innerRadius={isMobile ? 35 : 60}
+          outerRadius={isMobile ? 60 : 100}
           paddingAngle={2}
           dataKey="value"
         >
@@ -57,6 +57,7 @@ export function CategoryPieChart({ data }: Props) {
           layout={isMobile ? "horizontal" : "vertical"}
           align={isMobile ? "center" : "right"}
           verticalAlign={isMobile ? "bottom" : "middle"}
+          wrapperStyle={isMobile ? { paddingTop: "10px" } : undefined}
           formatter={(value) => (
             <span className={isMobile ? "text-xs text-gray-600" : "text-sm text-gray-600"}>{value}</span>
           )}
