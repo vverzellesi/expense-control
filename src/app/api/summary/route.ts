@@ -167,41 +167,141 @@ export async function GET(request: NextRequest) {
 
     const startDate = new Date(targetYear, targetMonth - 1, 1);
     const endDate = new Date(targetYear, targetMonth, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     // Check if viewing a past month (for auto-recording savings history)
     const isCurrentMonth = targetMonth === currentDate.getMonth() + 1 && targetYear === currentDate.getFullYear();
     const isPastMonth = new Date(targetYear, targetMonth - 1, 1) < new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
 
-    // Get transactions for the month (excluding soft-deleted)
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        userId,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-      },
-    });
+    // Calculate date ranges for consolidated query
+    const sixMonthsAgo = new Date(targetYear, targetMonth - 6, 1);
+    const futureDate = new Date(targetYear, targetMonth + 3, 0); // For installments (next 3 months)
+    futureDate.setHours(23, 59, 59, 999);
 
-    // Get previous month transactions for comparison (excluding soft-deleted)
+    // Previous month boundaries
     const prevMonthStart = new Date(targetYear, targetMonth - 2, 1);
     const prevMonthEnd = new Date(targetYear, targetMonth - 1, 0);
-    const prevTransactions = await prisma.transaction.findMany({
-      where: {
-        userId,
-        date: {
-          gte: prevMonthStart,
-          lte: prevMonthEnd,
+    prevMonthEnd.setHours(23, 59, 59, 999);
+
+    // Weekly boundaries for current month
+    const today = new Date();
+    const currentWeekStart = getMondayOfWeek(today);
+    currentWeekStart.setHours(0, 0, 0, 0);
+    const prevWeekStart = new Date(currentWeekStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    const prevWeekEnd = new Date(currentWeekStart);
+    prevWeekEnd.setDate(prevWeekEnd.getDate() - 1);
+    prevWeekEnd.setHours(23, 59, 59, 999);
+
+    // ===========================================
+    // OPTIMIZED: Run all queries in parallel
+    // ===========================================
+    const [
+      // Query 1: All transactions for 6 months (includes current, previous, and monthly data)
+      allTransactions,
+      // Query 2: Active budgets
+      budgets,
+      // Query 3: Fixed expenses (distinct by description)
+      fixedExpenses,
+      // Query 4: Future installment transactions (for upcoming installments)
+      futureInstallments,
+      // Query 5: Standalone installments for projection
+      standaloneInstallments,
+      // Query 6: Savings goal setting
+      savingsGoalSetting,
+    ] = await Promise.all([
+      // Query 1: All transactions for 6 months with category and installment info
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          date: {
+            gte: sixMonthsAgo,
+            lte: endDate,
+          },
+          deletedAt: null,
         },
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-      },
+        include: {
+          category: true,
+          installment: true,
+        },
+      }),
+
+      // Query 2: Active budgets with category
+      prisma.budget.findMany({
+        where: { userId, isActive: true },
+        include: { category: true },
+      }),
+
+      // Query 3: Fixed expenses (distinct by description)
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          isFixed: true,
+          type: "EXPENSE",
+          deletedAt: null,
+        },
+        include: {
+          category: true,
+        },
+        distinct: ["description"],
+      }),
+
+      // Query 4: Future grouped installments (next 3 months)
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          isInstallment: true,
+          installmentId: { not: null },
+          date: {
+            gt: endDate,
+            lte: futureDate,
+          },
+          deletedAt: null,
+        },
+        include: {
+          category: true,
+          installment: true,
+        },
+        orderBy: {
+          date: "asc",
+        },
+      }),
+
+      // Query 5: Standalone installments for projection
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          isInstallment: true,
+          installmentId: null,
+          totalInstallments: { not: null },
+          currentInstallment: { not: null },
+          deletedAt: null,
+        },
+        include: {
+          category: true,
+        },
+      }),
+
+      // Query 6: Savings goal setting
+      prisma.settings.findUnique({
+        where: { key_userId: { key: "savingsGoal", userId } },
+      }),
+    ]);
+
+    // ===========================================
+    // DERIVE DATA FROM CONSOLIDATED QUERIES
+    // ===========================================
+
+    // Filter transactions for current month
+    const transactions = allTransactions.filter((t) => {
+      const tDate = new Date(t.date);
+      return tDate >= startDate && tDate <= endDate;
+    });
+
+    // Filter transactions for previous month
+    const prevTransactions = allTransactions.filter((t) => {
+      const tDate = new Date(t.date);
+      return tDate >= prevMonthStart && tDate <= prevMonthEnd;
     });
 
     // Calculate previous month totals and category breakdown
@@ -229,7 +329,7 @@ export async function GET(request: NextRequest) {
       // TRANSFER is ignored in totals
     }
 
-    // Calculate summary
+    // Calculate current month summary
     let income = 0;
     let expense = 0;
     const categoryTotals: Record<string, { total: number; name: string; color: string }> = {};
@@ -261,7 +361,7 @@ export async function GET(request: NextRequest) {
     const balance = income - expense;
     const balanceChange = prevBalance !== 0 ? ((balance - prevBalance) / Math.abs(prevBalance)) * 100 : 0;
 
-    // Get category breakdown with previous month comparison (Feature 1)
+    // Get category breakdown with previous month comparison
     const categoryBreakdown = Object.entries(categoryTotals)
       .map(([categoryId, data]) => {
         const prevTotal = prevCategoryTotals[categoryId]?.total || null;
@@ -281,21 +381,19 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => b.total - a.total);
 
-    // Get last 6 months data (excluding soft-deleted)
+    // ===========================================
+    // DERIVE MONTHLY DATA FROM 6-MONTH QUERY
+    // ===========================================
     const monthlyData = [];
     for (let i = 5; i >= 0; i--) {
       const monthStart = new Date(targetYear, targetMonth - 1 - i, 1);
       const monthEnd = new Date(targetYear, targetMonth - i, 0);
+      monthEnd.setHours(23, 59, 59, 999);
 
-      const monthTransactions = await prisma.transaction.findMany({
-        where: {
-          userId,
-          date: {
-            gte: monthStart,
-            lte: monthEnd,
-          },
-          deletedAt: null,
-        },
+      // Filter from already-fetched transactions
+      const monthTransactions = allTransactions.filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate >= monthStart && tDate <= monthEnd;
       });
 
       let monthIncome = 0;
@@ -318,42 +416,28 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Feature 8: Weekly Summary - Calculate current and previous week totals
+    // ===========================================
+    // WEEKLY SUMMARY (derived from existing data when possible)
+    // ===========================================
     let weeklySummary = null;
     if (isCurrentMonth) {
-      const today = new Date();
-      const currentWeekStart = getMondayOfWeek(today);
-      currentWeekStart.setHours(0, 0, 0, 0);
-
-      const currentWeekEnd = new Date(today);
+      // End of current week (Sunday)
+      const currentWeekEnd = new Date(currentWeekStart);
+      currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
       currentWeekEnd.setHours(23, 59, 59, 999);
 
-      const prevWeekStart = new Date(currentWeekStart);
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-
-      const prevWeekEnd = new Date(currentWeekStart);
-      prevWeekEnd.setDate(prevWeekEnd.getDate() - 1);
-      prevWeekEnd.setHours(23, 59, 59, 999);
-
-      // Current week transactions
-      const currentWeekTransactions = transactions.filter(t => {
+      // Current week transactions (filter from already-fetched data)
+      const currentWeekTransactions = transactions.filter((t) => {
         const tDate = new Date(t.date);
         return tDate >= currentWeekStart && tDate <= currentWeekEnd && t.type === "EXPENSE";
       });
 
       const currentWeekTotal = currentWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-      // Previous week transactions (need to query since might be previous month)
-      const prevWeekTransactions = await prisma.transaction.findMany({
-        where: {
-          userId,
-          date: {
-            gte: prevWeekStart,
-            lte: prevWeekEnd,
-          },
-          type: "EXPENSE",
-          deletedAt: null,
-        },
+      // Previous week transactions (filter from 6-month data if available)
+      const prevWeekTransactions = allTransactions.filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate >= prevWeekStart && tDate <= prevWeekEnd && t.type === "EXPENSE";
       });
 
       const prevWeekTotal = prevWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
@@ -380,10 +464,9 @@ export async function GET(request: NextRequest) {
     // Weekly Breakdown: gastos por semana do mês
     const weeklyBreakdown = calculateWeeklyBreakdown(transactions, startDate, endDate);
 
-    // Get savings goal
-    const savingsGoalSetting = await prisma.settings.findUnique({
-      where: { key_userId: { key: "savingsGoal", userId } },
-    });
+    // ===========================================
+    // SAVINGS GOAL
+    // ===========================================
     const savingsGoal = savingsGoalSetting ? parseFloat(savingsGoalSetting.value) : null;
     const currentSavings = income - expense;
     const savingsPercentage = savingsGoal && savingsGoal > 0
@@ -423,12 +506,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get budget alerts (categories at 80% or more of budget)
-    const budgets = await prisma.budget.findMany({
-      where: { userId, isActive: true },
-      include: { category: true },
-    });
-
+    // ===========================================
+    // BUDGET ALERTS (using already-fetched budgets)
+    // ===========================================
     const allBudgets = budgets
       .map((budget) => {
         const spent = categoryTotals[budget.categoryId]?.total || 0;
@@ -447,61 +527,10 @@ export async function GET(request: NextRequest) {
 
     const budgetAlerts = allBudgets.filter((budget) => budget.percentage >= 80);
 
-    // Get fixed expenses (excluding soft-deleted)
-    const fixedExpenses = await prisma.transaction.findMany({
-      where: {
-        userId,
-        isFixed: true,
-        type: "EXPENSE",
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-      },
-      distinct: ["description"],
-    });
-
-    // Get upcoming installments (next 3 months, excluding soft-deleted)
-    const futureDate = new Date(targetYear, targetMonth + 2, 0);
-
-    // Get grouped installments (transactions that exist in the future)
-    const groupedInstallments = await prisma.transaction.findMany({
-      where: {
-        userId,
-        isInstallment: true,
-        installmentId: { not: null },
-        date: {
-          gt: endDate,
-          lte: futureDate,
-        },
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-        installment: true,
-      },
-      orderBy: {
-        date: "asc",
-      },
-    });
-
-    // Get standalone installments (manually marked) and project their future installments
-    const standaloneInstallments = await prisma.transaction.findMany({
-      where: {
-        userId,
-        isInstallment: true,
-        installmentId: null,
-        totalInstallments: { not: null },
-        currentInstallment: { not: null },
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-      },
-    });
-
-    // Project future installments from standalone transactions
-    const projectedInstallments: typeof groupedInstallments = [];
+    // ===========================================
+    // UPCOMING INSTALLMENTS (project from standalone)
+    // ===========================================
+    const projectedInstallments: typeof futureInstallments = [];
     for (const t of standaloneInstallments) {
       if (!t.currentInstallment || !t.totalInstallments) continue;
 
@@ -527,7 +556,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Combine and sort all upcoming installments
-    const upcomingInstallments = [...groupedInstallments, ...projectedInstallments]
+    const upcomingInstallments = [...futureInstallments, ...projectedInstallments]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return NextResponse.json({
