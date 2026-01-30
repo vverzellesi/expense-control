@@ -1,4 +1,4 @@
-import { Clock, Eye, Shield, Building2, Gift, Smartphone } from "lucide-react"
+import { Clock, Eye, Shield, Building2, Gift, Smartphone, TrendingUp } from "lucide-react"
 
 const benefits = [
   {
@@ -30,6 +30,12 @@ const benefits = [
     title: "Multi-Banco",
     description:
       "Funciona com C6, Itaú, BTG e outros. Importe de qualquer banco.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Acompanhe Investimentos",
+    description:
+      "Monitore seu portfólio, rentabilidade e metas de cada aplicação.",
   },
   {
     icon: Gift,

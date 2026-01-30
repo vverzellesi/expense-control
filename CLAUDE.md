@@ -35,6 +35,7 @@ npm run db:seed-demo  # Seed demo account with sample data
 
 - `/` - Public landing page (unauthenticated)
 - `/dashboard` - Main authenticated dashboard
+- `/investments` - Investment portfolio tracking
 - `/auth/login`, `/auth/register` - Authentication pages
 - All other routes require authentication
 
@@ -56,6 +57,9 @@ npm run db:seed-demo  # Seed demo account with sample data
 - **Origin** - Payment method/bank tracking
 - **Budget** - Category-level spending limits
 - **CategoryRule** - Keyword-based auto-categorization rules
+- **Investment** - Investment assets with current value, goal amount, and broker info
+- **InvestmentCategory** - Investment type classification (Renda Fixa, Ações, FIIs, etc.)
+- **InvestmentTransaction** - Deposits, withdrawals, and value updates for investments
 
 ### Smart Features
 
@@ -64,6 +68,7 @@ npm run db:seed-demo  # Seed demo account with sample data
 3. **Installment Detection** - Parses "3/10" or "PARCELA 3 DE 10" from descriptions
 4. **Multi-Bank CSV Import** (`/src/lib/csv-parser.ts`) - Detects and parses C6, Itaú, BTG formats
 5. **OCR Invoice Scanning** - PDF/image extraction via tesseract.js
+6. **Investment Tracking** (`/src/app/investments/`) - Portfolio management with deposits, withdrawals, return calculation, and goal tracking
 
 ### API Patterns
 

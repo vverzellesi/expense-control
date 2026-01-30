@@ -7,6 +7,7 @@ import {
   Target,
   Wand2,
   PiggyBank,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react"
 
@@ -64,5 +65,11 @@ export const slides: Slide[] = [
     title: "Meta de Economia",
     description:
       "Defina quanto quer economizar por mês e acompanhe seu progresso no dashboard.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Acompanhe seus Investimentos",
+    description:
+      "Cadastre seus investimentos, registre aportes e resgates, e acompanhe a rentabilidade de cada ativo.",
   },
 ]

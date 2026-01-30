@@ -8,6 +8,9 @@ import {
   PieChart,
   TrendingUp,
   Upload,
+  Wallet,
+  BarChart3,
+  ArrowUpRight,
 } from "lucide-react"
 
 const categories = [
@@ -74,6 +77,27 @@ const categories = [
       },
     ],
   },
+  {
+    title: "Investimentos",
+    icon: Wallet,
+    features: [
+      {
+        icon: BarChart3,
+        title: "Portfólio Completo",
+        description: "Acompanhe todos seus investimentos em um só lugar",
+      },
+      {
+        icon: ArrowUpRight,
+        title: "Rentabilidade em Tempo Real",
+        description: "Veja o retorno de cada aplicação e do portfólio total",
+      },
+      {
+        icon: Target,
+        title: "Metas por Investimento",
+        description: "Defina objetivos e acompanhe o progresso de cada ativo",
+      },
+    ],
+  },
 ]
 
 export function FeatureCategories() {
@@ -89,7 +113,7 @@ export function FeatureCategories() {
           </p>
         </div>
 
-        <div className="mt-16 grid gap-8 md:grid-cols-3">
+        <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {categories.map((category) => (
             <div key={category.title} className="space-y-6">
               <div className="flex items-center gap-3">

@@ -11,6 +11,7 @@ A personal finance management app with smart transaction categorization, built w
 - **Budget Monitoring** - Set category-level spending limits with alerts
 - **OCR Invoice Scanning** - Extract transaction data from PDF/image invoices
 - **Financial Reports** - Visualize spending patterns with charts and breakdowns
+- **Investment Tracking** - Monitor your portfolio with deposits, withdrawals, returns tracking, and goal setting per asset
 
 ## Tech Stack
 
@@ -65,6 +66,7 @@ src/
 │   ├── api/            # REST API endpoints
 │   ├── auth/           # Authentication pages
 │   ├── dashboard/      # Main dashboard
+│   ├── investments/    # Investment tracking module
 │   └── ...             # Other feature pages
 ├── components/
 │   ├── landing/        # Landing page sections
