@@ -230,6 +230,13 @@ export const defaultCategories = [
   { name: "Outros", color: "#6B7280", icon: "help-circle" },
 ];
 
+export const defaultInvestmentCategories = [
+  { name: "Renda Fixa", color: "#3B82F6", icon: "landmark" },
+  { name: "Renda Variável", color: "#8B5CF6", icon: "trending-up" },
+  { name: "Cripto", color: "#F97316", icon: "bitcoin" },
+  { name: "Previdência", color: "#10B981", icon: "shield" },
+];
+
 export const defaultRules = [
   { keyword: "UBER", category: "Transporte" },
   { keyword: "99", category: "Transporte" },
@@ -333,6 +340,56 @@ export async function initializeUserDefaults(userId: string): Promise<void> {
     }
   }
 
+  // Create default investment categories for the user
+  for (const category of defaultInvestmentCategories) {
+    await prisma.investmentCategory.create({
+      data: {
+        name: category.name,
+        color: category.color,
+        icon: category.icon,
+        isDefault: false,
+        userId,
+      },
+    });
+  }
+
   // Invalidate cache for this user
   invalidateRulesCache(userId);
+}
+
+// Cache flag to avoid repeated database checks
+let investmentCategoriesInitialized = false;
+
+/**
+ * Ensure global default investment categories exist.
+ * This is called on first access to ensure defaults are available.
+ * Uses in-memory caching to run only once per server instance.
+ */
+export async function ensureDefaultInvestmentCategories(): Promise<void> {
+  if (investmentCategoriesInitialized) return;
+
+  // Single query to get all existing default categories
+  const existing = await prisma.investmentCategory.findMany({
+    where: { userId: null, isDefault: true },
+    select: { name: true },
+  });
+
+  const existingNames = new Set(existing.map((c) => c.name));
+  const toCreate = defaultInvestmentCategories.filter(
+    (c) => !existingNames.has(c.name)
+  );
+
+  if (toCreate.length > 0) {
+    await prisma.investmentCategory.createMany({
+      data: toCreate.map((c) => ({
+        name: c.name,
+        color: c.color,
+        icon: c.icon,
+        isDefault: true,
+        userId: null,
+      })),
+    });
+  }
+
+  investmentCategoriesInitialized = true;
 }

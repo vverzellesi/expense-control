@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { ensureDefaultInvestmentCategories } from "@/lib/categorizer";
 
 export async function GET() {
   try {
     const userId = await getAuthenticatedUserId();
+
+    // Ensure default investment categories exist (self-healing)
+    await ensureDefaultInvestmentCategories();
 
     // Get default categories (userId is null) and user's custom categories
     const categories = await prisma.investmentCategory.findMany({
