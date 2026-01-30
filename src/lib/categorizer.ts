@@ -364,33 +364,41 @@ let investmentCategoriesInitialized = false;
  * Ensure global default investment categories exist.
  * This is called on first access to ensure defaults are available.
  * Uses in-memory caching to run only once per server instance.
+ * Fails silently to not break the app if there are database issues.
  */
 export async function ensureDefaultInvestmentCategories(): Promise<void> {
   if (investmentCategoriesInitialized) return;
 
-  // Single query to get all existing default categories
-  const existing = await prisma.investmentCategory.findMany({
-    where: { userId: null, isDefault: true },
-    select: { name: true },
-  });
-
-  const existingNames = new Set(existing.map((c) => c.name));
-  const toCreate = defaultInvestmentCategories.filter(
-    (c) => !existingNames.has(c.name)
-  );
-
-  if (toCreate.length > 0) {
-    await prisma.investmentCategory.createMany({
-      data: toCreate.map((c) => ({
-        name: c.name,
-        color: c.color,
-        icon: c.icon,
-        isDefault: true,
-        userId: null,
-      })),
-      skipDuplicates: true,
+  try {
+    // Single query to get all existing default categories
+    const existing = await prisma.investmentCategory.findMany({
+      where: { userId: null, isDefault: true },
+      select: { name: true },
     });
-  }
 
-  investmentCategoriesInitialized = true;
+    const existingNames = new Set(existing.map((c) => c.name));
+    const toCreate = defaultInvestmentCategories.filter(
+      (c) => !existingNames.has(c.name)
+    );
+
+    if (toCreate.length > 0) {
+      await prisma.investmentCategory.createMany({
+        data: toCreate.map((c) => ({
+          name: c.name,
+          color: c.color,
+          icon: c.icon,
+          isDefault: true,
+          userId: null,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    investmentCategoriesInitialized = true;
+  } catch (error) {
+    // Log but don't throw - categories can be fetched without defaults
+    console.error("Failed to ensure default investment categories:", error);
+    // Still mark as initialized to avoid repeated attempts
+    investmentCategoriesInitialized = true;
+  }
 }

@@ -57,8 +57,9 @@ export async function GET(request: NextRequest) {
       return unauthorizedResponse();
     }
     console.error("Error fetching investments:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Erro ao buscar investimentos" },
+      { error: "Erro ao buscar investimentos", details: errorMessage },
       { status: 500 }
     );
   }
