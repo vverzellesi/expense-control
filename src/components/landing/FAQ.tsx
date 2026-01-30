@@ -26,6 +26,11 @@ const faqs = [
     answer:
       'Você cria regras baseadas em palavras-chave. Por exemplo: toda transação com "NETFLIX" vai automaticamente para "Streaming".',
   },
+  {
+    question: "Posso acompanhar meus investimentos?",
+    answer:
+      "Sim! O MyPocket tem um módulo completo de investimentos. Cadastre seus ativos, registre aportes e resgates, acompanhe a rentabilidade e defina metas para cada aplicação.",
+  },
 ]
 
 export function FAQ() {
