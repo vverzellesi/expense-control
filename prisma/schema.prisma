@@ -121,6 +121,10 @@ model Transaction {
 
   @@index([userId])
   @@index([userId, date])
+  @@index([userId, type, deletedAt])
+  @@index([userId, deletedAt, date])
+  @@index([userId, isFixed, deletedAt])
+  @@index([userId, isInstallment, deletedAt])
 }
 
 model RecurringExpense {
@@ -205,6 +209,7 @@ model Budget {
 
   @@unique([categoryId, userId])
   @@index([userId])
+  @@index([userId, isActive])
 }
 
 model CategoryRule {
