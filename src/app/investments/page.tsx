@@ -89,6 +89,9 @@ export default function InvestmentsPage() {
       }
 
       const res = await fetch(`/api/investments?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch investments");
+      }
       const data = await res.json();
       setInvestments(data);
     } catch (error) {
@@ -106,6 +109,9 @@ export default function InvestmentsPage() {
   async function fetchCategories() {
     try {
       const res = await fetch("/api/investment-categories");
+      if (!res.ok) {
+        throw new Error("Failed to fetch categories");
+      }
       const data = await res.json();
       setCategories(data);
     } catch (error) {
@@ -116,10 +122,13 @@ export default function InvestmentsPage() {
   async function fetchSummary() {
     try {
       const res = await fetch("/api/investments/summary");
+      if (!res.ok) {
+        throw new Error("Failed to fetch investment summary");
+      }
       const data = await res.json();
       setSummary(data);
     } catch (error) {
-      console.error("Error fetching summary:", error);
+      console.error("Error fetching investment summary:", error);
     }
   }
 
@@ -399,7 +408,7 @@ export default function InvestmentsPage() {
               {summary ? formatCurrency(summary.totalReturn) : "R$ 0,00"}
             </div>
             <p className={`text-xs ${isPositiveReturn ? "text-green-600" : "text-red-600"}`}>
-              {isPositiveReturn ? "+" : ""}{summary?.totalReturnPercent.toFixed(2) || "0.00"}%
+              {isPositiveReturn ? "+" : ""}{summary?.totalReturnPercent?.toFixed(2) ?? "0.00"}%
             </p>
           </CardContent>
         </Card>

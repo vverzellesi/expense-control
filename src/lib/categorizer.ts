@@ -388,6 +388,7 @@ export async function ensureDefaultInvestmentCategories(): Promise<void> {
         isDefault: true,
         userId: null,
       })),
+      skipDuplicates: true,
     });
   }
 
