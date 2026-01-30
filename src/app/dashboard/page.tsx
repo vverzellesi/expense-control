@@ -107,8 +107,11 @@ export default function Dashboard() {
     async function checkOnboarding() {
       try {
         const res = await fetch("/api/settings?key=hasSeenOnboarding");
+        if (!res.ok) {
+          return;
+        }
         const data = await res.json();
-        if (data.value === null || data.value === undefined) {
+        if (!data || data.value === null || data.value === undefined) {
           setShowOnboarding(true);
         }
       } catch (error) {
