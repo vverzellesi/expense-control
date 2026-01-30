@@ -35,8 +35,9 @@ export async function GET() {
       return unauthorizedResponse();
     }
     console.error("Error fetching investment categories:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Erro ao buscar categorias de investimento" },
+      { error: "Erro ao buscar categorias de investimento", details: errorMessage },
       { status: 500 }
     );
   }

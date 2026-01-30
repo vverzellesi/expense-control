@@ -118,8 +118,9 @@ export async function GET(): Promise<NextResponse<InvestmentSummaryResponse | { 
       return unauthorizedResponse();
     }
     console.error("Error fetching investment summary:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Erro ao buscar resumo de investimentos" },
+      { error: "Erro ao buscar resumo de investimentos", details: errorMessage },
       { status: 500 }
     );
   }
