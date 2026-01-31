@@ -27,8 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History } from "lucide-react";
-import type { Category, Budget, CategoryRule, SavingsHistory } from "@/types";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil } from "lucide-react";
+import type { Category, Budget, CategoryRule, SavingsHistory, Origin } from "@/types";
 
 interface BudgetWithCategory extends Budget {
   category: Category;
@@ -59,6 +59,14 @@ export default function SettingsPage() {
   const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null);
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
+  // Origins
+  const [origins, setOrigins] = useState<Origin[]>([]);
+  const [newOriginName, setNewOriginName] = useState("");
+  const [originSaving, setOriginSaving] = useState(false);
+  const [editingOrigin, setEditingOrigin] = useState<Origin | null>(null);
+  const [editOriginName, setEditOriginName] = useState("");
+  const [deletingOrigin, setDeletingOrigin] = useState<Origin | null>(null);
+
   // Current month spending
   const [spending, setSpending] = useState<Record<string, number>>({});
 
@@ -76,12 +84,13 @@ export default function SettingsPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes, savingsHistoryRes] = await Promise.all([
+      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes, savingsHistoryRes, originsRes] = await Promise.all([
         fetch("/api/categories"),
         fetch("/api/budgets"),
         fetch("/api/rules"),
         fetch("/api/settings?key=savingsGoal"),
         fetch("/api/savings-history?limit=12"),
+        fetch("/api/origins"),
       ]);
 
       const categoriesData = await categoriesRes.json();
@@ -89,6 +98,7 @@ export default function SettingsPage() {
       const rulesData = await rulesRes.json();
       const savingsGoalData = await savingsGoalRes.json();
       const savingsHistoryData = await savingsHistoryRes.json();
+      const originsData = await originsRes.json();
 
       setCategories(categoriesData);
       setBudgets(budgetsData);
@@ -97,6 +107,7 @@ export default function SettingsPage() {
         setSavingsGoal(savingsGoalData.value);
       }
       setSavingsHistory(savingsHistoryData || []);
+      setOrigins(originsData || []);
 
       // Fetch current month spending
       const now = new Date();
@@ -299,6 +310,112 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleAddOrigin(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!newOriginName.trim()) {
+      toast({
+        title: "Erro",
+        description: "Informe o nome da origem",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setOriginSaving(true);
+
+    try {
+      const res = await fetch("/api/origins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newOriginName.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao criar origem");
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Origem adicionada com sucesso",
+      });
+
+      setNewOriginName("");
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao adicionar origem",
+        variant: "destructive",
+      });
+    } finally {
+      setOriginSaving(false);
+    }
+  }
+
+  async function handleEditOrigin() {
+    if (!editingOrigin || !editOriginName.trim()) return;
+
+    try {
+      const res = await fetch(`/api/origins?id=${editingOrigin.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editOriginName.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao atualizar origem");
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Origem atualizada com sucesso",
+      });
+
+      setEditingOrigin(null);
+      setEditOriginName("");
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao atualizar origem",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleDeleteOrigin() {
+    if (!deletingOrigin) return;
+
+    try {
+      const res = await fetch(`/api/origins?id=${deletingOrigin.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error();
+
+      toast({
+        title: "Sucesso",
+        description: "Origem excluída com sucesso",
+      });
+
+      setDeletingOrigin(null);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir origem",
+        variant: "destructive",
+      });
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -334,6 +451,11 @@ export default function SettingsPage() {
             <PiggyBank className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Meta de Economia</span>
             <span className="sm:hidden">Metas</span>
+          </TabsTrigger>
+          <TabsTrigger value="origins" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Wallet className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Origens</span>
+            <span className="sm:hidden">Origens</span>
           </TabsTrigger>
         </TabsList>
 
@@ -715,6 +837,125 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="origins" className="space-y-6">
+          {/* Add Origin Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Adicionar Origem</CardTitle>
+              <CardDescription>
+                Adicione cartoes, bancos ou metodos de pagamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAddOrigin} className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <Input
+                    value={newOriginName}
+                    onChange={(e) => setNewOriginName(e.target.value)}
+                    placeholder="Nome da origem"
+                    className="min-h-[44px]"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button type="submit" disabled={originSaving} className="w-full sm:w-auto min-h-[44px]">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Adicionar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Origins List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Suas Origens</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {origins.length === 0 ? (
+                <div className="text-center text-gray-500">
+                  Nenhuma origem cadastrada
+                </div>
+              ) : (
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {origins.map((origin) => (
+                    <div
+                      key={origin.id}
+                      className="flex items-center justify-between rounded-lg border p-4"
+                    >
+                      {editingOrigin?.id === origin.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <Input
+                            value={editOriginName}
+                            onChange={(e) => setEditOriginName(e.target.value)}
+                            className="min-h-[36px]"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleEditOrigin();
+                              } else if (e.key === "Escape") {
+                                setEditingOrigin(null);
+                                setEditOriginName("");
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={handleEditOrigin}
+                            className="min-h-[36px]"
+                          >
+                            Salvar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingOrigin(null);
+                              setEditOriginName("");
+                            }}
+                            className="min-h-[36px]"
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <Wallet className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <span className="font-medium truncate">{origin.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-[44px] min-w-[44px]"
+                              onClick={() => {
+                                setEditingOrigin(origin);
+                                setEditOriginName(origin.name);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 text-gray-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-[44px] min-w-[44px]"
+                              onClick={() => setDeletingOrigin(origin)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Delete Budget Confirmation */}
@@ -724,7 +965,7 @@ export default function SettingsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir este orçamento?
             </AlertDialogDescription>
@@ -745,7 +986,7 @@ export default function SettingsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir esta regra de categorização?
             </AlertDialogDescription>
@@ -753,6 +994,27 @@ export default function SettingsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteRule} className="bg-red-600">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Origin Confirmation */}
+      <AlertDialog
+        open={!!deletingOrigin}
+        onOpenChange={() => setDeletingOrigin(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a origem &quot;{deletingOrigin?.name}&quot;?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteOrigin} className="bg-red-600">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -353,6 +353,39 @@ export async function initializeUserDefaults(userId: string): Promise<void> {
     });
   }
 
+  // Create default origins for the user
+  const defaultOrigins = [
+    // Credit Cards
+    "Cartão C6",
+    "Cartão Itaú",
+    "Cartão BTG",
+    "Cartão Nubank",
+    // Payment Methods
+    "PIX",
+    "Transferência",
+    "Dinheiro",
+    "Boleto",
+    "Débito Automático",
+    // Bank Statements
+    "Extrato C6",
+    "Extrato Itaú",
+    "Extrato BTG",
+    "Extrato Nubank",
+    "Extrato Bradesco",
+    "Extrato Santander",
+    "Extrato BB",
+    "Extrato Caixa",
+    "Extrato Bancário",
+  ];
+
+  await prisma.origin.createMany({
+    data: defaultOrigins.map((name) => ({
+      name,
+      userId,
+    })),
+    skipDuplicates: true,
+  });
+
   // Invalidate cache for this user
   invalidateRulesCache(userId);
 }

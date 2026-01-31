@@ -90,26 +90,27 @@ const defaultRules = [
 ];
 
 const defaultOrigins = [
-  // Cartoes de credito
-  { name: "Cartao C6" },
-  { name: "Cartao Itau" },
-  { name: "Cartao BTG" },
+  // Cartões de crédito
+  { name: "Cartão C6" },
+  { name: "Cartão Itaú" },
+  { name: "Cartão BTG" },
+  { name: "Cartão Nubank" },
   // Formas de pagamento
   { name: "PIX" },
-  { name: "Transferencia" },
+  { name: "Transferência" },
   { name: "Dinheiro" },
   { name: "Boleto" },
-  { name: "Debito Automatico" },
-  // Extratos bancarios
+  { name: "Débito Automático" },
+  // Extratos bancários
   { name: "Extrato C6" },
-  { name: "Extrato Itau" },
+  { name: "Extrato Itaú" },
   { name: "Extrato BTG" },
   { name: "Extrato Nubank" },
   { name: "Extrato Bradesco" },
   { name: "Extrato Santander" },
   { name: "Extrato BB" },
   { name: "Extrato Caixa" },
-  { name: "Extrato Bancario" },
+  { name: "Extrato Bancário" },
 ];
 
 const defaultInvestmentCategories = [
