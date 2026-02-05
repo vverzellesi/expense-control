@@ -4,9 +4,18 @@ import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
 interface BillPeriod {
   label: string;
+  month: number;
+  year: number;
   startDate: Date;
   endDate: Date;
   dueDate: Date;
+}
+
+interface CarryoverInfo {
+  amount: number;
+  interest: number;
+  fromBill: string;
+  billPaymentId: string;
 }
 
 // Calculate bill periods based on closing day
@@ -36,6 +45,8 @@ function getBillPeriods(closingDay: number, count: number = 6): BillPeriod[] {
 
     periods.push({
       label,
+      month: refMonth + 1, // 1-12 format
+      year: refYear,
       startDate,
       endDate,
       dueDate,
@@ -83,11 +94,58 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        // Calculate totals
-        const total = transactions.reduce(
+        // Calculate transaction total (only period transactions)
+        const transactionTotal = transactions.reduce(
           (sum, t) => sum + Math.abs(t.amount),
           0
         );
+
+        // Look for carryover from previous month's bill payment
+        // Calculate previous month (handle January -> December of previous year)
+        const prevMonth = period.month === 1 ? 12 : period.month - 1;
+        const prevYear = period.month === 1 ? period.year - 1 : period.year;
+
+        // Query for partial bill payments from the previous month
+        const carryoverQuery: Record<string, unknown> = {
+          userId,
+          billMonth: prevMonth,
+          billYear: prevYear,
+          paymentType: "PARTIAL",
+          amountCarried: { gt: 0 },
+        };
+
+        if (origin) {
+          carryoverQuery.origin = origin;
+        }
+
+        const carryoverPayment = await prisma.billPayment.findFirst({
+          where: carryoverQuery,
+        });
+
+        // Build carryover info if found
+        let carryover: CarryoverInfo | null = null;
+        let carryoverAmount = 0;
+        let interestAmount = 0;
+
+        if (carryoverPayment) {
+          carryoverAmount = carryoverPayment.amountCarried;
+          interestAmount = carryoverPayment.interestAmount || 0;
+
+          const monthNames = [
+            "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+          ];
+
+          carryover = {
+            amount: carryoverAmount,
+            interest: interestAmount,
+            fromBill: `${monthNames[prevMonth - 1]}/${prevYear}`,
+            billPaymentId: carryoverPayment.id,
+          };
+        }
+
+        // Total includes transaction total + carryover + interest
+        const total = transactionTotal + carryoverAmount + interestAmount;
 
         // Group by category
         const categoryTotals: Record<
@@ -122,10 +180,14 @@ export async function GET(request: NextRequest) {
 
         return {
           label: period.label,
+          month: period.month,
+          year: period.year,
           startDate: period.startDate.toISOString(),
           endDate: period.endDate.toISOString(),
           dueDate: period.dueDate.toISOString(),
           total,
+          transactionTotal,
+          carryover,
           transactionCount: transactions.length,
           categories,
           transactions: transactions.map((t) => ({

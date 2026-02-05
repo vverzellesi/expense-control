@@ -30,8 +30,10 @@ import {
   ChevronUp,
   Settings2,
   Receipt,
+  Banknote,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { BillPaymentModal } from "@/components/BillPaymentModal";
 
 interface BillCategory {
   id: string;
@@ -54,12 +56,23 @@ interface BillTransaction {
   currentInstallment: number | null;
 }
 
+interface CarryoverInfo {
+  amount: number;
+  interest: number;
+  fromBill: string;
+  billPaymentId: string;
+}
+
 interface Bill {
   label: string;
+  month: number;
+  year: number;
   startDate: string;
   endDate: string;
   dueDate: string;
   total: number;
+  transactionTotal: number;
+  carryover: CarryoverInfo | null;
   transactionCount: number;
   categories: BillCategory[];
   transactions: BillTransaction[];
@@ -80,6 +93,8 @@ export default function BillsPage() {
   const [selectedOrigin, setSelectedOrigin] = useState<string>("");
   const [expandedBill, setExpandedBill] = useState<number | null>(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
 
   useEffect(() => {
     fetchBills();
@@ -114,6 +129,16 @@ export default function BillsPage() {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return `${start.getDate().toString().padStart(2, "0")}/${(start.getMonth() + 1).toString().padStart(2, "0")} a ${end.getDate().toString().padStart(2, "0")}/${(end.getMonth() + 1).toString().padStart(2, "0")}`;
+  }
+
+  function openPaymentModal(bill: Bill, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelectedBillForPayment(bill);
+    setPaymentModalOpen(true);
+  }
+
+  function handlePaymentSuccess() {
+    fetchBills();
   }
 
   const currentBill = bills[0];
@@ -267,40 +292,77 @@ export default function BillsPage() {
                 className="cursor-pointer"
                 onClick={() => toggleBill(index)}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-lg">{bill.label}</CardTitle>
-                    {index === 0 && (
-                      <Badge className="bg-primary">Atual</Badge>
-                    )}
-                    <span className="text-sm text-gray-500">
-                      {formatPeriod(bill.startDate, bill.endDate)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-xl font-bold text-red-600">
-                        {formatCurrency(bill.total)}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <CardTitle className="text-lg">{bill.label}</CardTitle>
+                      {index === 0 && (
+                        <Badge className="bg-primary">Atual</Badge>
+                      )}
+                      {bill.carryover && (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                          Pagamento Parcial
+                        </Badge>
+                      )}
+                      <span className="text-sm text-gray-500">
+                        {formatPeriod(bill.startDate, bill.endDate)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => openPaymentModal(bill, e)}
+                        className="hidden sm:flex"
+                      >
+                        <Banknote className="h-4 w-4 mr-2" />
+                        Pagar Fatura
+                      </Button>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-red-600">
+                          {formatCurrency(bill.total)}
+                        </div>
+                        {bill.changePercentage !== null && (
+                          <span
+                            className={`text-xs ${
+                              bill.changePercentage > 0
+                                ? "text-red-600"
+                                : "text-green-600"
+                            }`}
+                          >
+                            {bill.changePercentage > 0 ? "+" : ""}
+                            {bill.changePercentage.toFixed(1)}%
+                          </span>
+                        )}
                       </div>
-                      {bill.changePercentage !== null && (
-                        <span
-                          className={`text-xs ${
-                            bill.changePercentage > 0
-                              ? "text-red-600"
-                              : "text-green-600"
-                          }`}
-                        >
-                          {bill.changePercentage > 0 ? "+" : ""}
-                          {bill.changePercentage.toFixed(1)}%
-                        </span>
+                      {expandedBill === index ? (
+                        <ChevronUp className="h-5 w-5 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-gray-400" />
                       )}
                     </div>
-                    {expandedBill === index ? (
-                      <ChevronUp className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-400" />
-                    )}
                   </div>
+
+                  {/* Carryover badge info */}
+                  {bill.carryover && (
+                    <div className="text-sm text-gray-600 border-l-2 border-amber-400 pl-3 ml-1">
+                      <div>Saldo anterior ({bill.carryover.fromBill}): <span className="font-medium">{formatCurrency(bill.carryover.amount)}</span></div>
+                      {bill.carryover.interest > 0 && (
+                        <div>Juros: <span className="font-medium text-red-600">{formatCurrency(bill.carryover.interest)}</span></div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Mobile button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => openPaymentModal(bill, e)}
+                    className="sm:hidden w-full"
+                  >
+                    <Banknote className="h-4 w-4 mr-2" />
+                    Pagar Fatura
+                  </Button>
                 </div>
               </CardHeader>
 
@@ -455,6 +517,24 @@ export default function BillsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Bill Payment Modal */}
+      {selectedBillForPayment && (
+        <BillPaymentModal
+          isOpen={paymentModalOpen}
+          onClose={() => {
+            setPaymentModalOpen(false);
+            setSelectedBillForPayment(null);
+          }}
+          onSuccess={handlePaymentSuccess}
+          bill={{
+            month: selectedBillForPayment.month,
+            year: selectedBillForPayment.year,
+            origin: selectedOrigin || "Cartao",
+            total: selectedBillForPayment.total,
+          }}
+        />
       )}
     </div>
   );

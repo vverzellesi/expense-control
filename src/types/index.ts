@@ -3,6 +3,7 @@ export type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 // Special transaction types for credit card statements
 export type SpecialTransactionType =
   | "BILL_PAYMENT"      // Pagamento de fatura (credito)
+  | "BILL_CARRYOVER"    // Saldo anterior de fatura
   | "FINANCING"         // Parcelamento de fatura
   | "REFUND"            // Estorno
   | "FEE"               // Tarifa, anuidade
@@ -332,4 +333,30 @@ export interface InvestmentSummary {
 
 export interface InvestmentWithTransactions extends Investment {
   transactions: InvestmentTransaction[];
+}
+
+// ==========================================
+// BILL PAYMENT TYPES
+// ==========================================
+
+export type BillPaymentType = 'PARTIAL' | 'FINANCED';
+
+export interface BillPayment {
+  id: string;
+  billMonth: number;
+  billYear: number;
+  origin: string;
+  totalBillAmount: number;
+  amountPaid: number;
+  amountCarried: number;
+  paymentType: BillPaymentType;
+  installmentId?: string;
+  interestRate?: number;
+  interestAmount?: number;
+  entryTransactionId?: string;
+  carryoverTransactionId?: string;
+  linkedTransactionId?: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
