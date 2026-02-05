@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 import { BillPaymentType } from "@/types";
+import { generateBillPaymentTransactions } from "@/lib/bill-payment-transactions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -136,14 +137,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate amountCarried (remaining balance after payment)
-    const amountCarried = totalBillAmount - amountPaid;
+    // Generate transactions for the bill payment
+    const transactionResult = await generateBillPaymentTransactions({
+      billMonth,
+      billYear,
+      origin,
+      totalBillAmount,
+      amountPaid,
+      paymentType,
+      installments,
+      interestRate,
+      userId,
+    });
 
-    // Calculate interest amount if rate is provided
-    const interestAmount = interestRate
-      ? (amountCarried * interestRate) / 100
-      : null;
-
+    // Create bill payment record with generated transaction IDs
     const billPayment = await prisma.billPayment.create({
       data: {
         billMonth,
@@ -151,10 +158,13 @@ export async function POST(request: NextRequest) {
         origin,
         totalBillAmount,
         amountPaid,
-        amountCarried,
+        amountCarried: transactionResult.amountCarried,
         paymentType,
         interestRate: interestRate || null,
-        interestAmount,
+        interestAmount: transactionResult.interestAmount || null,
+        entryTransactionId: transactionResult.entryTransactionId,
+        carryoverTransactionId: transactionResult.carryoverTransactionId || null,
+        installmentId: transactionResult.installmentId || null,
         userId,
       },
       include: {

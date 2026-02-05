@@ -195,6 +195,7 @@ export async function GET(request: NextRequest) {
             description: t.description,
             amount: t.amount,
             date: t.date.toISOString(),
+            origin: t.origin,
             categoryId: t.categoryId,
             categoryName: t.category?.name || "Sem categoria",
             categoryColor: t.category?.color || "#9CA3AF",

@@ -49,6 +49,7 @@ interface BillTransaction {
   description: string;
   amount: number;
   date: string;
+  origin: string;
   categoryId: string | null;
   categoryName: string;
   categoryColor: string;
@@ -531,7 +532,7 @@ export default function BillsPage() {
           bill={{
             month: selectedBillForPayment.month,
             year: selectedBillForPayment.year,
-            origin: selectedOrigin || "Cartao",
+            origin: selectedOrigin || selectedBillForPayment.transactions[0]?.origin || "Cartao",
             total: selectedBillForPayment.total,
           }}
         />
