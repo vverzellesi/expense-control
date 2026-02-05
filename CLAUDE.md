@@ -15,6 +15,13 @@ npm run db:migrate    # Create and run database migrations
 npm run db:push       # Push schema changes directly (no migration)
 npm run db:seed       # Seed database with default categories and rules
 npm run db:seed-demo  # Seed demo account with sample data
+
+# Test commands
+npm test              # Run unit tests in watch mode
+npm run test:unit     # Run unit tests with coverage
+npm run test:integration  # Run integration tests (requires test DB)
+npm run test:e2e      # Run Playwright E2E tests
+npm run test:all      # Run all tests
 ```
 
 ## Tech Stack
@@ -26,6 +33,8 @@ npm run db:seed-demo  # Seed demo account with sample data
 - **Recharts** for data visualization
 - **tesseract.js** for OCR invoice scanning
 - **papaparse** for CSV parsing
+- **Vitest** for unit and integration testing
+- **Playwright** for E2E testing
 
 ## Architecture Overview
 
@@ -75,6 +84,39 @@ npm run db:seed-demo  # Seed demo account with sample data
 - RESTful endpoints in `/src/app/api/`
 - Query parameters for filtering: `month`, `year`, `categoryId`, `type`, `isFixed`, `isInstallment`
 - Transactional operations for linked entities (e.g., installment creation generates multiple transactions)
+
+## Testing Requirements
+
+**Always write tests for new features and bug fixes.** This is mandatory, not optional.
+
+### Test Structure
+
+- `/src/lib/*.test.ts` - Unit tests (co-located with source files)
+- `/tests/integration/` - API integration tests
+- `/tests/e2e/` - Playwright end-to-end tests
+- `/tests/mocks/` - Shared test mocks (e.g., Prisma client)
+
+### When to Write Tests
+
+1. **New features**: Write unit tests for business logic and integration tests for API endpoints
+2. **Bug fixes**: Write a test that reproduces the bug before fixing it
+3. **Utility functions**: All functions in `/src/lib/` must have unit tests
+4. **API endpoints**: Write integration tests for new or modified endpoints
+
+### Test Guidelines
+
+- Use **Vitest** for unit and integration tests
+- Use **Playwright** for E2E tests
+- Mock external dependencies (database, APIs) in unit tests
+- Integration tests use a separate test database
+- Follow existing test patterns in the codebase
+- Run `npm run test:unit` before committing to verify tests pass
+
+### Coverage Expectations
+
+- Utility functions (`/src/lib/`): High coverage expected
+- API routes: Test happy path and error cases
+- E2E: Cover critical user flows (auth, transactions, imports)
 
 ## Localization
 
