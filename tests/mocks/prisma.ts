@@ -99,7 +99,7 @@ export const mockPrismaClient = {
     create: vi.fn(),
     upsert: vi.fn()
   },
-  $transaction: vi.fn((fn) => fn(mockPrismaClient)),
+  $transaction: vi.fn((fn: (prisma: unknown) => unknown) => fn(mockPrismaClient)),
   $connect: vi.fn(),
   $disconnect: vi.fn()
 }
