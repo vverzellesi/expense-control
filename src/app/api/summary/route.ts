@@ -154,6 +154,42 @@ function calculateWeeklyBreakdown(
   };
 }
 
+// Helper to calculate expense adjustment for partial bill payments
+// When a bill was partially paid, we need to adjust the expense total
+// to reflect what was actually paid (amountPaid), not the full bill amount (totalBillAmount)
+interface BillPaymentRecord {
+  billMonth: number;
+  billYear: number;
+  origin: string;
+  totalBillAmount: number;
+  amountPaid: number;
+  amountCarried: number;
+}
+
+function calculatePartialPaymentAdjustment(
+  billPayments: BillPaymentRecord[],
+  month: number,
+  year: number
+): number {
+  // Find all bill payments for this specific month/year
+  const monthPayments = billPayments.filter(
+    (bp) => bp.billMonth === month && bp.billYear === year
+  );
+
+  // The adjustment is the difference between what was consumed (totalBillAmount)
+  // and what was actually paid (amountPaid)
+  // A positive adjustment means we need to REDUCE the expenses shown
+  // (because we're showing less than what was consumed)
+  let adjustment = 0;
+  for (const payment of monthPayments) {
+    // adjustment = totalBillAmount - amountPaid
+    // This is the amount that was carried/financed, not paid this month
+    adjustment += payment.amountCarried;
+  }
+
+  return adjustment;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -209,6 +245,8 @@ export async function GET(request: NextRequest) {
       standaloneInstallments,
       // Query 6: Savings goal setting
       savingsGoalSetting,
+      // Query 7: Bill payments for 6 months (for partial payment adjustments)
+      billPayments,
     ] = await Promise.all([
       // Query 1: All transactions for 6 months with category and installment info
       prisma.transaction.findMany({
@@ -286,6 +324,17 @@ export async function GET(request: NextRequest) {
       prisma.settings.findUnique({
         where: { key_userId: { key: "savingsGoal", userId } },
       }),
+
+      // Query 7: Bill payments for 6 months (for partial payment adjustments)
+      prisma.billPayment.findMany({
+        where: {
+          userId,
+          billYear: {
+            gte: sixMonthsAgo.getFullYear(),
+            lte: targetYear,
+          },
+        },
+      }),
     ]);
 
     // ===========================================
@@ -306,14 +355,14 @@ export async function GET(request: NextRequest) {
 
     // Calculate previous month totals and category breakdown
     let prevIncome = 0;
-    let prevExpense = 0;
+    let prevExpenseRaw = 0;
     const prevCategoryTotals: Record<string, { total: number; name: string; color: string }> = {};
 
     for (const t of prevTransactions) {
       if (t.type === "INCOME") {
         prevIncome += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
-        prevExpense += Math.abs(t.amount);
+        prevExpenseRaw += Math.abs(t.amount);
         // Track category totals for previous month
         if (t.category && t.categoryId) {
           if (!prevCategoryTotals[t.categoryId]) {
@@ -329,16 +378,27 @@ export async function GET(request: NextRequest) {
       // TRANSFER is ignored in totals
     }
 
+    // Apply partial payment adjustment for previous month
+    // This reduces expenses by the amount that was carried/financed instead of paid
+    const prevMonthNumber = prevMonthStart.getMonth() + 1;
+    const prevMonthYear = prevMonthStart.getFullYear();
+    const prevPartialPaymentAdjustment = calculatePartialPaymentAdjustment(
+      billPayments,
+      prevMonthNumber,
+      prevMonthYear
+    );
+    const prevExpense = Math.max(0, prevExpenseRaw - prevPartialPaymentAdjustment);
+
     // Calculate current month summary
     let income = 0;
-    let expense = 0;
+    let expenseRaw = 0;
     const categoryTotals: Record<string, { total: number; name: string; color: string }> = {};
 
     for (const t of transactions) {
       if (t.type === "INCOME") {
         income += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
-        expense += Math.abs(t.amount);
+        expenseRaw += Math.abs(t.amount);
       }
       // TRANSFER is ignored in totals
 
@@ -353,6 +413,17 @@ export async function GET(request: NextRequest) {
         categoryTotals[t.categoryId!].total += Math.abs(t.amount);
       }
     }
+
+    // Apply partial payment adjustment for current month
+    // When a bill was partially paid, we show only what was paid (amountPaid),
+    // not what was consumed (totalBillAmount). The carried amount appears
+    // in subsequent months via generated carryover/financing transactions.
+    const partialPaymentAdjustment = calculatePartialPaymentAdjustment(
+      billPayments,
+      targetMonth,
+      targetYear
+    );
+    const expense = Math.max(0, expenseRaw - partialPaymentAdjustment);
 
     // Calculate comparison percentages
     const incomeChange = prevIncome > 0 ? ((income - prevIncome) / prevIncome) * 100 : 0;
@@ -397,16 +468,26 @@ export async function GET(request: NextRequest) {
       });
 
       let monthIncome = 0;
-      let monthExpense = 0;
+      let monthExpenseRaw = 0;
 
       for (const t of monthTransactions) {
         if (t.type === "INCOME") {
           monthIncome += Math.abs(t.amount);
         } else if (t.type === "EXPENSE") {
-          monthExpense += Math.abs(t.amount);
+          monthExpenseRaw += Math.abs(t.amount);
         }
         // TRANSFER is ignored in totals
       }
+
+      // Apply partial payment adjustment for this month
+      const monthNumber = monthStart.getMonth() + 1;
+      const monthYear = monthStart.getFullYear();
+      const monthPartialPaymentAdjustment = calculatePartialPaymentAdjustment(
+        billPayments,
+        monthNumber,
+        monthYear
+      );
+      const monthExpense = Math.max(0, monthExpenseRaw - monthPartialPaymentAdjustment);
 
       monthlyData.push({
         month: monthStart.toLocaleDateString("pt-BR", { month: "short" }),

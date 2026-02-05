@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import {
+  isCarryoverTransaction,
+  findMatchingBillPayment,
+  calculateInterest,
+} from "@/lib/carryover-detector";
 
 // Normalize text for matching (lowercase, remove accents)
 function normalizeText(text: string): string {
@@ -55,6 +60,14 @@ export async function POST(request: NextRequest) {
 
     const created = [];
     let linkedCount = 0;
+    let carryoverLinkedCount = 0;
+    const linkedCarryovers: Array<{
+      transactionId: string;
+      billPaymentId: string;
+      fromBill: string;
+      interestRate: number | null;
+      interestAmount: number | null;
+    }> = [];
 
     for (const t of transactions) {
       // Determine type and amount sign
@@ -141,14 +154,80 @@ export async function POST(request: NextRequest) {
         },
       });
       created.push(transaction);
+
+      // Check if this is a carryover transaction and try to link it to a BillPayment
+      if (isCarryoverTransaction(t.description)) {
+        try {
+          const matchingBillPayment = await findMatchingBillPayment({
+            origin: transactionOrigin,
+            month: transactionMonth + 1, // Convert from 0-indexed to 1-indexed
+            year: transactionYear,
+            amount: Math.abs(amount),
+            userId,
+          });
+
+          if (matchingBillPayment) {
+            // Calculate interest from the difference
+            const interest = calculateInterest(
+              matchingBillPayment.amountCarried,
+              Math.abs(amount)
+            );
+
+            // Update the BillPayment with the linked transaction and interest info
+            await prisma.billPayment.update({
+              where: { id: matchingBillPayment.id },
+              data: {
+                linkedTransactionId: transaction.id,
+                interestRate: interest.rate,
+                interestAmount: interest.amount,
+              },
+            });
+
+            // Soft delete the old carryover transaction if it exists
+            if (matchingBillPayment.carryoverTransactionId) {
+              await prisma.transaction.update({
+                where: { id: matchingBillPayment.carryoverTransactionId },
+                data: { deletedAt: new Date() },
+              });
+            }
+
+            carryoverLinkedCount++;
+            linkedCarryovers.push({
+              transactionId: transaction.id,
+              billPaymentId: matchingBillPayment.id,
+              fromBill: `${matchingBillPayment.billMonth}/${matchingBillPayment.billYear}`,
+              interestRate: interest.rate,
+              interestAmount: interest.amount,
+            });
+          }
+        } catch (carryoverError) {
+          // Log but don't fail the import if carryover linking fails
+          console.error("Error linking carryover transaction:", carryoverError);
+        }
+      }
     }
 
-    const message = linkedCount > 0
-      ? `${created.length} transacoes importadas (${linkedCount} vinculadas a recorrentes)`
-      : `${created.length} transacoes importadas com sucesso`;
+    // Build response message
+    const messageParts = [`${created.length} transacoes importadas`];
+    if (linkedCount > 0) {
+      messageParts.push(`${linkedCount} vinculadas a recorrentes`);
+    }
+    if (carryoverLinkedCount > 0) {
+      messageParts.push(`${carryoverLinkedCount} vinculadas a saldo rolado`);
+    }
+    const message =
+      linkedCount > 0 || carryoverLinkedCount > 0
+        ? `${messageParts[0]} (${messageParts.slice(1).join(", ")})`
+        : `${created.length} transacoes importadas com sucesso`;
 
     return NextResponse.json(
-      { message, count: created.length, linkedCount },
+      {
+        message,
+        count: created.length,
+        linkedCount,
+        carryoverLinkedCount,
+        linkedCarryovers,
+      },
       { status: 201 }
     );
   } catch (error) {
