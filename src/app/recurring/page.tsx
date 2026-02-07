@@ -260,7 +260,15 @@ export default function RecurringPage() {
 
       setGeneratingId(null);
       setGenerateAmount("");
-      fetchData();
+
+      // Update state locally instead of refetching all data
+      setRecurringExpenses((prev) =>
+        prev.map((e) =>
+          e.id === expense.id
+            ? { ...e, transactions: [data, ...e.transactions] }
+            : e
+        )
+      );
     } catch (error) {
       toast({
         title: "Erro",
