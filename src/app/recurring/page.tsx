@@ -63,6 +63,7 @@ export default function RecurringPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generateAmount, setGenerateAmount] = useState("");
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [creatingSuggestion, setCreatingSuggestion] = useState<string | null>(null);
 
   // Form state
@@ -276,6 +277,59 @@ export default function RecurringPage() {
         variant: "destructive",
       });
     }
+  }
+
+  async function handleGenerateAll() {
+    const pending = recurringExpenses.filter(
+      (e) => e.isActive && e.autoGenerate && !hasTransactionThisMonth(e)
+    );
+    if (pending.length === 0) return;
+
+    setGeneratingAll(true);
+    let successCount = 0;
+    const newTransactions: Map<string, Transaction> = new Map();
+
+    await Promise.all(
+      pending.map(async (expense) => {
+        try {
+          const res = await fetch(`/api/recurring/${expense.id}/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              month: currentMonth,
+              year: currentYear,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            newTransactions.set(expense.id, data);
+            successCount++;
+          }
+        } catch {
+          // individual failures are silently skipped
+        }
+      })
+    );
+
+    if (successCount > 0) {
+      setRecurringExpenses((prev) =>
+        prev.map((e) => {
+          const newTx = newTransactions.get(e.id);
+          return newTx ? { ...e, transactions: [newTx, ...e.transactions] } : e;
+        })
+      );
+    }
+
+    toast({
+      title: successCount === pending.length ? "Sucesso" : "Parcialmente gerado",
+      description:
+        successCount === pending.length
+          ? `${successCount} transação(ões) gerada(s)`
+          : `${successCount} de ${pending.length} transações geradas`,
+      variant: successCount === 0 ? "destructive" : "default",
+    });
+
+    setGeneratingAll(false);
   }
 
   function hasTransactionThisMonth(expense: RecurringExpenseWithTransactions): boolean {
@@ -495,11 +549,27 @@ export default function RecurringPage() {
 
       {/* Generate for current month */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
             <span className="capitalize">{monthName} {currentYear}</span>
           </CardTitle>
+          {(() => {
+            const pendingCount = recurringExpenses.filter(
+              (e) => e.isActive && e.autoGenerate && !hasTransactionThisMonth(e)
+            ).length;
+            return (
+              <Button
+                size="sm"
+                className="min-h-[44px]"
+                disabled={pendingCount === 0 || generatingAll}
+                onClick={handleGenerateAll}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${generatingAll ? "animate-spin" : ""}`} />
+                {generatingAll ? "Gerando..." : `Gerar Todas (${pendingCount})`}
+              </Button>
+            );
+          })()}
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-gray-500">
