@@ -215,17 +215,28 @@ export default function RecurringPage() {
   }
 
   async function handleToggleActive(expense: RecurringExpense) {
+    const newIsActive = !expense.isActive;
+    setRecurringExpenses((prev) =>
+      prev.map((e) =>
+        e.id === expense.id ? { ...e, isActive: newIsActive } : e
+      )
+    );
     try {
-      await fetch(`/api/recurring/${expense.id}`, {
+      const res = await fetch(`/api/recurring/${expense.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...expense,
-          isActive: !expense.isActive,
+          isActive: newIsActive,
         }),
       });
-      fetchData();
+      if (!res.ok) throw new Error();
     } catch (error) {
+      setRecurringExpenses((prev) =>
+        prev.map((e) =>
+          e.id === expense.id ? { ...e, isActive: !newIsActive } : e
+        )
+      );
       toast({
         title: "Erro",
         description: "Erro ao atualizar status",
@@ -721,7 +732,6 @@ export default function RecurringPage() {
                     <Switch
                       checked={expense.isActive}
                       onCheckedChange={() => handleToggleActive(expense)}
-                      className="min-h-[44px]"
                     />
 
                     <Button
