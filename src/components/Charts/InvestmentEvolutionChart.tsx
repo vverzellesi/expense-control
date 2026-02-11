@@ -12,11 +12,7 @@ import {
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/hooks";
-
-const MONTH_NAMES = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
+import { MONTH_LABELS } from "@/lib/constants";
 
 interface SnapshotEntry {
   month: number;
@@ -34,7 +30,7 @@ export function InvestmentEvolutionChart({ data }: Props) {
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   const chartData = data.map((entry) => ({
-    label: `${MONTH_NAMES[entry.month - 1]}/${String(entry.year).slice(2)}`,
+    label: `${MONTH_LABELS[entry.month - 1]}/${String(entry.year).slice(2)}`,
     totalValue: entry.totalValue,
     totalInvested: entry.totalInvested,
   }));
@@ -46,11 +42,11 @@ export function InvestmentEvolutionChart({ data }: Props) {
         margin={isMobile ? { left: -10, right: 5 } : undefined}
       >
         <defs>
-          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="investEvoColorValue" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
           </linearGradient>
-          <linearGradient id="colorInvested" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="investEvoColorInvested" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
           </linearGradient>
@@ -100,7 +96,7 @@ export function InvestmentEvolutionChart({ data }: Props) {
           name="totalInvested"
           stroke="#3b82f6"
           strokeWidth={2}
-          fill="url(#colorInvested)"
+          fill="url(#investEvoColorInvested)"
         />
         <Area
           type="monotone"
@@ -108,7 +104,7 @@ export function InvestmentEvolutionChart({ data }: Props) {
           name="totalValue"
           stroke="#10b981"
           strokeWidth={2}
-          fill="url(#colorValue)"
+          fill="url(#investEvoColorValue)"
         />
       </AreaChart>
     </ResponsiveContainer>

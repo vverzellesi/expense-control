@@ -4,18 +4,15 @@ import {
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/auth-utils";
-
-const MONTH_LABELS = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
+import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const year = parseInt(
-      searchParams.get("year") || String(new Date().getFullYear())
+      searchParams.get("year") || String(new Date().getFullYear()),
+      10
     );
 
     const yearStart = new Date(year, 0, 1);

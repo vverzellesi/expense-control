@@ -42,6 +42,7 @@ export function CalendarHeatmapTab({ filterMonth, filterYear }: Props) {
         const res = await fetch(
           `/api/reports/calendar?month=${filterMonth}&year=${filterYear}`
         );
+        if (!res.ok) throw new Error("Fetch failed");
         const json = await res.json();
         setData(json);
       } catch (error) {

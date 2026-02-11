@@ -6,8 +6,8 @@ export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
-    const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
-    const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()));
+    const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1), 10);
+    const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()), 10);
 
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);

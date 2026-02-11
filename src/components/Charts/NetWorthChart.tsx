@@ -35,11 +35,11 @@ export function NetWorthChart({ data }: Props) {
         margin={isMobile ? { left: -10, right: 5 } : undefined}
       >
         <defs>
-          <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="netWorthColorCash" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
           </linearGradient>
-          <linearGradient id="colorInvestment" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="netWorthColorInvestment" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
           </linearGradient>
@@ -99,7 +99,7 @@ export function NetWorthChart({ data }: Props) {
           stackId="1"
           stroke="#3b82f6"
           strokeWidth={2}
-          fill="url(#colorCash)"
+          fill="url(#netWorthColorCash)"
         />
         <Area
           type="monotone"
@@ -108,7 +108,7 @@ export function NetWorthChart({ data }: Props) {
           stackId="1"
           stroke="#10b981"
           strokeWidth={2}
-          fill="url(#colorInvestment)"
+          fill="url(#netWorthColorInvestment)"
         />
         <Line
           type="monotone"

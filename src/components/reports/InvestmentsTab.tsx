@@ -67,6 +67,7 @@ export function InvestmentsTab() {
           fetch("/api/investments/snapshots?months=12"),
           fetch("/api/investments/summary"),
         ]);
+        if (!snapshotsRes.ok || !summaryRes.ok) throw new Error("Fetch failed");
         const [snapshots, summary] = await Promise.all([
           snapshotsRes.json(),
           summaryRes.json(),

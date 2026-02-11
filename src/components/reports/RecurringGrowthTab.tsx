@@ -48,6 +48,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
         const res = await fetch(
           `/api/reports/recurring-growth?year=${filterYear}`
         );
+        if (!res.ok) throw new Error("Fetch failed");
         const json = await res.json();
         setData(json);
       } catch (error) {

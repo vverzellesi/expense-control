@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SavingsHistoryChart } from "@/components/Charts/SavingsHistoryChart";
 import { formatCurrency } from "@/lib/utils";
+import { MONTH_LABELS } from "@/lib/constants";
 import {
   CheckCircle,
   XCircle,
@@ -12,11 +13,6 @@ import {
   Target,
   Flame,
 } from "lucide-react";
-
-const MONTH_NAMES = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
 
 interface SavingsEntry {
   id: string;
@@ -50,6 +46,7 @@ export function SavingsTab() {
       try {
         setLoading(true);
         const res = await fetch("/api/savings-history?limit=24");
+        if (!res.ok) throw new Error("Fetch failed");
         const json = await res.json();
         setData(json);
       } catch (error) {
@@ -116,7 +113,7 @@ export function SavingsTab() {
               {formatCurrency(bestMonth.actual)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {MONTH_NAMES[bestMonth.month - 1]}/{bestMonth.year}
+              {MONTH_LABELS[bestMonth.month - 1]}/{bestMonth.year}
             </p>
           </CardContent>
         </Card>
@@ -131,7 +128,7 @@ export function SavingsTab() {
               {formatCurrency(worstMonth.actual)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {MONTH_NAMES[worstMonth.month - 1]}/{worstMonth.year}
+              {MONTH_LABELS[worstMonth.month - 1]}/{worstMonth.year}
             </p>
           </CardContent>
         </Card>
@@ -195,7 +192,7 @@ export function SavingsTab() {
                 {data.map((entry) => (
                   <tr key={entry.id} className="border-b last:border-0">
                     <td className="py-3 font-medium">
-                      {MONTH_NAMES[entry.month - 1]}/{entry.year}
+                      {MONTH_LABELS[entry.month - 1]}/{entry.year}
                     </td>
                     <td className="py-3 text-right text-muted-foreground">
                       {formatCurrency(entry.goal)}

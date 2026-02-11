@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
-
-const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
-    const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
-    const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()));
+    const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1), 10);
+    const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()), 10);
 
     // Calculate 12-month range ending at the given month
     const endDate = new Date(year, month, 0); // last day of target month
@@ -46,19 +45,22 @@ export async function GET(request: NextRequest) {
 
     // Build monthly breakdown
     const monthlyEntries: { key: string; label: string; fixed: number; variable: number }[] = [];
+    const entryMap = new Map<string, { key: string; label: string; fixed: number; variable: number }>();
     for (let i = 0; i < 12; i++) {
       const d = new Date(startDate);
       d.setMonth(d.getMonth() + i);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const label = `${MONTH_NAMES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
-      monthlyEntries.push({ key, label, fixed: 0, variable: 0 });
+      const label = `${MONTH_LABELS[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+      const entry = { key, label, fixed: 0, variable: 0 };
+      monthlyEntries.push(entry);
+      entryMap.set(key, entry);
     }
 
     // Aggregate transactions into monthly buckets
     for (const t of transactions) {
       const d = new Date(t.date);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const entry = monthlyEntries.find((e) => e.key === key);
+      const entry = entryMap.get(key);
       if (entry) {
         const absAmount = Math.abs(t.amount);
         if (t.isFixed) {

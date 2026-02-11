@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ import {
   Landmark,
   RotateCcw,
 } from "lucide-react";
-import type { Category } from "@/types";
 import { OverviewTab } from "@/components/reports/OverviewTab";
 import { AnnualEvolutionTab } from "@/components/reports/AnnualEvolutionTab";
 import { OriginsTab } from "@/components/reports/OriginsTab";
@@ -40,28 +39,14 @@ import { NetWorthTab } from "@/components/reports/NetWorthTab";
 import { RecurringGrowthTab } from "@/components/reports/RecurringGrowthTab";
 
 export default function ReportsPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-
   const currentDate = new Date();
   const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1));
   const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
-  const [filterCategory, setFilterCategory] = useState("all");
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  async function fetchCategories() {
-    const res = await fetch("/api/categories");
-    const data = await res.json();
-    setCategories(data);
-  }
 
   async function handleExport() {
     const params = new URLSearchParams();
     if (filterMonth) params.set("month", filterMonth);
     if (filterYear) params.set("year", filterYear);
-    if (filterCategory && filterCategory !== "all") params.set("categoryId", filterCategory);
 
     window.location.href = `/api/export?${params.toString()}`;
   }
@@ -90,7 +75,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Relatorios</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Relatórios</h1>
           <p className="text-gray-500">Visualize e exporte seus dados</p>
         </div>
         <Button onClick={handleExport}>
@@ -102,9 +87,9 @@ export default function ReportsPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label>Mes</Label>
+              <Label>Mês</Label>
               <Select value={filterMonth} onValueChange={setFilterMonth}>
                 <SelectTrigger>
                   <SelectValue />
@@ -135,22 +120,6 @@ export default function ReportsPage() {
               </Select>
             </div>
 
-            <div>
-              <Label>Categoria (para exportacao)</Label>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -160,12 +129,12 @@ export default function ReportsPage() {
         <TabsList className="w-full flex-wrap h-auto gap-1 overflow-x-auto">
           <TabsTrigger value="overview" className="min-h-[44px] flex-1 sm:flex-initial">
             <BarChart3 className="mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Visao Geral</span>
+            <span className="hidden sm:inline">Visão Geral</span>
             <span className="sm:hidden">Geral</span>
           </TabsTrigger>
           <TabsTrigger value="annual" className="min-h-[44px] flex-1 sm:flex-initial">
             <TrendingUp className="mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Evolucao Anual</span>
+            <span className="hidden sm:inline">Evolução Anual</span>
             <span className="sm:hidden">Anual</span>
           </TabsTrigger>
           <TabsTrigger value="origins" className="min-h-[44px] flex-1 sm:flex-initial">
@@ -195,7 +164,7 @@ export default function ReportsPage() {
           </TabsTrigger>
           <TabsTrigger value="calendar" className="min-h-[44px] flex-1 sm:flex-initial">
             <Calendar className="mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Calendario</span>
+            <span className="hidden sm:inline">Calendário</span>
             <span className="sm:hidden">Calend.</span>
           </TabsTrigger>
           <TabsTrigger value="investments" className="min-h-[44px] flex-1 sm:flex-initial">
@@ -205,7 +174,7 @@ export default function ReportsPage() {
           </TabsTrigger>
           <TabsTrigger value="net-worth" className="min-h-[44px] flex-1 sm:flex-initial">
             <Landmark className="mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Patrimonio</span>
+            <span className="hidden sm:inline">Patrimônio</span>
             <span className="sm:hidden">Patrim.</span>
           </TabsTrigger>
           <TabsTrigger value="recurring" className="min-h-[44px] flex-1 sm:flex-initial">

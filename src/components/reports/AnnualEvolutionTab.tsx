@@ -40,6 +40,7 @@ export function AnnualEvolutionTab({ filterYear }: Props) {
       try {
         setLoading(true);
         const res = await fetch(`/api/reports/annual?year=${filterYear}`);
+        if (!res.ok) throw new Error("Fetch failed");
         const json = await res.json();
         setData(json);
       } catch (error) {

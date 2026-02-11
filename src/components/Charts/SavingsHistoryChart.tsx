@@ -14,11 +14,7 @@ import {
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/hooks";
-
-const MONTH_NAMES = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
+import { MONTH_LABELS } from "@/lib/constants";
 
 interface SavingsHistoryEntry {
   id: string;
@@ -39,7 +35,7 @@ export function SavingsHistoryChart({ data }: Props) {
 
   // Data comes reversed from API (newest first), reverse for chronological display
   const chartData = [...data].reverse().map((entry) => ({
-    label: `${MONTH_NAMES[entry.month - 1]}/${String(entry.year).slice(2)}`,
+    label: `${MONTH_LABELS[entry.month - 1]}/${String(entry.year).slice(2)}`,
     actual: entry.actual,
     goal: entry.goal,
     isAchieved: entry.isAchieved,

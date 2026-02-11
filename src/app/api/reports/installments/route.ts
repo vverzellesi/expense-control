@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
-
-const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get("year");
-    const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+    const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
     const installments = await prisma.installment.findMany({
       where: { userId },

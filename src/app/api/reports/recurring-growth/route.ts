@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const userId = await getAuthenticatedUserId();
     const searchParams = request.nextUrl.searchParams;
     const year = parseInt(
-      searchParams.get("year") || String(new Date().getFullYear())
+      searchParams.get("year") || String(new Date().getFullYear()),
+      10
     );
 
     const recurringExpenses = await prisma.recurringExpense.findMany({

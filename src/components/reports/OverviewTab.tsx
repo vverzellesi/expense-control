@@ -44,6 +44,7 @@ export function OverviewTab({ filterMonth, filterYear }: Props) {
         const res = await fetch(
           `/api/summary?month=${filterMonth}&year=${filterYear}`
         );
+        if (!res.ok) throw new Error("Fetch failed");
         const json = await res.json();
         setData(json);
       } catch (error) {
