@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,37 +11,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
-import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
-import { formatCurrency } from "@/lib/utils";
-import { Download, TrendingUp, TrendingDown } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Download,
+  BarChart3,
+  TrendingUp,
+  CreditCard,
+  Layers,
+  LineChart,
+  PiggyBank,
+  SlidersHorizontal,
+  Calendar,
+  Briefcase,
+  Landmark,
+  RotateCcw,
+} from "lucide-react";
 import type { Category } from "@/types";
-
-interface SummaryData {
-  summary: {
-    income: number;
-    expense: number;
-    balance: number;
-  };
-  categoryBreakdown: {
-    categoryId: string;
-    categoryName: string;
-    categoryColor: string;
-    total: number;
-    percentage: number;
-  }[];
-  monthlyData: {
-    month: string;
-    year: number;
-    income: number;
-    expense: number;
-  }[];
-}
+import { OverviewTab } from "@/components/reports/OverviewTab";
+import { AnnualEvolutionTab } from "@/components/reports/AnnualEvolutionTab";
+import { OriginsTab } from "@/components/reports/OriginsTab";
+import { InstallmentsTab } from "@/components/reports/InstallmentsTab";
+import { CategoryTrendsTab } from "@/components/reports/CategoryTrendsTab";
+import { SavingsTab } from "@/components/reports/SavingsTab";
+import { FixedVariableTab } from "@/components/reports/FixedVariableTab";
+import { CalendarHeatmapTab } from "@/components/reports/CalendarHeatmapTab";
+import { InvestmentsTab } from "@/components/reports/InvestmentsTab";
+import { NetWorthTab } from "@/components/reports/NetWorthTab";
+import { RecurringGrowthTab } from "@/components/reports/RecurringGrowthTab";
 
 export default function ReportsPage() {
-  const [data, setData] = useState<SummaryData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const currentDate = new Date();
   const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1));
@@ -52,29 +51,10 @@ export default function ReportsPage() {
     fetchCategories();
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [filterMonth, filterYear]);
-
   async function fetchCategories() {
     const res = await fetch("/api/categories");
     const data = await res.json();
     setCategories(data);
-  }
-
-  async function fetchData() {
-    try {
-      setLoading(true);
-      const res = await fetch(
-        `/api/summary?month=${filterMonth}&year=${filterYear}`
-      );
-      const json = await res.json();
-      setData(json);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function handleExport() {
@@ -106,19 +86,11 @@ export default function ReportsPage() {
     return { value: String(year), label: String(year) };
   });
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-gray-500">Carregando...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Relatórios</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Relatorios</h1>
           <p className="text-gray-500">Visualize e exporte seus dados</p>
         </div>
         <Button onClick={handleExport}>
@@ -183,132 +155,110 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total de Receitas
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(data?.summary.income || 0)}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <Tabs defaultValue="overview">
+        <TabsList className="w-full flex-wrap h-auto gap-1 overflow-x-auto">
+          <TabsTrigger value="overview" className="min-h-[44px] flex-1 sm:flex-initial">
+            <BarChart3 className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Visao Geral</span>
+            <span className="sm:hidden">Geral</span>
+          </TabsTrigger>
+          <TabsTrigger value="annual" className="min-h-[44px] flex-1 sm:flex-initial">
+            <TrendingUp className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Evolucao Anual</span>
+            <span className="sm:hidden">Anual</span>
+          </TabsTrigger>
+          <TabsTrigger value="origins" className="min-h-[44px] flex-1 sm:flex-initial">
+            <CreditCard className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Origens</span>
+            <span className="sm:hidden">Origens</span>
+          </TabsTrigger>
+          <TabsTrigger value="installments" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Layers className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Parcelas</span>
+            <span className="sm:hidden">Parcelas</span>
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="min-h-[44px] flex-1 sm:flex-initial">
+            <LineChart className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Categorias</span>
+            <span className="sm:hidden">Categ.</span>
+          </TabsTrigger>
+          <TabsTrigger value="savings" className="min-h-[44px] flex-1 sm:flex-initial">
+            <PiggyBank className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Economia</span>
+            <span className="sm:hidden">Econ.</span>
+          </TabsTrigger>
+          <TabsTrigger value="fixed-variable" className="min-h-[44px] flex-1 sm:flex-initial">
+            <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Fixos vs Var.</span>
+            <span className="sm:hidden">Fix/Var</span>
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Calendar className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Calendario</span>
+            <span className="sm:hidden">Calend.</span>
+          </TabsTrigger>
+          <TabsTrigger value="investments" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Briefcase className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Investimentos</span>
+            <span className="sm:hidden">Invest.</span>
+          </TabsTrigger>
+          <TabsTrigger value="net-worth" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Landmark className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Patrimonio</span>
+            <span className="sm:hidden">Patrim.</span>
+          </TabsTrigger>
+          <TabsTrigger value="recurring" className="min-h-[44px] flex-1 sm:flex-initial">
+            <RotateCcw className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Recorrentes</span>
+            <span className="sm:hidden">Recorr.</span>
+          </TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total de Despesas
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(data?.summary.expense || 0)}
-            </div>
-          </CardContent>
-        </Card>
+        <TabsContent value="overview">
+          <OverviewTab filterMonth={filterMonth} filterYear={filterYear} />
+        </TabsContent>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo do Mes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                (data?.summary.balance || 0) >= 0
-                  ? "text-green-600"
-                  : "text-red-600"
-              }`}
-            >
-              {formatCurrency(data?.summary.balance || 0)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="annual">
+          <AnnualEvolutionTab filterYear={filterYear} />
+        </TabsContent>
 
-      {/* Charts */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Despesas por Categoria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.categoryBreakdown && data.categoryBreakdown.length > 0 ? (
-              <CategoryPieChart data={data.categoryBreakdown} />
-            ) : (
-              <div className="flex h-64 items-center justify-center text-gray-500">
-                Nenhuma despesa neste periodo
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <TabsContent value="origins">
+          <OriginsTab filterMonth={filterMonth} filterYear={filterYear} />
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Evolucao Mensal</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data?.monthlyData && data.monthlyData.length > 0 ? (
-              <MonthlyBarChart data={data.monthlyData} />
-            ) : (
-              <div className="flex h-64 items-center justify-center text-gray-500">
-                Sem dados para exibir
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="installments">
+          <InstallmentsTab filterYear={filterYear} />
+        </TabsContent>
 
-      {/* Category Breakdown Table */}
-      {data?.categoryBreakdown && data.categoryBreakdown.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Detalhamento por Categoria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {data.categoryBreakdown.map((item) => (
-                <div
-                  key={item.categoryId}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-4 w-4 rounded-full"
-                      style={{ backgroundColor: item.categoryColor }}
-                    />
-                    <span className="font-medium">{item.categoryName}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-32">
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: item.categoryColor,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <span className="min-w-[60px] text-right text-sm text-gray-500">
-                      {item.percentage.toFixed(1)}%
-                    </span>
-                    <span className="min-w-[100px] text-right font-semibold">
-                      {formatCurrency(item.total)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <TabsContent value="categories">
+          <CategoryTrendsTab filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="savings">
+          <SavingsTab />
+        </TabsContent>
+
+        <TabsContent value="fixed-variable">
+          <FixedVariableTab filterMonth={filterMonth} filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="calendar">
+          <CalendarHeatmapTab filterMonth={filterMonth} filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="investments">
+          <InvestmentsTab />
+        </TabsContent>
+
+        <TabsContent value="net-worth">
+          <NetWorthTab filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="recurring">
+          <RecurringGrowthTab filterYear={filterYear} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
