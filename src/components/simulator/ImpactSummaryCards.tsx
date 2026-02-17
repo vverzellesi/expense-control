@@ -23,15 +23,15 @@ export function ImpactSummaryCards({ result, averageIncome }: ImpactSummaryCards
             {hasSimulation ? formatCurrency(result.monthlyInstallment) : "\u2014"}
           </p>
           <p className="text-xs text-gray-400">
-            {hasSimulation ? "adicionado ao seu fluxo" : "preencha a simulacao"}
+            {hasSimulation ? "adicionado ao seu fluxo" : "preencha a simulação"}
           </p>
         </CardContent>
       </Card>
 
-      {/* Mes mais apertado */}
+      {/* Mês mais apertado */}
       <Card>
         <CardContent className="pt-6">
-          <p className="text-sm text-gray-500">Mes mais apertado</p>
+          <p className="text-sm text-gray-500">Mês mais apertado</p>
           {hasSimulation && result.tightestMonth ? (
             <>
               <p className={cn(
@@ -82,7 +82,7 @@ export function ImpactSummaryCards({ result, averageIncome }: ImpactSummaryCards
           ) : (
             <p className="text-2xl font-bold text-gray-300">{"\u2014"}</p>
           )}
-          <p className="text-xs text-gray-400">da renda media mensal</p>
+          <p className="text-xs text-gray-400">da renda média mensal</p>
         </CardContent>
       </Card>
     </div>

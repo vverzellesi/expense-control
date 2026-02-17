@@ -51,7 +51,7 @@ function CustomTooltip({ active, payload, label }: TooltipProps<number, string>)
         )}
         {data.simulationExpenses > 0 && (
           <div className="flex justify-between gap-4">
-            <span className="text-emerald-600 font-medium">Esta simulacao:</span>
+            <span className="text-emerald-600 font-medium">Esta simulação:</span>
             <span className="text-emerald-600 font-medium">
               {formatCurrency(data.simulationExpenses)}
             </span>
@@ -123,7 +123,7 @@ export function ImpactChart({ baseline, averageIncome, simulatedMonths }: Impact
         {simulatedMonths && (
           <Bar
             dataKey="simulationExpenses"
-            name="Simulacao"
+            name="Simulação"
             stackId="expenses"
             fill="#34d399"
             radius={[4, 4, 0, 0]}

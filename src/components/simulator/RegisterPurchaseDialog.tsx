@@ -131,7 +131,7 @@ export function RegisterPurchaseDialog({
             <Label htmlFor="reg-origin">Origem / Banco</Label>
             <Input
               id="reg-origin"
-              placeholder="Ex: Cartao Nubank"
+              placeholder="Ex: Cartão Nubank"
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
             />

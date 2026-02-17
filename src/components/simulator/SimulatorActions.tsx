@@ -29,7 +29,7 @@ export function SimulatorActions({
       {!isSaved && (
         <Button variant="outline" onClick={onSave}>
           <Save className="h-4 w-4 mr-2" />
-          Salvar simulacao
+          Salvar simulação
         </Button>
       )}
       <Button onClick={onRegister} className="bg-emerald-600 hover:bg-emerald-700">

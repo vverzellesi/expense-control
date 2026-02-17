@@ -147,9 +147,9 @@ export default function SimuladorPage() {
         setSavedSimulations((prev) => [saved, ...prev]);
       }
       handleNew();
-      toast({ title: isEditing ? "Simulacao atualizada" : "Simulacao salva" });
+      toast({ title: isEditing ? "Simulação atualizada" : "Simulação salva" });
     } catch {
-      toast({ title: "Erro ao salvar simulacao", variant: "destructive" });
+      toast({ title: "Erro ao salvar simulação", variant: "destructive" });
     }
   }
 
@@ -225,10 +225,10 @@ export default function SimuladorPage() {
             onClick={handleSave}
             disabled={!description || totalAmount <= 0}
           >
-            Atualizar simulacao
+            Atualizar simulação
           </Button>
           <Button variant="ghost" onClick={handleNew}>
-            Cancelar edicao
+            Cancelar edição
           </Button>
         </div>
       )}

@@ -19,7 +19,7 @@ export async function GET() {
       return unauthorizedResponse();
     }
     console.error("Error fetching simulations:", error);
-    return NextResponse.json({ error: "Erro ao buscar simulacoes" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao buscar simulações" }, { status: 500 });
   }
 }
 
@@ -35,14 +35,14 @@ export async function POST(request: NextRequest) {
 
     if (!description || !totalAmount || !totalInstallments) {
       return NextResponse.json(
-        { error: "Descricao, valor total e parcelas sao obrigatorios" },
+        { error: "Descrição, valor total e parcelas são obrigatórios" },
         { status: 400 },
       );
     }
 
     if (isNaN(parsedAmount) || parsedAmount <= 0 || isNaN(parsedInstallments) || parsedInstallments < 1) {
       return NextResponse.json(
-        { error: "Valor e parcelas devem ser numeros positivos" },
+        { error: "Valor e parcelas devem ser números positivos" },
         { status: 400 },
       );
     }
@@ -64,6 +64,6 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse();
     }
     console.error("Error creating simulation:", error);
-    return NextResponse.json({ error: "Erro ao criar simulacao" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao criar simulação" }, { status: 500 });
   }
 }
