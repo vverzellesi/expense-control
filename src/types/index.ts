@@ -258,6 +258,37 @@ export interface WeeklyBreakdown {
 }
 
 // ==========================================
+// SIMULATION TYPES
+// ==========================================
+
+export interface Simulation {
+  id: string;
+  userId: string;
+  description: string;
+  totalAmount: number;
+  totalInstallments: number;
+  categoryId: string | null;
+  category?: Category | null;
+  isActive: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export interface BaselineMonth {
+  month: number;
+  year: number;
+  label: string;
+  currentExpenses: number;
+  recurringExpenses: number;
+  installmentsTotal: number;
+}
+
+export interface SimulationData {
+  averageIncome: number;
+  months: BaselineMonth[];
+}
+
+// ==========================================
 // INVESTMENT TYPES
 // ==========================================
 
