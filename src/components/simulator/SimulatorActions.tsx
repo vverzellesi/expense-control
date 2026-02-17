@@ -21,7 +21,7 @@ export function SimulatorActions({
   if (!hasSimulation) return null;
 
   return (
-    <div className="sticky bottom-0 border-t bg-white p-4 -mx-4 md:-mx-6 flex gap-3 justify-end">
+    <div className="sticky bottom-0 border-t bg-white p-4 flex gap-3 justify-end">
       <Button variant="ghost" onClick={onDiscard} className="text-gray-500">
         <Trash2 className="h-4 w-4 mr-2" />
         Descartar
