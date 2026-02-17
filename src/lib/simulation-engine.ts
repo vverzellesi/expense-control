@@ -1,5 +1,18 @@
 import type { BaselineMonth } from "@/types";
 
+export interface Scenario {
+  id: string;
+  name: string;
+  totalAmount: number;
+  totalInstallments: number;
+  monthlyAmount: number;
+  tightestMonth: { label: string; freeBalance: number } | null;
+  avgCommitment: number;
+  isOriginal: boolean;
+  hasRisk: boolean;
+  isRecommended: boolean;
+}
+
 export interface SimulatedMonth extends BaselineMonth {
   simulationExpenses: number;
   totalWithSimulation: number;
@@ -93,4 +106,58 @@ export function calculateSimulation(
     commitmentBefore,
     commitmentAfter,
   };
+}
+
+export function generateScenarios(
+  totalAmount: number,
+  totalInstallments: number,
+  baseline: BaselineMonth[],
+  averageIncome: number,
+): Scenario[] {
+  if (totalAmount <= 0 || totalInstallments <= 0) return [];
+
+  const longInstallments = Math.min(totalInstallments * 2, 24);
+  const configs = [
+    { name: "A vista", installments: 1 },
+    { name: `${totalInstallments}x (escolhido)`, installments: totalInstallments },
+    ...(totalInstallments > 1 && longInstallments !== totalInstallments
+      ? [{ name: `${longInstallments}x`, installments: longInstallments }]
+      : []),
+  ];
+
+  const scenarios: Scenario[] = configs.map((config, i) => {
+    const monthlyAmount = totalAmount / config.installments;
+    const result = calculateSimulation(baseline, averageIncome, [
+      { totalAmount, totalInstallments: config.installments, isActive: true },
+    ]);
+
+    return {
+      id: `scenario-${i}`,
+      name: config.name,
+      totalAmount,
+      totalInstallments: config.installments,
+      monthlyAmount,
+      tightestMonth: result.tightestMonth,
+      avgCommitment: result.commitmentAfter,
+      isOriginal: i === 1,
+      hasRisk: result.months.some((m) => m.isOverBudget),
+      isRecommended: false,
+    };
+  });
+
+  // Mark recommended: highest minimum free balance
+  let bestIdx = 0;
+  let bestMinBalance = -Infinity;
+  for (let i = 0; i < scenarios.length; i++) {
+    const minBalance = scenarios[i].tightestMonth?.freeBalance ?? Infinity;
+    if (minBalance > bestMinBalance) {
+      bestMinBalance = minBalance;
+      bestIdx = i;
+    }
+  }
+  if (scenarios.length > 0) {
+    scenarios[bestIdx].isRecommended = true;
+  }
+
+  return scenarios;
 }
