@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SimulationForm } from "@/components/simulator/SimulationForm";
 import { ImpactChart } from "@/components/simulator/ImpactChart";
+import { ImpactSummaryCards } from "@/components/simulator/ImpactSummaryCards";
+import { calculateSimulation } from "@/lib/simulation-engine";
 import type { Category, SimulationData } from "@/types";
 
 export default function SimuladorPage() {
@@ -16,6 +18,24 @@ export default function SimuladorPage() {
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [totalInstallments, setTotalInstallments] = useState<number>(1);
   const [categoryId, setCategoryId] = useState<string>("");
+
+  // Debounce only amount input (text input with rapid typing)
+  const [debouncedAmount, setDebouncedAmount] = useState(0);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedAmount(totalAmount);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [totalAmount]);
+
+  const simulationResult = useMemo(() => {
+    if (!simulationData || debouncedAmount <= 0) return null;
+    return calculateSimulation(
+      simulationData.months,
+      simulationData.averageIncome,
+      [{ totalAmount: debouncedAmount, totalInstallments: totalInstallments, isActive: true }],
+    );
+  }, [simulationData, debouncedAmount, totalInstallments]);
 
   useEffect(() => {
     async function fetchData() {
@@ -65,6 +85,11 @@ export default function SimuladorPage() {
         categories={categories}
       />
 
+      <ImpactSummaryCards
+        result={simulationResult}
+        averageIncome={simulationData?.averageIncome ?? 0}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Impacto no Fluxo Mensal</CardTitle>
@@ -74,6 +99,7 @@ export default function SimuladorPage() {
             <ImpactChart
               baseline={simulationData.months}
               averageIncome={simulationData.averageIncome}
+              simulatedMonths={simulationResult?.months ?? null}
             />
           )}
         </CardContent>
