@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calculateSimulation } from './simulation-engine'
+import { calculateSimulation, generateScenarios } from './simulation-engine'
 import type { BaselineMonth } from '@/types'
 
 function makeBaseline(count: number, currentExpenses = 3000): BaselineMonth[] {
@@ -167,6 +167,138 @@ describe('calculateSimulation', () => {
       expect(result.months).toHaveLength(0)
       expect(result.tightestMonth).toBeNull()
       expect(result.commitmentBefore).toBe(0)
+    })
+  })
+})
+
+describe('generateScenarios', () => {
+  describe('scenario generation', () => {
+    it('generates 3 scenarios: a vista, chosen, and long-term', () => {
+      const baseline = makeBaseline(24)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      expect(scenarios).toHaveLength(3)
+      expect(scenarios[0].name).toBe('A vista')
+      expect(scenarios[0].totalInstallments).toBe(1)
+      expect(scenarios[0].monthlyAmount).toBe(3000)
+
+      expect(scenarios[1].name).toBe('6x (escolhido)')
+      expect(scenarios[1].totalInstallments).toBe(6)
+      expect(scenarios[1].monthlyAmount).toBe(500)
+      expect(scenarios[1].isOriginal).toBe(true)
+
+      expect(scenarios[2].name).toBe('12x')
+      expect(scenarios[2].totalInstallments).toBe(12)
+      expect(scenarios[2].monthlyAmount).toBe(250)
+    })
+
+    it('marks the original scenario (index 1) as isOriginal', () => {
+      const baseline = makeBaseline(24)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      expect(scenarios[0].isOriginal).toBe(false)
+      expect(scenarios[1].isOriginal).toBe(true)
+      expect(scenarios[2].isOriginal).toBe(false)
+    })
+
+    it('caps long-term installments at 24', () => {
+      const baseline = makeBaseline(24)
+      const scenarios = generateScenarios(6000, 18, baseline, 5000)
+
+      // 18 * 2 = 36, but capped at 24
+      const longScenario = scenarios[2]
+      expect(longScenario.totalInstallments).toBe(24)
+    })
+
+    it('generates only 2 scenarios when long installments equals chosen', () => {
+      const baseline = makeBaseline(24)
+      // 1x: a vista, chosen is 1x => long would be 2 but != 1, so 3 scenarios
+      // Actually: if totalInstallments=12, long=24 => 3 scenarios
+      // If totalInstallments=12, long=min(24,24)=24, 24 != 12 => 3 scenarios
+      // If totalInstallments=1, long=min(2,24)=2, 2 != 1 => still 3
+      // To get 2 scenarios: need totalInstallments > 1 AND longInstallments == totalInstallments
+      // That means: min(totalInstallments*2, 24) == totalInstallments
+      // Only possible if totalInstallments >= 24 (since *2 => 48 capped to 24, but 24 != 48)
+      // Actually: min(24*2, 24) = 24 == 24 => only 2 scenarios for installments=24
+      const scenarios = generateScenarios(6000, 24, baseline, 5000)
+      expect(scenarios).toHaveLength(2)
+      expect(scenarios[0].name).toBe('A vista')
+      expect(scenarios[1].name).toBe('24x (escolhido)')
+    })
+  })
+
+  describe('risk and recommendation badges', () => {
+    it('marks scenario as hasRisk when any month has negative free balance', () => {
+      // Income 5000, expenses 4800 => free 200 before simulation
+      // A vista: 3000 added to month 1 => 4800+3000=7800 > 5000 => risk
+      const baseline = makeBaseline(12, 4800)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      expect(scenarios[0].hasRisk).toBe(true) // A vista: 3000 in one month
+    })
+
+    it('marks recommended scenario as the one with highest minimum free balance', () => {
+      const baseline = makeBaseline(24, 3000)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      // Longer installments have smaller monthly amount => higher minimum free balance
+      // 12x: 250/month => tightest = 5000 - 3000 - 250 = 1750
+      // 6x:  500/month => tightest = 5000 - 3000 - 500 = 1500
+      // 1x: 3000/month1 => tightest = 5000 - 3000 - 3000 = -1000
+      // The 12x scenario should be recommended (highest min free balance)
+      const recommended = scenarios.find((s) => s.isRecommended)
+      expect(recommended).toBeDefined()
+      expect(recommended!.totalInstallments).toBe(12)
+    })
+
+    it('only one scenario is marked as recommended', () => {
+      const baseline = makeBaseline(24, 3000)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      const recommendedCount = scenarios.filter((s) => s.isRecommended).length
+      expect(recommendedCount).toBe(1)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('returns empty array when totalAmount is 0', () => {
+      const baseline = makeBaseline(12)
+      const scenarios = generateScenarios(0, 6, baseline, 5000)
+      expect(scenarios).toHaveLength(0)
+    })
+
+    it('returns empty array when totalInstallments is 0', () => {
+      const baseline = makeBaseline(12)
+      const scenarios = generateScenarios(3000, 0, baseline, 5000)
+      expect(scenarios).toHaveLength(0)
+    })
+
+    it('returns empty array when totalAmount is negative', () => {
+      const baseline = makeBaseline(12)
+      const scenarios = generateScenarios(-1000, 6, baseline, 5000)
+      expect(scenarios).toHaveLength(0)
+    })
+
+    it('includes avgCommitment from calculateSimulation', () => {
+      const baseline = makeBaseline(24, 3000)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      // Each scenario should have a numeric avgCommitment
+      scenarios.forEach((s) => {
+        expect(typeof s.avgCommitment).toBe('number')
+        expect(s.avgCommitment).toBeGreaterThan(0)
+      })
+    })
+
+    it('includes tightestMonth info from calculateSimulation', () => {
+      const baseline = makeBaseline(24, 3000)
+      const scenarios = generateScenarios(3000, 6, baseline, 5000)
+
+      scenarios.forEach((s) => {
+        expect(s.tightestMonth).not.toBeNull()
+        expect(s.tightestMonth!.label).toBeDefined()
+        expect(typeof s.tightestMonth!.freeBalance).toBe('number')
+      })
     })
   })
 })

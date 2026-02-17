@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
 
     const { description, totalAmount, totalInstallments, categoryId } = body;
 
+    const parsedAmount = parseFloat(totalAmount);
+    const parsedInstallments = parseInt(totalInstallments, 10);
+
     if (!description || !totalAmount || !totalInstallments) {
       return NextResponse.json(
         { error: "Descricao, valor total e parcelas sao obrigatorios" },
@@ -36,11 +40,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (isNaN(parsedAmount) || parsedAmount <= 0 || isNaN(parsedInstallments) || parsedInstallments < 1) {
+      return NextResponse.json(
+        { error: "Valor e parcelas devem ser numeros positivos" },
+        { status: 400 },
+      );
+    }
+
     const simulation = await prisma.simulation.create({
       data: {
         description,
-        totalAmount: parseFloat(totalAmount),
-        totalInstallments: parseInt(totalInstallments),
+        totalAmount: parsedAmount,
+        totalInstallments: parsedInstallments,
         categoryId: categoryId || null,
         userId,
       },

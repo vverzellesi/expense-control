@@ -7,7 +7,10 @@ import { SimulationForm } from "@/components/simulator/SimulationForm";
 import { SimulationChips } from "@/components/simulator/SimulationChips";
 import { ImpactChart } from "@/components/simulator/ImpactChart";
 import { ImpactSummaryCards } from "@/components/simulator/ImpactSummaryCards";
-import { calculateSimulation } from "@/lib/simulation-engine";
+import { calculateSimulation, generateScenarios } from "@/lib/simulation-engine";
+import { ScenarioComparison } from "@/components/simulator/ScenarioComparison";
+import { RegisterPurchaseDialog } from "@/components/simulator/RegisterPurchaseDialog";
+import { SimulatorActions } from "@/components/simulator/SimulatorActions";
 import { useToast } from "@/components/ui/use-toast";
 import type { Category, Simulation, SimulationData } from "@/types";
 
@@ -25,6 +28,7 @@ export default function SimuladorPage() {
   // Saved simulations state
   const [savedSimulations, setSavedSimulations] = useState<Simulation[]>([]);
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
   const { toast } = useToast();
 
   // Debounce only amount input (text input with rapid typing)
@@ -63,6 +67,16 @@ export default function SimuladorPage() {
     if (!hasActive) return null;
     return calculateSimulation(simulationData.months, simulationData.averageIncome, simulationInputs);
   }, [simulationData, simulationInputs]);
+
+  const scenarios = useMemo(() => {
+    if (!simulationData || debouncedAmount <= 0) return [];
+    return generateScenarios(
+      debouncedAmount,
+      totalInstallments,
+      simulationData.months,
+      simulationData.averageIncome,
+    );
+  }, [simulationData, debouncedAmount, totalInstallments]);
 
   useEffect(() => {
     async function fetchData() {
@@ -164,6 +178,19 @@ export default function SimuladorPage() {
     }
   }
 
+  function handleSelectScenario(newInstallments: number) {
+    setTotalInstallments(newInstallments);
+  }
+
+  async function handleRegisterSuccess() {
+    // Remove from saved simulations if it was saved
+    if (selectedSimulationId) {
+      await fetch(`/api/simulations/${selectedSimulationId}`, { method: "DELETE" });
+      setSavedSimulations((prev) => prev.filter((s) => s.id !== selectedSimulationId));
+    }
+    setShowRegisterDialog(false);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -191,20 +218,20 @@ export default function SimuladorPage() {
         categories={categories}
       />
 
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          onClick={handleSave}
-          disabled={!description || totalAmount <= 0}
-        >
-          {selectedSimulationId ? "Atualizar simulacao" : "Salvar simulacao"}
-        </Button>
-        {selectedSimulationId && (
+      {selectedSimulationId && (
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={handleSave}
+            disabled={!description || totalAmount <= 0}
+          >
+            Atualizar simulacao
+          </Button>
           <Button variant="ghost" onClick={handleNew}>
             Cancelar edicao
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <SimulationChips
         simulations={savedSimulations}
@@ -234,6 +261,35 @@ export default function SimuladorPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Scenarios comparison */}
+      {scenarios.length > 0 && (
+        <ScenarioComparison
+          scenarios={scenarios}
+          onSelectScenario={handleSelectScenario}
+        />
+      )}
+
+      {/* Register Purchase Dialog */}
+      <RegisterPurchaseDialog
+        open={showRegisterDialog}
+        onOpenChange={setShowRegisterDialog}
+        description={description}
+        totalAmount={totalAmount}
+        totalInstallments={totalInstallments}
+        categoryId={categoryId}
+        categories={categories}
+        onSuccess={handleRegisterSuccess}
+      />
+
+      {/* Action bar */}
+      <SimulatorActions
+        hasSimulation={totalAmount > 0 && description.length > 0}
+        isSaved={!!selectedSimulationId}
+        onSave={handleSave}
+        onRegister={() => setShowRegisterDialog(true)}
+        onDiscard={handleNew}
+      />
     </div>
   );
 }

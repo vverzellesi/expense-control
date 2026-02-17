@@ -22,8 +22,20 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
     if (body.isActive !== undefined) updateData.isActive = body.isActive;
     if (body.description !== undefined) updateData.description = body.description;
-    if (body.totalAmount !== undefined) updateData.totalAmount = parseFloat(body.totalAmount);
-    if (body.totalInstallments !== undefined) updateData.totalInstallments = parseInt(body.totalInstallments);
+    if (body.totalAmount !== undefined) {
+      const parsedAmount = parseFloat(body.totalAmount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return NextResponse.json({ error: "Valor deve ser um numero positivo" }, { status: 400 });
+      }
+      updateData.totalAmount = parsedAmount;
+    }
+    if (body.totalInstallments !== undefined) {
+      const parsedInstallments = parseInt(body.totalInstallments, 10);
+      if (isNaN(parsedInstallments) || parsedInstallments < 1) {
+        return NextResponse.json({ error: "Parcelas deve ser um numero positivo" }, { status: 400 });
+      }
+      updateData.totalInstallments = parsedInstallments;
+    }
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId || null;
 
     const updated = await prisma.simulation.update({
