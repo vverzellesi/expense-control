@@ -42,7 +42,7 @@ export function SimulationForm({
       <CardContent className="pt-6">
         <div className="grid gap-4 md:grid-cols-4">
           <div className="space-y-2">
-            <Label htmlFor="description">Descricao</Label>
+            <Label htmlFor="description">Descrição</Label>
             <Input
               id="description"
               placeholder="Ex: TV Samsung 55&quot;"

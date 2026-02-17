@@ -16,7 +16,7 @@ export async function PATCH(
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Simulacao nao encontrada" }, { status: 404 });
+      return NextResponse.json({ error: "Simulação não encontrada" }, { status: 404 });
     }
 
     const updateData: Record<string, unknown> = {};
@@ -25,14 +25,14 @@ export async function PATCH(
     if (body.totalAmount !== undefined) {
       const parsedAmount = parseFloat(body.totalAmount);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        return NextResponse.json({ error: "Valor deve ser um numero positivo" }, { status: 400 });
+        return NextResponse.json({ error: "Valor deve ser um número positivo" }, { status: 400 });
       }
       updateData.totalAmount = parsedAmount;
     }
     if (body.totalInstallments !== undefined) {
       const parsedInstallments = parseInt(body.totalInstallments, 10);
       if (isNaN(parsedInstallments) || parsedInstallments < 1) {
-        return NextResponse.json({ error: "Parcelas deve ser um numero positivo" }, { status: 400 });
+        return NextResponse.json({ error: "Parcelas deve ser um número positivo" }, { status: 400 });
       }
       updateData.totalInstallments = parsedInstallments;
     }
@@ -50,7 +50,7 @@ export async function PATCH(
       return unauthorizedResponse();
     }
     console.error("Error updating simulation:", error);
-    return NextResponse.json({ error: "Erro ao atualizar simulacao" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao atualizar simulação" }, { status: 500 });
   }
 }
 
@@ -67,7 +67,7 @@ export async function DELETE(
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Simulacao nao encontrada" }, { status: 404 });
+      return NextResponse.json({ error: "Simulação não encontrada" }, { status: 404 });
     }
 
     await prisma.simulation.delete({ where: { id } });
@@ -78,6 +78,6 @@ export async function DELETE(
       return unauthorizedResponse();
     }
     console.error("Error deleting simulation:", error);
-    return NextResponse.json({ error: "Erro ao deletar simulacao" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao deletar simulação" }, { status: 500 });
   }
 }

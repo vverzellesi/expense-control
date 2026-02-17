@@ -16,7 +16,7 @@ export function ScenarioComparison({ scenarios, onSelectScenario }: ScenarioComp
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-3">Comparacao de cenarios</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-3">Comparação de cenários</h3>
       <div className="grid gap-4 md:grid-cols-3">
         {scenarios.map((scenario) => (
           <Card
@@ -48,12 +48,12 @@ export function ScenarioComparison({ scenarios, onSelectScenario }: ScenarioComp
                 <div className="flex justify-between">
                   <span className="text-gray-500">Parcela:</span>
                   <span className="font-medium">
-                    {formatCurrency(scenario.monthlyAmount)}/mes
+                    {formatCurrency(scenario.monthlyAmount)}/mês
                   </span>
                 </div>
                 {scenario.tightestMonth && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Mes mais apertado:</span>
+                    <span className="text-gray-500">Mês mais apertado:</span>
                     <span className={cn(
                       "font-medium",
                       scenario.tightestMonth.freeBalance < 0 ? "text-red-600" : "text-gray-900"
@@ -64,7 +64,7 @@ export function ScenarioComparison({ scenarios, onSelectScenario }: ScenarioComp
                 )}
                 {scenario.tightestMonth && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Saldo no pior mes:</span>
+                    <span className="text-gray-500">Saldo no pior mês:</span>
                     <span className={cn(
                       "font-medium",
                       scenario.tightestMonth.freeBalance < 0 ? "text-red-600" : "text-gray-900"

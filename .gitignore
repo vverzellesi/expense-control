@@ -45,4 +45,8 @@ next-env.d.ts
 .entire/
 
 docs/plans/
+ai_docs/brainstorm/
+ai_docs/research/
+ai_docs/handoffs/
+ai_docs/oracle/
 /scripts/reset-password.ts

@@ -136,7 +136,7 @@ export async function GET() {
     }
     console.error("Error fetching simulation data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados de simulacao" },
+      { error: "Erro ao buscar dados de simulação" },
       { status: 500 }
     );
   }
