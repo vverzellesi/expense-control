@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { SimulationForm } from "@/components/simulator/SimulationForm";
+import { SimulationChips } from "@/components/simulator/SimulationChips";
 import { ImpactChart } from "@/components/simulator/ImpactChart";
 import { ImpactSummaryCards } from "@/components/simulator/ImpactSummaryCards";
 import { calculateSimulation } from "@/lib/simulation-engine";
-import type { Category, SimulationData } from "@/types";
+import { useToast } from "@/components/ui/use-toast";
+import type { Category, Simulation, SimulationData } from "@/types";
 
 export default function SimuladorPage() {
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
@@ -19,6 +22,11 @@ export default function SimuladorPage() {
   const [totalInstallments, setTotalInstallments] = useState<number>(1);
   const [categoryId, setCategoryId] = useState<string>("");
 
+  // Saved simulations state
+  const [savedSimulations, setSavedSimulations] = useState<Simulation[]>([]);
+  const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
+  const { toast } = useToast();
+
   // Debounce only amount input (text input with rapid typing)
   const [debouncedAmount, setDebouncedAmount] = useState(0);
   useEffect(() => {
@@ -28,27 +36,52 @@ export default function SimuladorPage() {
     return () => clearTimeout(timer);
   }, [totalAmount]);
 
+  // Build combined simulation inputs for calculation
+  const simulationInputs = useMemo(() => {
+    const inputs = savedSimulations.map((s) => ({
+      totalAmount: s.totalAmount,
+      totalInstallments: s.totalInstallments,
+      isActive: s.isActive,
+    }));
+
+    // Add current form as unsaved simulation (if not editing a saved one)
+    if (debouncedAmount > 0 && !selectedSimulationId) {
+      inputs.push({
+        totalAmount: debouncedAmount,
+        totalInstallments: totalInstallments,
+        isActive: true,
+      });
+    }
+
+    return inputs;
+  }, [savedSimulations, debouncedAmount, totalInstallments, selectedSimulationId]);
+
+  // Update calculation to use all inputs
   const simulationResult = useMemo(() => {
-    if (!simulationData || debouncedAmount <= 0) return null;
-    return calculateSimulation(
-      simulationData.months,
-      simulationData.averageIncome,
-      [{ totalAmount: debouncedAmount, totalInstallments: totalInstallments, isActive: true }],
-    );
-  }, [simulationData, debouncedAmount, totalInstallments]);
+    if (!simulationData || simulationInputs.length === 0) return null;
+    const hasActive = simulationInputs.some((s) => s.isActive && s.totalAmount > 0);
+    if (!hasActive) return null;
+    return calculateSimulation(simulationData.months, simulationData.averageIncome, simulationInputs);
+  }, [simulationData, simulationInputs]);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [dataRes, catRes] = await Promise.all([
+        const [dataRes, catRes, simRes] = await Promise.all([
           fetch("/api/simulation/data"),
           fetch("/api/categories"),
+          fetch("/api/simulations"),
         ]);
         if (!dataRes.ok || !catRes.ok) throw new Error("Failed to fetch data");
         const data = await dataRes.json();
         const cats = await catRes.json();
         setSimulationData(data);
         setCategories(cats);
+
+        if (simRes.ok) {
+          const sims = await simRes.json();
+          setSavedSimulations(sims);
+        }
       } catch (error) {
         console.error("Error loading simulation data:", error);
       } finally {
@@ -57,6 +90,79 @@ export default function SimuladorPage() {
     }
     fetchData();
   }, []);
+
+  // Handlers
+  function handleNew() {
+    setSelectedSimulationId(null);
+    setDescription("");
+    setTotalAmount(0);
+    setTotalInstallments(1);
+    setCategoryId("");
+  }
+
+  function handleSelect(sim: Simulation) {
+    setSelectedSimulationId(sim.id);
+    setDescription(sim.description);
+    setTotalAmount(sim.totalAmount);
+    setTotalInstallments(sim.totalInstallments);
+    setCategoryId(sim.categoryId || "");
+  }
+
+  async function handleSave() {
+    if (!description || totalAmount <= 0) return;
+    try {
+      const isEditing = !!selectedSimulationId;
+      const url = isEditing
+        ? `/api/simulations/${selectedSimulationId}`
+        : "/api/simulations";
+      const method = isEditing ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, totalAmount, totalInstallments, categoryId: categoryId || null }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      const saved = await res.json();
+
+      if (isEditing) {
+        setSavedSimulations((prev) =>
+          prev.map((s) => (s.id === saved.id ? saved : s)),
+        );
+      } else {
+        setSavedSimulations((prev) => [saved, ...prev]);
+      }
+      handleNew();
+      toast({ title: isEditing ? "Simulacao atualizada" : "Simulacao salva" });
+    } catch {
+      toast({ title: "Erro ao salvar simulacao", variant: "destructive" });
+    }
+  }
+
+  async function handleToggle(id: string, isActive: boolean) {
+    try {
+      await fetch(`/api/simulations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+      setSavedSimulations((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, isActive } : s)),
+      );
+    } catch {
+      toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await fetch(`/api/simulations/${id}`, { method: "DELETE" });
+      setSavedSimulations((prev) => prev.filter((s) => s.id !== id));
+      if (selectedSimulationId === id) handleNew();
+    } catch {
+      toast({ title: "Erro ao deletar", variant: "destructive" });
+    }
+  }
 
   if (loading) {
     return (
@@ -83,6 +189,30 @@ export default function SimuladorPage() {
         categoryId={categoryId}
         onCategoryIdChange={setCategoryId}
         categories={categories}
+      />
+
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          onClick={handleSave}
+          disabled={!description || totalAmount <= 0}
+        >
+          {selectedSimulationId ? "Atualizar simulacao" : "Salvar simulacao"}
+        </Button>
+        {selectedSimulationId && (
+          <Button variant="ghost" onClick={handleNew}>
+            Cancelar edicao
+          </Button>
+        )}
+      </div>
+
+      <SimulationChips
+        simulations={savedSimulations}
+        selectedId={selectedSimulationId}
+        onSelect={handleSelect}
+        onToggle={handleToggle}
+        onDelete={handleDelete}
+        onNew={handleNew}
       />
 
       <ImpactSummaryCards

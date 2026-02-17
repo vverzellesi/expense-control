@@ -99,6 +99,14 @@ export const mockPrismaClient = {
     create: vi.fn(),
     upsert: vi.fn()
   },
+  simulation: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn()
+  },
   billPayment: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
