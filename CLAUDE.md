@@ -128,3 +128,15 @@ npm run test:all      # Run all tests
 ## Path Alias
 
 TypeScript path alias: `@/*` maps to `./src/*`
+
+## Architecture Diagrams
+
+Diagramas Mermaid da arquitetura estão em `ai_docs/diagrams/`. Consulte-os para entender a estrutura do projeto, relações entre entidades, fluxos de API e hierarquia de componentes.
+
+Arquivos disponíveis:
+- `data-models.md` - Diagrama ER das entidades Prisma
+- `route-structure.md` - Mapa de rotas e páginas
+- `api-flows.md` - Fluxos das operações principais
+- `component-tree.md` - Hierarquia de componentes React
+
+**Manutenção:** Ao criar novas páginas, componentes, rotas de API ou modelos Prisma, atualize os diagramas correspondentes. Mudanças relevantes em estrutura existente (novos relacionamentos, reorganização de componentes) também devem ser refletidas.
