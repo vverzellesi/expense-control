@@ -375,6 +375,16 @@ describe('detectTransfer', () => {
       expect(detectTransfer('DEBITO AUTOMATICO CARTAO')).toBe(true)
       expect(detectTransfer('DEBITO AUTO FATURA')).toBe(true)
     })
+
+    it('should detect PGTO FAT abbreviation', () => {
+      expect(detectTransfer('PGTO FAT CARTAO C6')).toBe(true)
+      expect(detectTransfer('PGTO FAT')).toBe(true)
+    })
+
+    it('should detect INCLUSAO DE PAGAMENTO', () => {
+      expect(detectTransfer('INCLUSAO DE PAGAMENTO')).toBe(true)
+      expect(detectTransfer('INCLUSAO PAGAMENTO')).toBe(true)
+    })
   })
 
   describe('internal transfers', () => {

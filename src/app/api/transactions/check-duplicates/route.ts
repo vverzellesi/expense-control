@@ -6,6 +6,7 @@ interface TransactionToCheck {
   description: string;
   amount: number;
   date: string;
+  origin?: string;
   isInstallment?: boolean;
   currentInstallment?: number;
   totalInstallments?: number;
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     const userId = await getAuthenticatedUserId();
 
     const body = await request.json();
-    const { transactions } = body as { transactions: TransactionToCheck[] };
+    const { transactions, origin } = body as { transactions: TransactionToCheck[]; origin?: string };
 
     if (!transactions || !Array.isArray(transactions)) {
       return NextResponse.json(
@@ -74,28 +75,72 @@ export async function POST(request: NextRequest) {
       const dateStr = !t.date.includes('T') ? t.date + 'T12:00:00' : t.date;
       const transactionDate = new Date(dateStr);
 
-      // Check for exact duplicates (same date, description, amount)
-      const existing = await prisma.transaction.findFirst({
-        where: {
-          userId,
-          description: {
-            contains: t.description.slice(0, 50),
-          },
-          amount: {
-            gte: t.amount - 0.01,
-            lte: t.amount + 0.01,
-          },
-          date: {
-            gte: new Date(transactionDate.getTime() - 24 * 60 * 60 * 1000),
-            lte: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
-          },
-          deletedAt: null,
+      // Check for exact duplicates (same date, description, amount, and optionally origin)
+      const duplicateWhere: Record<string, unknown> = {
+        userId,
+        description: {
+          contains: t.description.slice(0, 50),
         },
+        amount: {
+          gte: t.amount - 0.01,
+          lte: t.amount + 0.01,
+        },
+        date: {
+          gte: new Date(transactionDate.getTime() - 24 * 60 * 60 * 1000),
+          lte: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
+        },
+        deletedAt: null,
+      };
+
+      // If origin is provided, only match duplicates from same origin
+      if (origin) {
+        duplicateWhere.origin = origin;
+      }
+
+      const existing = await prisma.transaction.findFirst({
+        where: duplicateWhere,
       });
 
       if (existing) {
         duplicates.push(i);
         continue;
+      }
+
+      // Also check if a recurring expense already has a transaction for this month
+      // that is linked to a recurring expense (via recurringExpenseId)
+      if (!existing && origin) {
+        const recurringDuplicates = await prisma.transaction.findMany({
+          where: {
+            userId,
+            recurringExpenseId: { not: null },
+            origin,
+            date: {
+              gte: new Date(transactionDate.getFullYear(), transactionDate.getMonth(), 1),
+              lt: new Date(transactionDate.getFullYear(), transactionDate.getMonth() + 1, 1),
+            },
+            deletedAt: null,
+          },
+          include: { recurringExpense: true },
+        });
+
+        // Check if any recurring transaction matches by keyword (reuse normalize+keyword logic)
+        const normalizedDesc = t.description.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+        const isRecurringDuplicate = recurringDuplicates.some((rt) => {
+          if (!rt.recurringExpense) return false;
+          const keywords = rt.recurringExpense.description
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .split(/\s+/)
+            .filter((k: string) => k.length > 2);
+          return keywords.some((kw: string) => normalizedDesc.includes(kw));
+        });
+
+        if (isRecurringDuplicate) {
+          duplicates.push(i);
+          continue;
+        }
       }
 
       // Check for related installments (sequential installments of same purchase)

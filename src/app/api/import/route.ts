@@ -44,16 +44,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch recurring expenses that await import linking
+    // Fetch ALL active recurring expenses for matching (not just autoGenerate=false)
     const recurringToMatch = await prisma.recurringExpense.findMany({
       where: {
         userId,
-        autoGenerate: false,
         isActive: true,
       },
       include: {
         transactions: {
           select: { id: true, date: true },
+          where: { deletedAt: null },
         },
       },
     });
