@@ -91,45 +91,50 @@ export async function POST(request: NextRequest) {
       const transactionOrigin = origin || t.origin || "Importacao CSV";
 
       // Try to match with a recurring expense
-      let matchedRecurringId: string | null = null;
+      let matchedRecurringId: string | null = t.recurringExpenseId || null;
 
-      const matches = recurringToMatch.filter((recurring) => {
-        // Check origin match
-        if (recurring.origin !== transactionOrigin) {
-          return false;
-        }
+      // Only do server-side matching if frontend didn't already identify a match
+      if (!matchedRecurringId) {
+        const matches = recurringToMatch.filter((recurring) => {
+          // Check origin match
+          if (recurring.origin !== transactionOrigin) {
+            return false;
+          }
 
-        // Check category match (if recurring has category defined)
-        if (recurring.categoryId && t.categoryId && recurring.categoryId !== t.categoryId) {
-          return false;
-        }
+          // Check category match (if recurring has category defined)
+          if (recurring.categoryId && t.categoryId && recurring.categoryId !== t.categoryId) {
+            return false;
+          }
 
-        // Check description match
-        if (!matchesRecurring(t.description, recurring.description)) {
-          return false;
-        }
+          // Check description match
+          if (!matchesRecurring(t.description, recurring.description)) {
+            return false;
+          }
 
-        // Check if already has transaction for this month
-        const hasThisMonth = recurring.transactions.some((existingTx) => {
-          const existingDate = new Date(existingTx.date);
-          return (
-            existingDate.getMonth() === transactionMonth &&
-            existingDate.getFullYear() === transactionYear
-          );
+          // Check if already has transaction for this month
+          const hasThisMonth = recurring.transactions.some((existingTx) => {
+            const existingDate = new Date(existingTx.date);
+            return (
+              existingDate.getMonth() === transactionMonth &&
+              existingDate.getFullYear() === transactionYear
+            );
+          });
+
+          if (hasThisMonth) {
+            return false;
+          }
+
+          return true;
         });
 
-        if (hasThisMonth) {
-          return false;
+        // Only link if we have exactly one match (conservative)
+        if (matches.length === 1) {
+          matchedRecurringId = matches[0].id;
+          // Add to existing transactions to prevent double matching in same import
+          matches[0].transactions.push({ id: "temp", date: transactionDate });
+          linkedCount++;
         }
-
-        return true;
-      });
-
-      // Only link if we have exactly one match (conservative)
-      if (matches.length === 1) {
-        matchedRecurringId = matches[0].id;
-        // Add to existing transactions to prevent double matching in same import
-        matches[0].transactions.push({ id: "temp", date: transactionDate });
+      } else {
         linkedCount++;
       }
 

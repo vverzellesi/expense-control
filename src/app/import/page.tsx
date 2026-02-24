@@ -46,7 +46,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { detectTransfer, detectInstallment } from "@/lib/categorizer";
+import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType } from "@/types";
 
 // Detecta transacoes especiais de cartao de credito
@@ -155,6 +155,10 @@ type ExtendedTransaction = ImportedTransaction & {
     relatedDescription: string;
     relatedInstallment: number;
   };
+  // Recurring match fields
+  recurringMatchId?: string;
+  recurringMatchDescription?: string;
+  recurringAlreadyGenerated?: boolean;
 };
 
 export default function ImportPage() {
@@ -263,6 +267,51 @@ export default function ImportPage() {
       return updatedTransactions;
     } catch (error) {
       console.error("Error checking duplicates:", error);
+      return parsedTransactions;
+    }
+  }
+
+  async function checkRecurringMatches(parsedTransactions: ExtendedTransaction[]) {
+    try {
+      const res = await fetch("/api/transactions/check-recurring-matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactions: parsedTransactions.map((t) => ({
+            description: t.description,
+            amount: t.amount,
+            date: t.date instanceof Date ? t.date.toISOString() : t.date,
+          })),
+          origin,
+        }),
+      });
+
+      if (!res.ok) return parsedTransactions;
+
+      const data = await res.json();
+
+      if (!data.hasMatches) return parsedTransactions;
+
+      const matchMap = new Map<number, typeof data.matches[0]>();
+      for (const match of data.matches) {
+        matchMap.set(match.index, match);
+      }
+
+      return parsedTransactions.map((t, index) => {
+        const match = matchMap.get(index);
+        if (!match) return t;
+
+        return {
+          ...t,
+          recurringMatchId: match.recurringExpenseId,
+          recurringMatchDescription: match.recurringDescription,
+          recurringAlreadyGenerated: match.hasExistingTransaction,
+          // Deselect if recurring already has transaction for this month
+          selected: match.hasExistingTransaction ? false : t.selected,
+        };
+      });
+    } catch (error) {
+      console.error("Error checking recurring matches:", error);
       return parsedTransactions;
     }
   }
@@ -438,6 +487,9 @@ export default function ImportPage() {
       const currentInstallment = installmentInfo.currentInstallment;
       const totalInstallments = installmentInfo.totalInstallments;
 
+      // Check for recurring pattern (activate dead badge)
+      const recurringInfo = detectRecurringTransaction(description);
+
       // Check for transfer pattern (credit card bill payment, internal transfer)
       const isTransfer = detectTransfer(description);
 
@@ -516,6 +568,8 @@ export default function ImportPage() {
         categoryId,
         suggestedCategoryId: categoryId,
         selected: shouldBeSelected,
+        isRecurring: recurringInfo.isRecurring,
+        recurringName: recurringInfo.recurringName,
         specialType: specialTx?.type,
         specialTypeWarning: specialTx?.warning,
       });
@@ -527,7 +581,9 @@ export default function ImportPage() {
 
     // Check for duplicates
     const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
-    setTransactions(transactionsWithDuplicates);
+    // Check for recurring matches
+    const transactionsWithRecurring = await checkRecurringMatches(transactionsWithDuplicates);
+    setTransactions(transactionsWithRecurring);
     setStep("preview");
   }
 
@@ -655,6 +711,7 @@ export default function ImportPage() {
             isInstallment: t.isInstallment,
             currentInstallment: t.currentInstallment,
             totalInstallments: t.totalInstallments,
+            recurringExpenseId: t.recurringMatchId || undefined,
           })),
           origin,
         }),
@@ -703,6 +760,8 @@ export default function ImportPage() {
   ).length;
   const duplicateCount = transactions.filter((t) => t.isDuplicate).length;
   const relatedInstallmentCount = transactions.filter((t) => t.isRelatedInstallment).length;
+  const recurringAlreadyCount = transactions.filter((t) => t.recurringAlreadyGenerated).length;
+  const recurringMatchCount = transactions.filter((t) => t.recurringMatchId && !t.recurringAlreadyGenerated).length;
   const specialCount = transactions.filter((t) => t.specialType).length;
   const billPaymentCount = transactions.filter((t) => t.specialType === "BILL_PAYMENT").length;
   const financingCount = transactions.filter((t) => t.specialType === "FINANCING").length;
@@ -824,6 +883,18 @@ export default function ImportPage() {
                       <span className="flex items-center gap-1 text-blue-600">
                         <Link2 className="h-4 w-4" />
                         {relatedInstallmentCount} parcela(s) relacionada(s)
+                      </span>
+                    )}
+                    {recurringAlreadyCount > 0 && (
+                      <span className="flex items-center gap-1 text-amber-600">
+                        <RefreshCw className="h-4 w-4" />
+                        {recurringAlreadyCount} recorrente(s) ja gerada(s)
+                      </span>
+                    )}
+                    {recurringMatchCount > 0 && (
+                      <span className="flex items-center gap-1 text-blue-600">
+                        <Link2 className="h-4 w-4" />
+                        {recurringMatchCount} a vincular com recorrente
                       </span>
                     )}
                     {incomeCount > 0 && (
@@ -1005,7 +1076,19 @@ export default function ImportPage() {
                             {t.isRecurring && (
                               <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                                 <RefreshCw className="h-3 w-3 mr-1" />
-                                Recorrente
+                                {t.recurringName || "Recorrente"}
+                              </Badge>
+                            )}
+                            {t.recurringAlreadyGenerated && (
+                              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Ja gerada
+                              </Badge>
+                            )}
+                            {t.recurringMatchId && !t.recurringAlreadyGenerated && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                <Link2 className="h-3 w-3 mr-1" />
+                                Vincular
                               </Badge>
                             )}
                             {t.specialType === "BILL_PAYMENT" && (
@@ -1263,7 +1346,19 @@ export default function ImportPage() {
                               {t.isRecurring && (
                                 <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                                   <RefreshCw className="h-3 w-3 mr-1" />
-                                  {t.recurringName || "Recorrente"}
+                                  Recorrente: {t.recurringName || "Recorrente"}
+                                </Badge>
+                              )}
+                              {t.recurringAlreadyGenerated && (
+                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Recorrente ja gerada
+                                </Badge>
+                              )}
+                              {t.recurringMatchId && !t.recurringAlreadyGenerated && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                  <Link2 className="h-3 w-3 mr-1" />
+                                  Vincular a recorrente
                                 </Badge>
                               )}
                               {t.specialType === "BILL_PAYMENT" && (
