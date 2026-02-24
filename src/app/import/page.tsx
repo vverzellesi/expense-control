@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Upload,
   FileText,
@@ -671,6 +672,74 @@ export default function ImportPage() {
     setTransactions((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function extractKeyword(description: string): string {
+    // Remove known prefixes from bank statements
+    let keyword = description
+      .replace(/^(IFD\*|MP\s*\*|EC\s*\*|PDV\*|PG\s*\*|PAG\*|PIX\s+)/i, "")
+      .trim();
+
+    // Remove trailing installment info
+    keyword = keyword
+      .replace(/\s*[-–]\s*Parcela.*$/i, "")
+      .replace(/\s*\d+\s*[\/\\]\s*\d+\s*$/i, "")
+      .trim();
+
+    // Remove trailing transaction codes (common in bank statements)
+    keyword = keyword
+      .replace(/\s+\d{6,}$/i, "")  // trailing numbers (6+ digits)
+      .replace(/\s+[A-Z]{2,3}\d{2,}$/i, "")  // codes like "SP01234"
+      .trim();
+
+    // Take first meaningful words (max 3 words, at least 3 chars each)
+    const words = keyword.split(/\s+/).filter(w => w.length >= 3);
+    if (words.length > 3) {
+      keyword = words.slice(0, 3).join(" ");
+    }
+
+    return keyword;
+  }
+
+  async function suggestRule(description: string, categoryId: string) {
+    const keyword = extractKeyword(description);
+    if (keyword.length < 3) return;
+
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return;
+
+    toast({
+      title: "Criar regra de categorização?",
+      description: `"${keyword.toUpperCase()}" → ${category.name}`,
+      action: (
+        <ToastAction
+          altText="Criar regra"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/rules", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  keyword: keyword.toUpperCase(),
+                  categoryId,
+                }),
+              });
+
+              if (res.ok) {
+                toast({
+                  title: "Regra criada",
+                  description: `Transações com "${keyword.toUpperCase()}" serão categorizadas automaticamente`,
+                });
+              }
+            } catch (error) {
+              console.error("Error creating rule:", error);
+            }
+          }}
+        >
+          Criar regra
+        </ToastAction>
+      ),
+    });
+  }
+
   function getConfidenceBadge(confidence?: number) {
     if (confidence === undefined) return null;
 
@@ -1126,11 +1195,14 @@ export default function ImportPage() {
                             </Label>
                             <Select
                               value={t.categoryId || ""}
-                              onValueChange={(value) =>
+                              onValueChange={(value) => {
                                 updateTransaction(index, {
                                   categoryId: value || undefined,
-                                })
-                              }
+                                });
+                                if (value && value !== t.categoryId) {
+                                  suggestRule(t.description, value);
+                                }
+                              }}
                             >
                               <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Selecione" />
@@ -1406,11 +1478,14 @@ export default function ImportPage() {
                         <TableCell>
                           <Select
                             value={t.categoryId || ""}
-                            onValueChange={(value) =>
+                            onValueChange={(value) => {
                               updateTransaction(index, {
                                 categoryId: value || undefined,
-                              })
-                            }
+                              });
+                              if (value && value !== t.categoryId) {
+                                suggestRule(t.description, value);
+                              }
+                            }}
                           >
                             <SelectTrigger className="w-40">
                               <SelectValue placeholder="Selecione" />
