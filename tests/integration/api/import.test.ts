@@ -117,6 +117,139 @@ describe('POST /api/import - Carryover Linking', () => {
     })
   })
 
+  describe('Recurring expense matching', () => {
+    it('should match autoGenerate=true recurring expenses during import', async () => {
+      // Setup: recurring expense with autoGenerate=true and NO transaction for January
+      mockPrisma.recurringExpense.findMany.mockResolvedValue([
+        {
+          id: 'rec-spotify',
+          description: 'SPOTIFY',
+          amount: -19.90,
+          origin: 'Nubank',
+          categoryId: 'cat-1',
+          autoGenerate: true,
+          isActive: true,
+          userId: testUser.id,
+          transactions: [], // No existing transaction for this month
+        }
+      ])
+
+      const mockTransaction = {
+        ...createMockTransaction('txn-spotify', 'EBN *SPOTIFY', -19.90, '2024-01-15'),
+        isFixed: true,
+        recurringExpenseId: 'rec-spotify',
+        recurringExpense: { id: 'rec-spotify', description: 'SPOTIFY' },
+      }
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'EBN *SPOTIFY', amount: 19.90, date: '2024-01-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.linkedCount).toBe(1)
+
+      // Verify transaction was created with recurringExpenseId
+      expect(mockPrisma.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recurringExpenseId: 'rec-spotify',
+            isFixed: true,
+          })
+        })
+      )
+    })
+
+    it('should NOT match recurring that already has a transaction this month', async () => {
+      mockPrisma.recurringExpense.findMany.mockResolvedValue([
+        {
+          id: 'rec-spotify',
+          description: 'SPOTIFY',
+          amount: -19.90,
+          origin: 'Nubank',
+          categoryId: 'cat-1',
+          autoGenerate: true,
+          isActive: true,
+          userId: testUser.id,
+          transactions: [
+            { id: 'existing-txn', date: new Date('2024-01-05') } // Already has a transaction for Jan
+          ],
+        }
+      ])
+
+      const mockTransaction = createMockTransaction('txn-spotify-2', 'EBN *SPOTIFY', -19.90, '2024-01-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'EBN *SPOTIFY', amount: 19.90, date: '2024-01-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.linkedCount).toBe(0)
+
+      // Transaction should NOT be linked to recurring
+      expect(mockPrisma.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recurringExpenseId: null,
+            isFixed: false,
+          })
+        })
+      )
+    })
+
+    it('should query recurring expenses WITHOUT autoGenerate filter', async () => {
+      mockPrisma.recurringExpense.findMany.mockResolvedValue([])
+      const mockTransaction = createMockTransaction('txn-1', 'SOMETHING', -50, '2024-01-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'SOMETHING', amount: 50, date: '2024-01-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      await POST(request)
+
+      // The query should NOT have autoGenerate: false filter
+      const findManyCall = mockPrisma.recurringExpense.findMany.mock.calls[0][0]
+      expect(findManyCall.where).not.toHaveProperty('autoGenerate')
+    })
+
+    it('should filter out soft-deleted transactions when checking existing recurring', async () => {
+      mockPrisma.recurringExpense.findMany.mockResolvedValue([])
+      const mockTransaction = createMockTransaction('txn-1', 'SOMETHING', -50, '2024-01-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'SOMETHING', amount: 50, date: '2024-01-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      await POST(request)
+
+      // The include should filter for deletedAt: null
+      const findManyCall = mockPrisma.recurringExpense.findMany.mock.calls[0][0]
+      expect(findManyCall.include.transactions.where).toEqual({ deletedAt: null })
+    })
+  })
+
   describe('Carryover detection and linking', () => {
     it('should detect and link carryover transaction that matches existing BillPayment', async () => {
       // Setup: BillPayment from January 2024 with R$ 2,000 carried
