@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
       const transactionDate = new Date(dateStr);
 
       // Check for exact duplicates (same date, description, amount, and optionally origin)
-      const duplicateWhere: Record<string, unknown> = {
+      const duplicateWhere: Prisma.TransactionWhereInput = {
         userId,
         description: {
           contains: t.description.slice(0, 50),
@@ -90,12 +91,8 @@ export async function POST(request: NextRequest) {
           lte: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
         },
         deletedAt: null,
+        ...(origin ? { origin } : {}),
       };
-
-      // If origin is provided, only match duplicates from same origin
-      if (origin) {
-        duplicateWhere.origin = origin;
-      }
 
       const existing = await prisma.transaction.findFirst({
         where: duplicateWhere,

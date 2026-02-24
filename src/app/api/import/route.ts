@@ -91,9 +91,17 @@ export async function POST(request: NextRequest) {
       const transactionOrigin = origin || t.origin || "Importacao CSV";
 
       // Try to match with a recurring expense
-      let matchedRecurringId: string | null = t.recurringExpenseId || null;
+      let matchedRecurringId: string | null = null;
 
-      // Only do server-side matching if frontend didn't already identify a match
+      // Validate frontend-provided recurringExpenseId belongs to this user
+      if (t.recurringExpenseId) {
+        const isOwned = recurringToMatch.some(r => r.id === t.recurringExpenseId);
+        if (isOwned) {
+          matchedRecurringId = t.recurringExpenseId;
+        }
+      }
+
+      // Only do server-side matching if no valid match from frontend
       if (!matchedRecurringId) {
         const matches = recurringToMatch.filter((recurring) => {
           // Check origin match
