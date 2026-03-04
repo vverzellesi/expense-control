@@ -32,6 +32,7 @@ model User {
   origins           Origin[]
   budgets           Budget[]
   categoryRules     CategoryRule[]
+  categoryTags      CategoryTag[]
   settings          Settings[]
   savingsHistories  SavingsHistory[]
 
@@ -114,6 +115,8 @@ model Transaction {
   recurringExpenseId String?
   recurringExpense   RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
   tags               String? // JSON array: '["trabalho", "viagem"]'
+  categoryTagId      String?
+  categoryTag        CategoryTag?  @relation(fields: [categoryTagId], references: [id], onDelete: SetNull)
   deletedAt          DateTime? // Soft delete - null means active
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -163,6 +166,7 @@ model Category {
   transactions      Transaction[]
   budgets           Budget[]
   categoryRules     CategoryRule[]
+  categoryTags      CategoryTag[]
   recurringExpenses RecurringExpense[]
   simulations       Simulation[]
 
@@ -234,6 +238,23 @@ model CategoryRule {
 
   @@unique([keyword, categoryId, userId])
   @@index([userId])
+}
+
+model CategoryTag {
+  id         String        @id @default(cuid())
+  name       String
+  keywords   String // Comma-separated: "shell,ipiranga,posto"
+  categoryId String
+  category   Category      @relation(fields: [categoryId], references: [id])
+  transactions Transaction[]
+
+  // User relationship
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, categoryId, userId])
+  @@index([userId])
+  @@index([categoryId])
 }
 
 model Settings {
