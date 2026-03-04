@@ -29,6 +29,8 @@ export interface Transaction {
   recurringExpenseId: string | null;
   recurringExpense?: RecurringExpense | null;
   tags: string | null;
+  categoryTagId: string | null;
+  categoryTag?: CategoryTag | null;
   deletedAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -84,6 +86,14 @@ export interface Budget {
 export interface CategoryRule {
   id: string;
   keyword: string;
+  categoryId: string;
+  category?: Category;
+}
+
+export interface CategoryTag {
+  id: string;
+  name: string;
+  keywords: string;
   categoryId: string;
   category?: Category;
 }

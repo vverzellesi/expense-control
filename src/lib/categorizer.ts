@@ -30,6 +30,68 @@ export function invalidateRulesCache(userId?: string) {
   }
 }
 
+// Cache category tags per user
+interface TagWithCategory {
+  id: string;
+  name: string;
+  keywords: string;
+  categoryId: string;
+  category: Category;
+}
+
+const tagsCacheByUser: Map<string, TagWithCategory[]> = new Map();
+
+export async function getCategoryTags(userId?: string): Promise<TagWithCategory[]> {
+  const cacheKey = userId || "_global";
+  const cached = tagsCacheByUser.get(cacheKey);
+  if (cached) return cached;
+
+  const tags = await prisma.categoryTag.findMany({
+    where: userId ? { userId } : undefined,
+    include: { category: true },
+  });
+
+  tagsCacheByUser.set(cacheKey, tags as TagWithCategory[]);
+  return tags as TagWithCategory[];
+}
+
+export function invalidateTagsCache(userId?: string) {
+  if (userId) {
+    tagsCacheByUser.delete(userId);
+  } else {
+    tagsCacheByUser.clear();
+  }
+}
+
+export async function matchCategoryTag(
+  description: string,
+  categoryId: string,
+  userId?: string
+): Promise<TagWithCategory | null> {
+  const allTags = await getCategoryTags(userId);
+  const categoryTags = allTags.filter((t) => t.categoryId === categoryId);
+
+  if (categoryTags.length === 0) return null;
+
+  const upperDesc = description.toUpperCase();
+  const matches: TagWithCategory[] = [];
+
+  for (const tag of categoryTags) {
+    const keywords = tag.keywords.split(",").map((k) => k.trim().toUpperCase()).filter((k) => k.length > 0);
+    const hasMatch = keywords.some((keyword) => upperDesc.includes(keyword));
+    if (hasMatch) {
+      matches.push(tag);
+    }
+  }
+
+  // Conservative: only return if exactly one tag matches
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  return null;
+}
+
 export async function suggestCategory(
   description: string,
   userId?: string

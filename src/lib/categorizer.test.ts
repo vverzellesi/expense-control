@@ -5,7 +5,9 @@ import {
   detectInstallment,
   defaultCategories,
   defaultRules,
-  defaultInvestmentCategories
+  defaultInvestmentCategories,
+  matchCategoryTag,
+  invalidateTagsCache
 } from './categorizer'
 
 // Mock the database module for functions that use it
@@ -20,6 +22,9 @@ vi.mock('./db', () => ({
       count: vi.fn(),
       create: vi.fn()
     },
+    categoryTag: {
+      findMany: vi.fn(),
+    },
     investmentCategory: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -30,6 +35,8 @@ vi.mock('./db', () => ({
     }
   }
 }))
+
+import prisma from './db'
 
 describe('detectRecurringTransaction', () => {
   describe('streaming services', () => {
@@ -648,3 +655,52 @@ describe('default constants', () => {
     })
   })
 })
+
+describe("matchCategoryTag", () => {
+  const mockTags = [
+    { id: "tag1", name: "Combustível", keywords: "shell,ipiranga,posto", categoryId: "cat1", category: { id: "cat1", name: "Automóvel", color: "#000", icon: null } },
+  ];
+
+  beforeEach(() => {
+    // Clear tag cache between tests to prevent stale data
+    invalidateTagsCache();
+  });
+
+  it("should match a tag when keyword is found in description", async () => {
+    vi.mocked(prisma.categoryTag.findMany).mockResolvedValue(mockTags as never);
+
+    const result = await matchCategoryTag("SHELL COMBUSTIVEL SP", "cat1", "user1");
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("Combustível");
+  });
+
+  it("should return null when no keywords match", async () => {
+    vi.mocked(prisma.categoryTag.findMany).mockResolvedValue(mockTags as never);
+
+    const result = await matchCategoryTag("UBER TRIP", "cat1", "user2");
+    expect(result).toBeNull();
+  });
+
+  it("should return null when multiple tags match (ambiguity)", async () => {
+    const ambiguousTags = [
+      { id: "tag1", name: "Combustível", keywords: "shell", categoryId: "cat1", category: { id: "cat1", name: "Automóvel", color: "#000", icon: null } },
+      { id: "tag2", name: "Lavagem", keywords: "shell", categoryId: "cat1", category: { id: "cat1", name: "Automóvel", color: "#000", icon: null } },
+    ];
+    vi.mocked(prisma.categoryTag.findMany).mockResolvedValue(ambiguousTags as never);
+
+    const result = await matchCategoryTag("SHELL SERVICOS", "cat1", "user3");
+    expect(result).toBeNull();
+  });
+
+  it("should only match tags from the specified category", async () => {
+    const crossCategoryTags = [
+      { id: "tag1", name: "Combustível", keywords: "shell", categoryId: "cat1", category: { id: "cat1", name: "Automóvel", color: "#000", icon: null } },
+      { id: "tag2", name: "Restaurante", keywords: "shell", categoryId: "cat2", category: { id: "cat2", name: "Alimentação", color: "#000", icon: null } },
+    ];
+    vi.mocked(prisma.categoryTag.findMany).mockResolvedValue(crossCategoryTags as never);
+
+    const result = await matchCategoryTag("SHELL COMBUSTIVEL", "cat1", "user4");
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe("tag1");
+  });
+});
