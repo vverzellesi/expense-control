@@ -22,6 +22,7 @@ export async function GET() {
         type: "INCOME",
         date: { gte: threeMonthsAgo, lte: currentMonthEnd },
         deletedAt: null,
+        investmentTransaction: null,
       },
     });
 

@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
             gte: new Date(year, 0, 1),
             lte: new Date(year, 11, 31, 23, 59, 59, 999),
           },
+          investmentTransaction: null,
         },
       }),
       prisma.transaction.findMany({
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
             gte: new Date(year - 1, 0, 1),
             lte: new Date(year - 1, 11, 31, 23, 59, 59, 999),
           },
+          investmentTransaction: null,
         },
       }),
     ]);

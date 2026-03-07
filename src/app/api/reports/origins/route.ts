@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
         userId,
         deletedAt: null,
         type: "EXPENSE",
+        investmentTransaction: null,
         date: {
           gte: monthStart,
           lte: monthEnd,
