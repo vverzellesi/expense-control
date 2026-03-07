@@ -1013,6 +1013,201 @@ describe('GET /api/summary', () => {
     })
   })
 
+  describe('Investment transactions exclusion', () => {
+    it('should exclude investment deposit transactions from expense totals', async () => {
+      const transactions = [
+        // Regular expense
+        {
+          id: 'txn-expense-1',
+          description: 'Groceries',
+          amount: -500,
+          date: new Date(2024, 0, 15),
+          type: 'EXPENSE',
+          categoryId: 'cat-food',
+          category: { id: 'cat-food', name: 'Mercado', color: '#22C55E' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: null
+        },
+        // Investment deposit (should NOT count as expense)
+        {
+          id: 'txn-investment-1',
+          description: 'Aporte - Tesouro Selic',
+          amount: -1000,
+          date: new Date(2024, 0, 10),
+          type: 'EXPENSE',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-1' }
+        },
+        // Regular income
+        {
+          id: 'txn-income-1',
+          description: 'Salary',
+          amount: 5000,
+          date: new Date(2024, 0, 5),
+          type: 'INCOME',
+          categoryId: 'cat-salary',
+          category: { id: 'cat-salary', name: 'Salario', color: '#10B981' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: null
+        }
+      ]
+
+      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
+
+      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
+      const response = await GET(request)
+      const data = await response.json()
+
+      // Only the regular expense should count (500), NOT the investment deposit (1000)
+      expect(data.summary.expense).toBe(500)
+      expect(data.summary.income).toBe(5000)
+      expect(data.summary.balance).toBe(4500)
+    })
+
+    it('should exclude investment withdrawal transactions from income totals', async () => {
+      const transactions = [
+        // Regular income
+        {
+          id: 'txn-income-1',
+          description: 'Salary',
+          amount: 5000,
+          date: new Date(2024, 0, 5),
+          type: 'INCOME',
+          categoryId: 'cat-salary',
+          category: { id: 'cat-salary', name: 'Salario', color: '#10B981' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: null
+        },
+        // Investment withdrawal (should NOT count as income)
+        {
+          id: 'txn-investment-withdraw',
+          description: 'Resgate - Tesouro Selic',
+          amount: 2000,
+          date: new Date(2024, 0, 20),
+          type: 'INCOME',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-2' }
+        }
+      ]
+
+      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
+
+      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
+      const response = await GET(request)
+      const data = await response.json()
+
+      // Only salary should count as income (5000), NOT the withdrawal (2000)
+      expect(data.summary.income).toBe(5000)
+      expect(data.summary.expense).toBe(0)
+      expect(data.summary.balance).toBe(5000)
+    })
+
+    it('should exclude investment transactions from category breakdown', async () => {
+      const transactions = [
+        // Regular expense
+        {
+          id: 'txn-expense-1',
+          description: 'Groceries',
+          amount: -500,
+          date: new Date(2024, 0, 15),
+          type: 'EXPENSE',
+          categoryId: 'cat-food',
+          category: { id: 'cat-food', name: 'Mercado', color: '#22C55E' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: null
+        },
+        // Investment deposit (should NOT appear in category breakdown)
+        {
+          id: 'txn-investment-1',
+          description: 'Aporte - CDB',
+          amount: -3000,
+          date: new Date(2024, 0, 10),
+          type: 'EXPENSE',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-3' }
+        }
+      ]
+
+      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
+
+      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
+      const response = await GET(request)
+      const data = await response.json()
+
+      // Investment category should NOT appear in breakdown
+      const investCategory = data.categoryBreakdown.find(
+        (c: { categoryName: string }) => c.categoryName === 'Investimento'
+      )
+      expect(investCategory).toBeUndefined()
+
+      // Only Mercado should be in breakdown
+      expect(data.categoryBreakdown).toHaveLength(1)
+      expect(data.categoryBreakdown[0].categoryName).toBe('Mercado')
+    })
+
+    it('should return zero totals when all transactions are investment-linked', async () => {
+      const transactions = [
+        {
+          id: 'txn-invest-deposit',
+          description: 'Aporte - Tesouro Selic',
+          amount: -2000,
+          date: new Date(2024, 0, 10),
+          type: 'EXPENSE',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-10' }
+        },
+        {
+          id: 'txn-invest-withdraw',
+          description: 'Resgate - CDB',
+          amount: 1500,
+          date: new Date(2024, 0, 20),
+          type: 'INCOME',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-11' }
+        }
+      ]
+
+      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
+
+      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
+      const response = await GET(request)
+      const data = await response.json()
+
+      expect(data.summary.income).toBe(0)
+      expect(data.summary.expense).toBe(0)
+      expect(data.summary.balance).toBe(0)
+      expect(data.categoryBreakdown).toHaveLength(0)
+    })
+  })
+
   describe('Edge cases', () => {
     it('should handle bill payment with zero carried amount', async () => {
       // Full payment (nothing carried)

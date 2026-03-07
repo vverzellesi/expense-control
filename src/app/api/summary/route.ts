@@ -261,6 +261,7 @@ export async function GET(request: NextRequest) {
         include: {
           category: true,
           installment: true,
+          investmentTransaction: { select: { id: true } },
         },
       }),
 
@@ -277,6 +278,7 @@ export async function GET(request: NextRequest) {
           isFixed: true,
           type: "EXPENSE",
           deletedAt: null,
+          investmentTransaction: null,
         },
         include: {
           category: true,
@@ -359,6 +361,9 @@ export async function GET(request: NextRequest) {
     const prevCategoryTotals: Record<string, { total: number; name: string; color: string }> = {};
 
     for (const t of prevTransactions) {
+      // Skip investment-linked transactions (deposits/withdrawals)
+      if (t.investmentTransaction) continue;
+
       if (t.type === "INCOME") {
         prevIncome += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
@@ -395,6 +400,9 @@ export async function GET(request: NextRequest) {
     const categoryTotals: Record<string, { total: number; name: string; color: string }> = {};
 
     for (const t of transactions) {
+      // Skip investment-linked transactions (deposits/withdrawals)
+      if (t.investmentTransaction) continue;
+
       if (t.type === "INCOME") {
         income += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
@@ -471,6 +479,9 @@ export async function GET(request: NextRequest) {
       let monthExpenseRaw = 0;
 
       for (const t of monthTransactions) {
+        // Skip investment-linked transactions (deposits/withdrawals)
+        if (t.investmentTransaction) continue;
+
         if (t.type === "INCOME") {
           monthIncome += Math.abs(t.amount);
         } else if (t.type === "EXPENSE") {
@@ -510,7 +521,7 @@ export async function GET(request: NextRequest) {
       // Current week transactions (filter from already-fetched data)
       const currentWeekTransactions = transactions.filter((t) => {
         const tDate = new Date(t.date);
-        return tDate >= currentWeekStart && tDate <= currentWeekEnd && t.type === "EXPENSE";
+        return tDate >= currentWeekStart && tDate <= currentWeekEnd && t.type === "EXPENSE" && !t.investmentTransaction;
       });
 
       const currentWeekTotal = currentWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
@@ -518,7 +529,7 @@ export async function GET(request: NextRequest) {
       // Previous week transactions (filter from 6-month data if available)
       const prevWeekTransactions = allTransactions.filter((t) => {
         const tDate = new Date(t.date);
-        return tDate >= prevWeekStart && tDate <= prevWeekEnd && t.type === "EXPENSE";
+        return tDate >= prevWeekStart && tDate <= prevWeekEnd && t.type === "EXPENSE" && !t.investmentTransaction;
       });
 
       const prevWeekTotal = prevWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
@@ -543,7 +554,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Weekly Breakdown: gastos por semana do mês
-    const weeklyBreakdown = calculateWeeklyBreakdown(transactions, startDate, endDate);
+    const nonInvestmentTransactions = transactions.filter((t) => !t.investmentTransaction);
+    const weeklyBreakdown = calculateWeeklyBreakdown(nonInvestmentTransactions, startDate, endDate);
 
     // ===========================================
     // SAVINGS GOAL

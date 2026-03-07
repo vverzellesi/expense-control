@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
         userId,
         deletedAt: null,
         type: "EXPENSE",
+        investmentTransaction: null,
         date: {
           gte: new Date(year, 0, 1),
           lte: new Date(year, 11, 31, 23, 59, 59, 999),
