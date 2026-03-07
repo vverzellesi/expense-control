@@ -1042,7 +1042,7 @@ describe('GET /api/summary', () => {
           isFixed: false,
           isInstallment: false,
           userId: testUser.id,
-          investmentTransaction: { id: 'inv-txn-1', type: 'DEPOSIT', amount: 1000 }
+          investmentTransaction: { id: 'inv-txn-1' }
         },
         // Regular income
         {
@@ -1100,7 +1100,7 @@ describe('GET /api/summary', () => {
           isFixed: false,
           isInstallment: false,
           userId: testUser.id,
-          investmentTransaction: { id: 'inv-txn-2', type: 'WITHDRAWAL', amount: 2000 }
+          investmentTransaction: { id: 'inv-txn-2' }
         }
       ]
 
@@ -1112,6 +1112,8 @@ describe('GET /api/summary', () => {
 
       // Only salary should count as income (5000), NOT the withdrawal (2000)
       expect(data.summary.income).toBe(5000)
+      expect(data.summary.expense).toBe(0)
+      expect(data.summary.balance).toBe(5000)
     })
 
     it('should exclude investment transactions from category breakdown', async () => {
@@ -1142,7 +1144,7 @@ describe('GET /api/summary', () => {
           isFixed: false,
           isInstallment: false,
           userId: testUser.id,
-          investmentTransaction: { id: 'inv-txn-3', type: 'DEPOSIT', amount: 3000 }
+          investmentTransaction: { id: 'inv-txn-3' }
         }
       ]
 
@@ -1161,6 +1163,48 @@ describe('GET /api/summary', () => {
       // Only Mercado should be in breakdown
       expect(data.categoryBreakdown).toHaveLength(1)
       expect(data.categoryBreakdown[0].categoryName).toBe('Mercado')
+    })
+
+    it('should return zero totals when all transactions are investment-linked', async () => {
+      const transactions = [
+        {
+          id: 'txn-invest-deposit',
+          description: 'Aporte - Tesouro Selic',
+          amount: -2000,
+          date: new Date(2024, 0, 10),
+          type: 'EXPENSE',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-10' }
+        },
+        {
+          id: 'txn-invest-withdraw',
+          description: 'Resgate - CDB',
+          amount: 1500,
+          date: new Date(2024, 0, 20),
+          type: 'INCOME',
+          categoryId: 'cat-invest',
+          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
+          isFixed: false,
+          isInstallment: false,
+          userId: testUser.id,
+          investmentTransaction: { id: 'inv-txn-11' }
+        }
+      ]
+
+      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
+
+      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
+      const response = await GET(request)
+      const data = await response.json()
+
+      expect(data.summary.income).toBe(0)
+      expect(data.summary.expense).toBe(0)
+      expect(data.summary.balance).toBe(0)
+      expect(data.categoryBreakdown).toHaveLength(0)
     })
   })
 

@@ -278,6 +278,7 @@ export async function GET(request: NextRequest) {
           isFixed: true,
           type: "EXPENSE",
           deletedAt: null,
+          investmentTransaction: null,
         },
         include: {
           category: true,
