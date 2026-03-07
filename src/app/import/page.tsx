@@ -45,10 +45,11 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Tag,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
-import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType } from "@/types";
+import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
 
 // Detecta transacoes especiais de cartao de credito
 function detectSpecialTransaction(description: string): { type: SpecialTransactionType; warning: string } | null {
@@ -160,11 +161,15 @@ type ExtendedTransaction = ImportedTransaction & {
   recurringMatchId?: string;
   recurringMatchDescription?: string;
   recurringAlreadyGenerated?: boolean;
+  // Category tag fields
+  categoryTagId?: string;
+  categoryTagName?: string;
 };
 
 export default function ImportPage() {
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryTags, setCategoryTags] = useState<CategoryTag[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [step, setStep] = useState<"upload" | "preview" | "done">("upload");
@@ -205,6 +210,12 @@ export default function ImportPage() {
     const res = await fetch("/api/categories");
     const data = await res.json();
     setCategories(data);
+
+    const tagsRes = await fetch("/api/category-tags");
+    if (tagsRes.ok) {
+      const tagsData = await tagsRes.json();
+      setCategoryTags(tagsData);
+    }
   }
 
   async function checkDuplicates(parsedTransactions: ExtendedTransaction[]) {
@@ -555,6 +566,17 @@ export default function ImportPage() {
         finalAmount = -Math.abs(amount);
       }
 
+      // Match category tag
+      let categoryTagId: string | undefined;
+      let categoryTagName: string | undefined;
+      if (categoryId) {
+        const tagMatch = matchTag(description, categoryId);
+        if (tagMatch) {
+          categoryTagId = tagMatch.id;
+          categoryTagName = tagMatch.name;
+        }
+      }
+
       // Auto-deselect bill payments (they shouldn't be imported as regular transactions)
       const shouldBeSelected = specialTx?.type !== "BILL_PAYMENT";
 
@@ -573,6 +595,8 @@ export default function ImportPage() {
         recurringName: recurringInfo.recurringName,
         specialType: specialTx?.type,
         specialTypeWarning: specialTx?.warning,
+        categoryTagId,
+        categoryTagName,
       });
     }
 
@@ -699,6 +723,22 @@ export default function ImportPage() {
     return keyword;
   }
 
+  function matchTag(description: string, categoryId: string): { id: string; name: string } | null {
+    const tagsForCategory = categoryTags.filter(t => t.categoryId === categoryId);
+    if (tagsForCategory.length === 0) return null;
+
+    const upperDesc = description.toUpperCase();
+    const matches = tagsForCategory.filter(tag => {
+      const keywords = tag.keywords.split(",").map(k => k.trim().toUpperCase()).filter(k => k.length > 0);
+      return keywords.some(keyword => upperDesc.includes(keyword));
+    });
+
+    if (matches.length === 1) {
+      return { id: matches[0].id, name: matches[0].name };
+    }
+    return null;
+  }
+
   async function suggestRule(description: string, categoryId: string) {
     const keyword = extractKeyword(description);
     if (keyword.length < 3) return;
@@ -735,6 +775,54 @@ export default function ImportPage() {
           }}
         >
           Criar regra
+        </ToastAction>
+      ),
+    });
+  }
+
+  async function suggestTag(description: string, categoryId: string) {
+    // Don't suggest if a tag already matches
+    const existingMatch = matchTag(description, categoryId);
+    if (existingMatch) return;
+
+    const keyword = extractKeyword(description);
+    if (keyword.length < 3) return;
+
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return;
+
+    toast({
+      title: "Criar tag para esta categoria?",
+      description: `"${keyword}" em ${category.name}`,
+      action: (
+        <ToastAction
+          altText="Criar tag"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/category-tags", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: keyword,
+                  keywords: keyword.toLowerCase(),
+                  categoryId,
+                }),
+              });
+
+              if (res.ok) {
+                const newTag = await res.json();
+                setCategoryTags(prev => [...prev, newTag]);
+                toast({
+                  title: "Tag criada",
+                  description: `Tag "${keyword}" adicionada em ${category.name}`,
+                });
+              }
+            } catch (error) {
+              console.error("Error creating tag:", error);
+            }
+          }}
+        >
+          Criar tag
         </ToastAction>
       ),
     });
@@ -781,6 +869,7 @@ export default function ImportPage() {
             currentInstallment: t.currentInstallment,
             totalInstallments: t.totalInstallments,
             recurringExpenseId: t.recurringMatchId || undefined,
+            categoryTagId: t.categoryTagId || undefined,
           })),
           origin,
         }),
@@ -1160,6 +1249,12 @@ export default function ImportPage() {
                                 Vincular
                               </Badge>
                             )}
+                            {t.categoryTagName && (
+                              <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
+                                <Tag className="h-3 w-3 mr-1" />
+                                {t.categoryTagName}
+                              </Badge>
+                            )}
                             {t.specialType === "BILL_PAYMENT" && (
                               <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300">
                                 <CreditCard className="h-3 w-3 mr-1" />
@@ -1196,11 +1291,15 @@ export default function ImportPage() {
                             <Select
                               value={t.categoryId || ""}
                               onValueChange={(value) => {
+                                const tagMatch = value ? matchTag(t.description, value) : null;
                                 updateTransaction(index, {
                                   categoryId: value || undefined,
+                                  categoryTagId: tagMatch?.id,
+                                  categoryTagName: tagMatch?.name,
                                 });
                                 if (value && value !== t.categoryId) {
                                   suggestRule(t.description, value);
+                                  suggestTag(t.description, value);
                                 }
                               }}
                             >
@@ -1433,6 +1532,12 @@ export default function ImportPage() {
                                   Vincular a recorrente
                                 </Badge>
                               )}
+                              {t.categoryTagName && (
+                                <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
+                                  <Tag className="h-3 w-3 mr-1" />
+                                  Tag: {t.categoryTagName}
+                                </Badge>
+                              )}
                               {t.specialType === "BILL_PAYMENT" && (
                                 <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300" title={t.specialTypeWarning}>
                                   <CreditCard className="h-3 w-3 mr-1" />
@@ -1479,11 +1584,15 @@ export default function ImportPage() {
                           <Select
                             value={t.categoryId || ""}
                             onValueChange={(value) => {
+                              const tagMatch = value ? matchTag(t.description, value) : null;
                               updateTransaction(index, {
                                 categoryId: value || undefined,
+                                categoryTagId: tagMatch?.id,
+                                categoryTagName: tagMatch?.name,
                               });
                               if (value && value !== t.categoryId) {
                                 suggestRule(t.description, value);
+                                suggestTag(t.description, value);
                               }
                             }}
                           >

@@ -58,6 +58,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Fetch user's category tags for validation
+    const userTagIds = new Set(
+      (await prisma.categoryTag.findMany({
+        where: { userId },
+        select: { id: true, categoryId: true },
+      })).map(t => `${t.id}:${t.categoryId}`)
+    );
+
     const created = [];
     let linkedCount = 0;
     let carryoverLinkedCount = 0;
@@ -146,6 +154,15 @@ export async function POST(request: NextRequest) {
         linkedCount++;
       }
 
+      // Validate frontend-provided categoryTagId belongs to user and matches category
+      let validatedTagId: string | null = null;
+      if (t.categoryTagId) {
+        const tagKey = `${t.categoryTagId}:${t.categoryId || ""}`;
+        if (userTagIds.has(tagKey)) {
+          validatedTagId = t.categoryTagId;
+        }
+      }
+
       const transaction = await prisma.transaction.create({
         data: {
           userId,
@@ -155,6 +172,7 @@ export async function POST(request: NextRequest) {
           type,
           origin: transactionOrigin,
           categoryId: t.categoryId || null,
+          categoryTagId: validatedTagId,
           isFixed: matchedRecurringId !== null,
           isInstallment: t.isInstallment || false,
           currentInstallment: t.currentInstallment || null,
