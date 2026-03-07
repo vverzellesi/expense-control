@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "e41b8b9e1c46",
+  "session_id": "cccff38d-4e84-457d-bf75-29271c66530c",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-07T18:25:07.821472Z",
+  "branch": "fix/exclude-investments-from-expense-totals",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/app/api/projection/route.ts",
+    "src/app/api/reports/annual/route.ts",
+    "src/app/api/summary/route.ts",
+    "tests/integration/api/summary.test.ts"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "3f46529c-84cf-4ef8-9436-3fc261cbbfda",
+  "token_usage": {
+    "input_tokens": 4631,
+    "cache_creation_tokens": 97748,
+    "cache_read_tokens": 3603081,
+    "output_tokens": 16649,
+    "api_call_count": 48
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-07T18:25:07.742092Z",
+    "agent_lines": 168,
+    "human_added": 32,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 200,
+    "agent_percentage": 84
+  }
+}

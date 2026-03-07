@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "e41b8b9e1c46",
+  "strategy": "manual-commit",
+  "branch": "fix/exclude-investments-from-expense-totals",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/app/api/projection/route.ts",
+    "src/app/api/reports/annual/route.ts",
+    "src/app/api/summary/route.ts",
+    "tests/integration/api/summary.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e4/1b8b9e1c46/0/metadata.json",
+      "transcript": "/e4/1b8b9e1c46/0/full.jsonl",
+      "context": "/e4/1b8b9e1c46/0/context.md",
+      "content_hash": "/e4/1b8b9e1c46/0/content_hash.txt",
+      "prompt": "/e4/1b8b9e1c46/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4631,
+    "cache_creation_tokens": 97748,
+    "cache_read_tokens": 3603081,
+    "output_tokens": 16649,
+    "api_call_count": 48
+  }
+}
