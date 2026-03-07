@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
         where: {
           userId,
           deletedAt: null,
+          investmentTransaction: null,
           date: { gte: yearStart, lte: yearEnd },
         },
         select: { amount: true, type: true, date: true },

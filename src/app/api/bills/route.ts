@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
           },
           deletedAt: null,
           type: "EXPENSE", // Only expenses for bills
+          investmentTransaction: null,
         };
 
         if (origin) {

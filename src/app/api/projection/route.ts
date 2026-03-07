@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
           lte: endOfCurrentMonth,
         },
         deletedAt: null,
+        investmentTransaction: null,
       },
     });
 

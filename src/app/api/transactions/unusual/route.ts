@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         },
         type: "EXPENSE",
         deletedAt: null,
+        investmentTransaction: null,
       },
       include: {
         category: true,
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
         },
         type: "EXPENSE",
         deletedAt: null,
+        investmentTransaction: null,
       },
       include: {
         category: true,
