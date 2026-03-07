@@ -94,6 +94,7 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         category: true,
+        categoryTag: true,
         installment: true,
       },
       orderBy: {

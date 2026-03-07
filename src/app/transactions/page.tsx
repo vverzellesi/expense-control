@@ -558,13 +558,21 @@ function TransactionsContent() {
                               {transaction.category && (
                                 <>
                                   <span className="hidden sm:inline">-</span>
-                                  <span className="hidden sm:inline">{transaction.category.name}</span>
+                                  <span className="hidden sm:inline">
+                                    {transaction.category.name}
+                                    {transaction.categoryTag && (
+                                      <span className="text-gray-400"> · {transaction.categoryTag.name}</span>
+                                    )}
+                                  </span>
                                 </>
                               )}
                               {/* Mobile: show origin and category as badges */}
                               <span className="sm:hidden text-xs bg-gray-100 px-1.5 py-0.5 rounded">{transaction.origin}</span>
                               {transaction.category && (
-                                <span className="sm:hidden text-xs bg-gray-100 px-1.5 py-0.5 rounded">{transaction.category.name}</span>
+                                <span className="sm:hidden text-xs bg-gray-100 px-1.5 py-0.5 rounded">
+                                  {transaction.category.name}
+                                  {transaction.categoryTag && ` · ${transaction.categoryTag.name}`}
+                                </span>
                               )}
                             </div>
 

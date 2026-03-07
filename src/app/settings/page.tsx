@@ -27,14 +27,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil } from "lucide-react";
-import type { Category, Budget, CategoryRule, SavingsHistory, Origin } from "@/types";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers } from "lucide-react";
+import type { Category, Budget, CategoryRule, SavingsHistory, Origin, CategoryTag } from "@/types";
 
 interface BudgetWithCategory extends Budget {
   category: Category;
 }
 
 interface RuleWithCategory extends CategoryRule {
+  category: Category;
+}
+
+interface TagWithCategory extends CategoryTag {
   category: Category;
 }
 
@@ -55,9 +59,19 @@ export default function SettingsPage() {
   const [ruleCategoryId, setRuleCategoryId] = useState("");
   const [ruleSaving, setRuleSaving] = useState(false);
 
+  // Category tags
+  const [categoryTags, setCategoryTags] = useState<TagWithCategory[]>([]);
+
+  // Tag form
+  const [tagName, setTagName] = useState("");
+  const [tagKeywords, setTagKeywords] = useState("");
+  const [tagCategoryId, setTagCategoryId] = useState("");
+  const [tagSaving, setTagSaving] = useState(false);
+
   // Delete confirmation
   const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null);
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
+  const [deletingTagId, setDeletingTagId] = useState<string | null>(null);
 
   // Origins
   const [origins, setOrigins] = useState<Origin[]>([]);
@@ -84,13 +98,14 @@ export default function SettingsPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes, savingsHistoryRes, originsRes] = await Promise.all([
+      const [categoriesRes, budgetsRes, rulesRes, savingsGoalRes, savingsHistoryRes, originsRes, tagsRes] = await Promise.all([
         fetch("/api/categories"),
         fetch("/api/budgets"),
         fetch("/api/rules"),
         fetch("/api/settings?key=savingsGoal"),
         fetch("/api/savings-history?limit=12"),
         fetch("/api/origins"),
+        fetch("/api/category-tags"),
       ]);
 
       const categoriesData = await categoriesRes.json();
@@ -99,6 +114,7 @@ export default function SettingsPage() {
       const savingsGoalData = await savingsGoalRes.json();
       const savingsHistoryData = await savingsHistoryRes.json();
       const originsData = await originsRes.json();
+      const tagsData = await tagsRes.json();
 
       setCategories(categoriesData);
       setBudgets(budgetsData);
@@ -108,6 +124,7 @@ export default function SettingsPage() {
       }
       setSavingsHistory(savingsHistoryData || []);
       setOrigins(originsData || []);
+      setCategoryTags(tagsData || []);
 
       // Fetch current month spending
       const now = new Date();
@@ -273,6 +290,78 @@ export default function SettingsPage() {
       toast({
         title: "Erro",
         description: "Erro ao excluir regra",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleSaveTag(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!tagName.trim() || !tagKeywords.trim() || !tagCategoryId) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTagSaving(true);
+
+    try {
+      const res = await fetch("/api/category-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: tagName.trim(),
+          keywords: tagKeywords.trim().toLowerCase(),
+          categoryId: tagCategoryId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao criar tag");
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Tag criada com sucesso",
+      });
+      setTagName("");
+      setTagKeywords("");
+      setTagCategoryId("");
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao criar tag",
+        variant: "destructive",
+      });
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
+  async function handleDeleteTag() {
+    if (!deletingTagId) return;
+
+    try {
+      await fetch(`/api/category-tags/${deletingTagId}`, {
+        method: "DELETE",
+      });
+
+      toast({
+        title: "Sucesso",
+        description: "Tag excluída com sucesso",
+      });
+      setDeletingTagId(null);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir tag",
         variant: "destructive",
       });
     }
@@ -456,6 +545,11 @@ export default function SettingsPage() {
             <Wallet className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Origens</span>
             <span className="sm:hidden">Origens</span>
+          </TabsTrigger>
+          <TabsTrigger value="tags" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Layers className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Tags</span>
+            <span className="sm:hidden">Tags</span>
           </TabsTrigger>
         </TabsList>
 
@@ -956,6 +1050,130 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="tags" className="space-y-6">
+          {/* Add Tag Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Nova Tag</CardTitle>
+              <CardDescription>
+                Tags são sub-labels dentro de categorias. Use keywords para identificar transações automaticamente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveTag} className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Label>Nome</Label>
+                    <Input
+                      value={tagName}
+                      onChange={(e) => setTagName(e.target.value)}
+                      placeholder="Ex: Combustível, Estacionamento"
+                      className="min-h-[44px]"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label>Keywords (separadas por vírgula)</Label>
+                    <Input
+                      value={tagKeywords}
+                      onChange={(e) => setTagKeywords(e.target.value)}
+                      placeholder="Ex: shell, ipiranga, posto"
+                      className="min-h-[44px]"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Label>Categoria</Label>
+                    <Select
+                      value={tagCategoryId}
+                      onValueChange={setTagCategoryId}
+                    >
+                      <SelectTrigger className="min-h-[44px]">
+                        <SelectValue placeholder="Selecione uma categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: c.color }}
+                              />
+                              {c.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" disabled={tagSaving} className="w-full sm:w-auto min-h-[44px]">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Tags List grouped by category */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tags por Categoria ({categoryTags.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {categoryTags.length === 0 ? (
+                <div className="text-center text-gray-500">
+                  Nenhuma tag configurada
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Group tags by category */}
+                  {categories
+                    .filter(c => categoryTags.some(t => t.categoryId === c.id))
+                    .map(category => (
+                      <div key={category.id}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <h4 className="font-medium text-sm">{category.name}</h4>
+                        </div>
+                        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ml-5">
+                          {categoryTags
+                            .filter(t => t.categoryId === category.id)
+                            .map(tag => (
+                              <div
+                                key={tag.id}
+                                className="flex items-center justify-between rounded-lg border p-3"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-sm">{tag.name}</div>
+                                  <div className="text-xs text-gray-500 truncate">
+                                    {tag.keywords}
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="min-h-[44px] min-w-[44px] flex-shrink-0"
+                                  onClick={() => setDeletingTagId(tag.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Delete Budget Confirmation */}
@@ -1015,6 +1233,24 @@ export default function SettingsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteOrigin} className="bg-red-600">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Tag Confirmation */}
+      <AlertDialog open={!!deletingTagId} onOpenChange={() => setDeletingTagId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir tag?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Transações vinculadas a esta tag perderão a associação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTag}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
