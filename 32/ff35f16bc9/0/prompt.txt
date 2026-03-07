@@ -1,0 +1,754 @@
+reivsa o pr
+
+---
+
+# Code Review
+
+## Overview
+Perform a comprehensive code review of changes in the current branch, analyzing code quality, potential issues, and suggesting improvements.
+
+## Context
+
+- Current branch: fix/exclude-investments-from-expense-totals
+- Current git status: On branch fix/exclude-investments-from-expense-totals
+Your branch is up to date with 'origin/fix/exclude-investments-from-expense-totals'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .entire/settings.json
+
+no changes added to commit (use "git add" and/or "git commit -a")
+- Changes from main branch: diff --git a/src/app/api/bills/route.ts b/src/app/api/bills/route.ts
+index 10d0047..ecf5835 100644
+--- a/src/app/api/bills/route.ts
++++ b/src/app/api/bills/route.ts
+@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
+           },
+           deletedAt: null,
+           type: "EXPENSE", // Only expenses for bills
++          investmentTransaction: null,
+         };
+ 
+         if (origin) {
+diff --git a/src/app/api/projection/route.ts b/src/app/api/projection/route.ts
+index 8c790f7..c86c4ee 100644
+--- a/src/app/api/projection/route.ts
++++ b/src/app/api/projection/route.ts
+@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
+           lte: endOfCurrentMonth,
+         },
+         deletedAt: null,
++        investmentTransaction: null,
+       },
+     });
+ 
+diff --git a/src/app/api/reports/annual/route.ts b/src/app/api/reports/annual/route.ts
+index ed84752..3fcbbd3 100644
+--- a/src/app/api/reports/annual/route.ts
++++ b/src/app/api/reports/annual/route.ts
+@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
+             gte: new Date(year, 0, 1),
+             lte: new Date(year, 11, 31, 23, 59, 59, 999),
+           },
++          investmentTransaction: null,
+         },
+       }),
+       prisma.transaction.findMany({
+@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
+             gte: new Date(year - 1, 0, 1),
+             lte: new Date(year - 1, 11, 31, 23, 59, 59, 999),
+           },
++          investmentTransaction: null,
+         },
+       }),
+     ]);
+diff --git a/src/app/api/reports/calendar/route.ts b/src/app/api/reports/calendar/route.ts
+index a70d738..619b2e9 100644
+--- a/src/app/api/reports/calendar/route.ts
++++ b/src/app/api/reports/calendar/route.ts
+@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
+         userId,
+         deletedAt: null,
+         type: "EXPENSE",
++        investmentTransaction: null,
+         date: {
+           gte: monthStart,
+           lte: monthEnd,
+diff --git a/src/app/api/reports/category-trends/route.ts b/src/app/api/reports/category-trends/route.ts
+index 2cfd464..5aace69 100644
+--- a/src/app/api/reports/category-trends/route.ts
++++ b/src/app/api/reports/category-trends/route.ts
+@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
+         userId,
+         deletedAt: null,
+         type: "EXPENSE",
++        investmentTransaction: null,
+         date: {
+           gte: new Date(year, 0, 1),
+           lte: new Date(year, 11, 31, 23, 59, 59, 999),
+diff --git a/src/app/api/reports/fixed-variable/route.ts b/src/app/api/reports/fixed-variable/route.ts
+index fe2a702..fdaec4b 100644
+--- a/src/app/api/reports/fixed-variable/route.ts
++++ b/src/app/api/reports/fixed-variable/route.ts
+@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
+         userId,
+         deletedAt: null,
+         type: "EXPENSE",
++        investmentTransaction: null,
+         date: {
+           gte: startDate,
+           lte: endDate,
+diff --git a/src/app/api/reports/net-worth/route.ts b/src/app/api/reports/net-worth/route.ts
+index e38b66d..94d3362 100644
+--- a/src/app/api/reports/net-worth/route.ts
++++ b/src/app/api/reports/net-worth/route.ts
+@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
+         where: {
+           userId,
+           deletedAt: null,
++          investmentTransaction: null,
+           date: { gte: yearStart, lte: yearEnd },
+         },
+         select: { amount: true, type: true, date: true },
+diff --git a/src/app/api/reports/origins/route.ts b/src/app/api/reports/origins/route.ts
+index ee15313..ccb1cbc 100644
+--- a/src/app/api/reports/origins/route.ts
++++ b/src/app/api/reports/origins/route.ts
+@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
+         userId,
+         deletedAt: null,
+         type: "EXPENSE",
++        investmentTransaction: null,
+         date: {
+           gte: monthStart,
+           lte: monthEnd,
+diff --git a/src/app/api/simulation/data/route.ts b/src/app/api/simulation/data/route.ts
+index 5bac589..48b40c0 100644
+--- a/src/app/api/simulation/data/route.ts
++++ b/src/app/api/simulation/data/route.ts
+@@ -22,6 +22,7 @@ export async function GET() {
+         type: "INCOME",
+         date: { gte: threeMonthsAgo, lte: currentMonthEnd },
+         deletedAt: null,
++        investmentTransaction: null,
+       },
+     });
+ 
+diff --git a/src/app/api/summary/route.ts b/src/app/api/summary/route.ts
+index a090e00..ded99f2 100644
+--- a/src/app/api/summary/route.ts
++++ b/src/app/api/summary/route.ts
+@@ -261,6 +261,7 @@ export async function GET(request: NextRequest) {
+         include: {
+           category: true,
+           installment: true,
++          investmentTransaction: { select: { id: true } },
+         },
+       }),
+ 
+@@ -359,6 +360,9 @@ export async function GET(request: NextRequest) {
+     const prevCategoryTotals: Record<string, { total: number; name: string; color: string }> = {};
+ 
+     for (const t of prevTransactions) {
++      // Skip investment-linked transactions (deposits/withdrawals)
++      if (t.investmentTransaction) continue;
++
+       if (t.type === "INCOME") {
+         prevIncome += Math.abs(t.amount);
+       } else if (t.type === "EXPENSE") {
+@@ -395,6 +399,9 @@ export async function GET(request: NextRequest) {
+     const categoryTotals: Record<string, { total: number; name: string; color: string }> = {};
+ 
+     for (const t of transactions) {
++      // Skip investment-linked transactions (deposits/withdrawals)
++      if (t.investmentTransaction) continue;
++
+       if (t.type === "INCOME") {
+         income += Math.abs(t.amount);
+       } else if (t.type === "EXPENSE") {
+@@ -471,6 +478,9 @@ export async function GET(request: NextRequest) {
+       let monthExpenseRaw = 0;
+ 
+       for (const t of monthTransactions) {
++        // Skip investment-linked transactions (deposits/withdrawals)
++        if (t.investmentTransaction) continue;
++
+         if (t.type === "INCOME") {
+           monthIncome += Math.abs(t.amount);
+         } else if (t.type === "EXPENSE") {
+@@ -510,7 +520,7 @@ export async function GET(request: NextRequest) {
+       // Current week transactions (filter from already-fetched data)
+       const currentWeekTransactions = transactions.filter((t) => {
+         const tDate = new Date(t.date);
+-        return tDate >= currentWeekStart && tDate <= currentWeekEnd && t.type === "EXPENSE";
++        return tDate >= currentWeekStart && tDate <= currentWeekEnd && t.type === "EXPENSE" && !t.investmentTransaction;
+       });
+ 
+       const currentWeekTotal = currentWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+@@ -518,7 +528,7 @@ export async function GET(request: NextRequest) {
+       // Previous week transactions (filter from 6-month data if available)
+       const prevWeekTransactions = allTransactions.filter((t) => {
+         const tDate = new Date(t.date);
+-        return tDate >= prevWeekStart && tDate <= prevWeekEnd && t.type === "EXPENSE";
++        return tDate >= prevWeekStart && tDate <= prevWeekEnd && t.type === "EXPENSE" && !t.investmentTransaction;
+       });
+ 
+       const prevWeekTotal = prevWeekTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+@@ -543,7 +553,8 @@ export async function GET(request: NextRequest) {
+     }
+ 
+     // Weekly Breakdown: gastos por semana do mês
+-    const weeklyBreakdown = calculateWeeklyBreakdown(transactions, startDate, endDate);
++    const nonInvestmentTransactions = transactions.filter((t) => !t.investmentTransaction);
++    const weeklyBreakdown = calculateWeeklyBreakdown(nonInvestmentTransactions, startDate, endDate);
+ 
+     // ===========================================
+     // SAVINGS GOAL
+diff --git a/src/app/api/transactions/unusual/route.ts b/src/app/api/transactions/unusual/route.ts
+index 87b14ab..d7cd7b3 100644
+--- a/src/app/api/transactions/unusual/route.ts
++++ b/src/app/api/transactions/unusual/route.ts
+@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
+         },
+         type: "EXPENSE",
+         deletedAt: null,
++        investmentTransaction: null,
+       },
+       include: {
+         category: true,
+@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
+         },
+         type: "EXPENSE",
+         deletedAt: null,
++        investmentTransaction: null,
+       },
+       include: {
+         category: true,
+diff --git a/tests/integration/api/summary.test.ts b/tests/integration/api/summary.test.ts
+index 3cf631a..b708dee 100644
+--- a/tests/integration/api/summary.test.ts
++++ b/tests/integration/api/summary.test.ts
+@@ -1013,6 +1013,157 @@ describe('GET /api/summary', () => {
+     })
+   })
+ 
++  describe('Investment transactions exclusion', () => {
++    it('should exclude investment deposit transactions from expense totals', async () => {
++      const transactions = [
++        // Regular expense
++        {
++          id: 'txn-expense-1',
++          description: 'Groceries',
++          amount: -500,
++          date: new Date(2024, 0, 15),
++          type: 'EXPENSE',
++          categoryId: 'cat-food',
++          category: { id: 'cat-food', name: 'Mercado', color: '#22C55E' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: null
++        },
++        // Investment deposit (should NOT count as expense)
++        {
++          id: 'txn-investment-1',
++          description: 'Aporte - Tesouro Selic',
++          amount: -1000,
++          date: new Date(2024, 0, 10),
++          type: 'EXPENSE',
++          categoryId: 'cat-invest',
++          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: { id: 'inv-txn-1', type: 'DEPOSIT', amount: 1000 }
++        },
++        // Regular income
++        {
++          id: 'txn-income-1',
++          description: 'Salary',
++          amount: 5000,
++          date: new Date(2024, 0, 5),
++          type: 'INCOME',
++          categoryId: 'cat-salary',
++          category: { id: 'cat-salary', name: 'Salario', color: '#10B981' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: null
++        }
++      ]
++
++      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
++
++      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
++      const response = await GET(request)
++      const data = await response.json()
++
++      // Only the regular expense should count (500), NOT the investment deposit (1000)
++      expect(data.summary.expense).toBe(500)
++      expect(data.summary.income).toBe(5000)
++      expect(data.summary.balance).toBe(4500)
++    })
++
++    it('should exclude investment withdrawal transactions from income totals', async () => {
++      const transactions = [
++        // Regular income
++        {
++          id: 'txn-income-1',
++          description: 'Salary',
++          amount: 5000,
++          date: new Date(2024, 0, 5),
++          type: 'INCOME',
++          categoryId: 'cat-salary',
++          category: { id: 'cat-salary', name: 'Salario', color: '#10B981' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: null
++        },
++        // Investment withdrawal (should NOT count as income)
++        {
++          id: 'txn-investment-withdraw',
++          description: 'Resgate - Tesouro Selic',
++          amount: 2000,
++          date: new Date(2024, 0, 20),
++          type: 'INCOME',
++          categoryId: 'cat-invest',
++          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: { id: 'inv-txn-2', type: 'WITHDRAWAL', amount: 2000 }
++        }
++      ]
++
++      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
++
++      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
++      const response = await GET(request)
++      const data = await response.json()
++
++      // Only salary should count as income (5000), NOT the withdrawal (2000)
++      expect(data.summary.income).toBe(5000)
++    })
++
++    it('should exclude investment transactions from category breakdown', async () => {
++      const transactions = [
++        // Regular expense
++        {
++          id: 'txn-expense-1',
++          description: 'Groceries',
++          amount: -500,
++          date: new Date(2024, 0, 15),
++          type: 'EXPENSE',
++          categoryId: 'cat-food',
++          category: { id: 'cat-food', name: 'Mercado', color: '#22C55E' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: null
++        },
++        // Investment deposit (should NOT appear in category breakdown)
++        {
++          id: 'txn-investment-1',
++          description: 'Aporte - CDB',
++          amount: -3000,
++          date: new Date(2024, 0, 10),
++          type: 'EXPENSE',
++          categoryId: 'cat-invest',
++          category: { id: 'cat-invest', name: 'Investimento', color: '#6366F1' },
++          isFixed: false,
++          isInstallment: false,
++          userId: testUser.id,
++          investmentTransaction: { id: 'inv-txn-3', type: 'DEPOSIT', amount: 3000 }
++        }
++      ]
++
++      mockPrisma.transaction.findMany.mockResolvedValue(transactions)
++
++      const request = createRequest('http://localhost:3000/api/summary?month=1&year=2024')
++      const response = await GET(request)
++      const data = await response.json()
++
++      // Investment category should NOT appear in breakdown
++      const investCategory = data.categoryBreakdown.find(
++        (c: { categoryName: string }) => c.categoryName === 'Investimento'
++      )
++      expect(investCategory).toBeUndefined()
++
++      // Only Mercado should be in breakdown
++      expect(data.categoryBreakdown).toHaveLength(1)
++      expect(data.categoryBreakdown[0].categoryName).toBe('Mercado')
++    })
++  })
++
+   describe('Edge cases', () => {
+     it('should handle bill payment with zero carried amount', async () => {
+       // Full payment (nothing carried)
+- Recent commits on this branch: 921671b fix: exclude investment transactions from expense/income totals
+
+## Arguments:
+- Focus area (optional):  - Specific area to focus on (security, performance, testing, documentation, etc.)
+
+## Your Task
+
+### 0. Get Existing PRs
+- Use command `gh pr list --state all --json number,title,headRefName,url` to list existing PRs for context
+- Check if there's a PR for the current branch to understand any previous feedback
+
+### 1. Understand the Changes
+- **Review the git diff** to understand what's being changed
+- **Analyze commit history** to understand the evolution of changes
+- **Identify the purpose** of these changes based on branch name and commits
+- **Check for existing PRs** to understand any previous feedback
+
+### 2. Code Quality Review
+
+**Architecture & Design:**
+- Are changes following existing patterns in the codebase?
+- Is the code organized logically?
+- Are there any architectural concerns?
+- Is the separation of concerns appropriate?
+
+**Code Quality:**
+- Is the code readable and maintainable?
+- Are variable/function names clear and descriptive?
+- Is there unnecessary complexity that could be simplified?
+- Are there any code smells or anti-patterns?
+
+**Best Practices:**
+- Does the code follow language/framework conventions?
+- Are there proper error handling mechanisms?
+- Is input validation present where needed?
+- Are there magic numbers or hardcoded values that should be constants?
+
+### 3. Potential Issues
+
+**Bugs & Logic:**
+- Are there any obvious bugs or logical errors?
+- Could any code paths lead to unexpected behavior?
+- Are edge cases handled properly?
+- Are there potential race conditions or concurrency issues?
+
+**Performance:**
+- Are there any performance concerns (N+1 queries, inefficient loops, etc.)?
+- Could any operations be optimized?
+- Are there unnecessary computations or redundant operations?
+
+**Security:**
+- Are there any security vulnerabilities?
+- Is sensitive data handled properly?
+- Are there SQL injection or XSS risks?
+- Is authentication/authorization implemented correctly?
+
+### 4. Testing & Documentation
+
+**Test Coverage:**
+- Are there tests for the new functionality?
+- Are edge cases covered by tests?
+- Are tests clear and maintainable?
+
+**Documentation:**
+- Is the code self-documenting or does it need comments?
+- Are complex algorithms explained?
+- Is public API documented?
+- Does README or other docs need updates?
+
+### 5. Additional Checks
+
+**Dependencies:**
+- Are new dependencies necessary and well-maintained?
+- Are dependency versions pinned appropriately?
+
+**Breaking Changes:**
+- Are there any breaking changes?
+- Is backward compatibility maintained where needed?
+
+**Monorepo Considerations (if applicable):**
+- Do changes affect multiple packages?
+- Are package boundaries respected?
+- Are shared utilities used appropriately?
+
+## Output Format
+
+Provide your review in the following structure:
+
+### Summary
+- Brief overview of what's being changed
+- Overall assessment (Approve, Request Changes, Comment)
+
+### Strengths
+- What's done well in these changes
+- Positive aspects worth highlighting
+
+### Issues Found
+Organize by severity:
+
+**🔴 Critical (Must Fix):**
+- Issues that would break functionality or introduce security vulnerabilities
+
+**🟡 Important (Should Fix):**
+- Issues that impact code quality, performance, or maintainability
+
+**🔵 Minor (Nice to Have):**
+- Suggestions for improvement, style issues, optional optimizations
+
+For each issue, provide:
+- File and line reference (file.ts:123)
+- Description of the issue
+- Suggested fix or improvement
+
+### Questions
+- Any clarifications needed about the implementation
+- Concerns that need discussion
+
+### Testing Recommendations
+- Specific scenarios that should be tested
+- Edge cases to verify
+
+## Best Practices
+- **Be constructive**: Frame feedback as suggestions for improvement
+- **Be specific**: Reference exact files and line numbers
+- **Provide context**: Explain why something is an issue
+- **Suggest solutions**: Don't just point out problems, offer fixes
+- **Consider the scope**: Focus on what's changed, not the entire codebase
+- **Balance thoroughness with practicality**: Prioritize important issues
+- **Be respectful**: Assume good intentions and focus on the code, not the author
+
+## Example Output
+
+### Summary
+Implements user authentication with JWT tokens. Overall well-structured, but has some security concerns that need addressing before merging.
+
+### Strengths
+- Clean separation between auth logic and route handlers
+- Comprehensive error handling for invalid credentials
+- Good test coverage for happy path scenarios
+
+### Issues Found
+
+**🔴 Critical:**
+- `auth.ts:45` - JWT secret is hardcoded. Move to environment variable
+- `user.service.ts:89` - Password comparison is vulnerable to timing attacks. Use constant-time comparison
+
+**🟡 Important:**
+- `auth.controller.ts:23` - No rate limiting on login endpoint. Add rate limiting middleware
+- `user.model.ts:12` - Password stored without salt rounds configuration. Make bcrypt rounds configurable
+
+**🔵 Minor:**
+- `auth.ts:67` - Token expiry could be a constant for easier maintenance
+- `user.service.ts:34` - Consider extracting validation logic to separate validator
+
+### Questions
+- Should we implement refresh tokens for better UX?
+- What's the expected behavior when a user's session expires mid-request?
+
+### Testing Recommendations
+- Test with expired/invalid JWT tokens
+- Verify behavior with malformed authentication headers
+- Test concurrent login attempts
+- Verify password reset flow end-to-end
+
+---
+
+Stop hook feedback:
+MANAGER REVIEW REQUIRED
+
+Before your response reaches the user, run through the checklist:
+
+1. Read ~/.claude/skills/manager-review/SKILL.md
+2. Verify your response passes ALL checks
+3. Add the approval token at the end
+
+If checks fail, iterate on your response first.
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/manager-review
+
+# Manager Review
+
+## Step 0: Intent Check (ALWAYS DO THIS FIRST)
+
+**What is the user's intent?** Classify into one of:
+
+| Intent Type | Examples | Action |
+|-------------|----------|--------|
+| **Confirmation** | "yes", "ok", "proceed", "looks good", "got it", "thanks", "right", "correct" | → **AUTO-APPROVE** (skip to token) |
+| **Simple acknowledgment** | "I see", "understood", "makes sense", "that works" | → **AUTO-APPROVE** |
+| **Clarification response** | User answering your question | → **CONTINUE TO CHECKLIST** |
+| **Substantive request** | Implementation, analysis, code changes, debugging | → **CONTINUE TO CHECKLIST** |
+
+**If user is just confirming/acknowledging → include token immediately, skip checklist.**
+
+### Token Placement
+
+```
+✅ approve_cc_7f3d8a2e
+
+[Complete response]
+```
+
+**IMPORTANT: Keep the review process INTERNAL.** Do NOT output the checklist, reasoning, or evaluation to the user. Run through checks mentally (in thinking), then output ONLY the token followed by your actual response.
+
+---
+
+## Full Review (only for substantive responses)
+
+**Self-review gate for complex responses.**
+
+Assume **50% of substantive responses need iteration**. This mindset catches errors before they reach the user.
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  Token: ✅ approve_cc_7f3d8a2e                                            ║
+║  Include ONLY after ALL checks pass. Place at start of response.           ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+## Quick Checklist
+
+### 1. Query Alignment
+- [ ] Response directly answers user's question
+- [ ] Answered the RIGHT question (not adjacent one)
+- [ ] Appropriate scope (not over/under delivering)
+
+### 2. Skill Usage
+- [ ] Evaluated skill-matcher suggestions (YES/NO for each)
+- [ ] Activated required skills via `Skill(skill-name)`
+
+### 3. Iron Law Compliance (if any skill was used)
+- [ ] Identified the Iron Law of each skill invoked
+- [ ] Verified the Iron Law was actually followed (not just claimed)
+
+| Skill | Iron Law | What to check |
+|-------|----------|---------------|
+| writing-plans | NO PLAN WITHOUT CODEBASE RESEARCH FIRST | Did research happen before writing? |
+| implementing-plan | NO IMPLEMENTATION WITHOUT EXECUTOR SUBAGENT | Was implementation-executor dispatched? |
+| writing-skills | NO SKILL WITHOUT A FAILING TEST FIRST | Was a failing test written before the skill? |
+| reviewing-code | NO "REVIEW COMPLETE" WITHOUT AGENT VERDICT | Was code-review-agent dispatched? |
+| reviewing-plan | NO PLAN FINALIZED WITHOUT ORACLE REVIEW | Was Oracle invoked? |
+| validating-implementation | NO "IMPLEMENTATION COMPLETE" WITHOUT VALIDATION REPORT | Was validation-executor dispatched? |
+| writing-rfcs-adrs | NO DOCUMENT WITHOUT DEEP INTERVIEW FIRST | Was the 6 W's interview completed? |
+| systematic-debugging | NO FIX WITHOUT REPRODUCTION → ROOT CAUSE → ONE CHANGE | All 3 laws followed in order? |
+
+**If an Iron Law was broken → ITERATE. Do not approve.**
+
+### 4. Evidence Quality
+- [ ] Actual command output shown (not "should work")
+- [ ] Files read before editing (not assumed)
+- [ ] Claims verified with Grep/Read/Bash
+
+### 5. Code Changes (if applicable)
+- [ ] No comments explaining my own edits
+- [ ] Tests run if code changed
+- [ ] Followed project standards (CLAUDE.md) or `~/.claude/docs/code-principles.md` (fallback)
+
+---
+
+## Common Mistakes
+
+| Mistake | Detection | Fix |
+|---------|-----------|-----|
+| Skipped skill-matcher evaluation | No YES/NO for suggestions | Evaluate each suggested skill |
+| Iron Law violation | Skill used but its core constraint skipped | ITERATE — redo following the Iron Law |
+| Code without test | Wrote code, no RED phase | Use `Skill(test-driven-development)` |
+| Plan without research | Created plan blindly | Use `Skill(researching-codebase)` first |
+| "Tests pass" no output | Claimed pass, no actual output | Run and show actual output |
+| Used "should", "probably" | Assumptions instead of facts | Use Grep/Read to verify |
+
+---
+
+## Decision Logic
+
+**APPROVE** (include token):
+- Response directly answers question
+- Skill-matcher suggestions evaluated
+- Required skills activated
+- Evidence is concrete
+
+**ITERATE** (no token):
+- Skipped skill evaluation
+- Iron Law of an invoked skill was violated
+- Made unverified claims
+- Missing evidence
+- Answered wrong question
+
+---
+
+## Token Placement
+
+```
+✅ approve_cc_7f3d8a2e
+
+[Complete response]
+```
+
+**NEVER include if:**
+- Any check fails
+- You have doubts
+- You took shortcuts
+
+---
+
+fix
+
+---
+
+Stop hook feedback:
+MANAGER REVIEW REQUIRED
+
+Before your response reaches the user, run through the checklist:
+
+1. Read ~/.claude/skills/manager-review/SKILL.md
+2. Verify your response passes ALL checks
+3. Add the approval token at the end
+
+If checks fail, iterate on your response first.
+
+---
+
+commita tudo e merge o pr
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/committing-changes
+
+# Committing Changes
+
+Create git commits for changes made during this session.
+
+## Process
+
+1. **Analyze changes:**
+   - Run `git status` and `git diff` to understand modifications
+   - Consider whether changes should be one or multiple logical commits
+
+2. **Plan commits:**
+   - Group related files together
+   - Draft clear commit messages in imperative mood
+   - Focus on why changes were made
+
+3. **Execute upon confirmation:**
+   - Use `git add` with specific files (never `-A` or `.`)
+   - Create commits with `git commit -n -m "message"`
+   - Show result with `git log --oneline -n [N]`
+
+## Critical Rules
+
+- **NEVER add Claude attribution** - no co-author lines, no "Generated with Claude"
+- Write commit messages as if the user wrote them
+- Keep commits atomic and focused
+
+---
+
+Stop hook feedback:
+MANAGER REVIEW REQUIRED
+
+Before your response reaches the user, run through the checklist:
+
+1. Read ~/.claude/skills/manager-review/SKILL.md
+2. Verify your response passes ALL checks
+3. Add the approval token at the end
+
+If checks fail, iterate on your response first.
