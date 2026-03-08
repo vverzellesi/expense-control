@@ -33,6 +33,7 @@ flowchart TB
         REPORTS["/reports"]
         PROJ["/projection"]
         SIM["/simulador"]
+        SPACE_SET["/spaces/[spaceId]/settings"]
     end
 
     subgraph TX_API["API Transacoes"]
@@ -87,6 +88,16 @@ flowchart TB
         RP8["/api/reports/recurring-growth GET"]
     end
 
+    subgraph SPACE_API["API Espaços Compartilhados"]
+        SP1["/api/spaces GET POST"]
+        SP2["/api/spaces/active GET PUT"]
+        SP3["/api/spaces/active/permissions GET"]
+        SP4["/api/spaces/[spaceId]/members GET"]
+        SP5["/api/spaces/[spaceId]/members/[memberId] PUT DELETE"]
+        SP6["/api/spaces/[spaceId]/invites GET POST"]
+        SP7["/api/spaces/[spaceId]/migrate POST"]
+    end
+
     subgraph MISC_API["API Outros"]
         M1["/api/summary GET"]
         M2["/api/projection GET"]
@@ -109,4 +120,4 @@ flowchart TB
     MW -->|"permite"| AUTH_API
 ```
 
-Mapa completo de rotas: 5 paginas publicas, 14 protegidas, 5 endpoints de API publicos (auth) e 46 protegidos. O middleware NextAuth intercepta todas as requisicoes e redireciona usuarios nao autenticados para /auth/login. Endpoints protegidos tambem validam sessao via getAuthenticatedUserId().
+Mapa completo de rotas: 5 páginas públicas, 15 protegidas, 5 endpoints de API públicos (auth) e 53 protegidos (incluindo 7 de espaços compartilhados). O middleware NextAuth intercepta todas as requisições e redireciona usuários não autenticados para /auth/login. Endpoints protegidos também validam sessão via getAuthenticatedUserId(). As APIs de espaços compartilhados gerenciam criação de espaços, alternância de contexto (active), permissões por role, membros, convites e migração de dados pessoais para o espaço.
