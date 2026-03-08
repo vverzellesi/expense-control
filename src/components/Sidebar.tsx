@@ -27,6 +27,8 @@ import {
   Calculator,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
+import { SpaceSwitcher } from "@/components/SpaceSwitcher";
+import { PendingInvites } from "@/components/PendingInvites";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -102,6 +104,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </button>
         )}
       </div>
+      <SpaceSwitcher />
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navigation.map((item) => {
           const isActive =
@@ -132,6 +135,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           );
         })}
       </nav>
+      <div className="border-t px-3 py-2">
+        <PendingInvites />
+      </div>
       <div className="border-t p-3">
         <button
           onClick={() => {
