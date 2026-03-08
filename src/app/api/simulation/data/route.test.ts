@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Use vi.hoisted so these are available in vi.mock factories (which are hoisted)
-const { mockTransaction, mockRecurringExpense, mockGetAuth } = vi.hoisted(
+const { mockTransaction, mockRecurringExpense, mockGetAuthContext } = vi.hoisted(
   () => ({
     mockTransaction: {
       findMany: vi.fn(),
@@ -10,18 +10,22 @@ const { mockTransaction, mockRecurringExpense, mockGetAuth } = vi.hoisted(
     mockRecurringExpense: {
       findMany: vi.fn(),
     },
-    mockGetAuth: vi.fn(),
+    mockGetAuthContext: vi.fn(),
   })
 );
 
 vi.mock("@/lib/auth-utils", () => ({
-  getAuthenticatedUserId: mockGetAuth,
+  getAuthContext: mockGetAuthContext,
   unauthorizedResponse: () => {
     const { NextResponse } = require("next/server");
     return NextResponse.json(
       { error: "Nao autorizado. Faca login para continuar." },
       { status: 401 }
     );
+  },
+  forbiddenResponse: () => {
+    const { NextResponse } = require("next/server");
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   },
 }));
 
@@ -33,6 +37,13 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { GET } from "./route";
+
+const defaultAuthContext = {
+  userId: "user-1",
+  spaceId: null,
+  permissions: null,
+  ownerFilter: { userId: "user-1" },
+};
 
 describe("GET /api/simulation/data", () => {
   beforeEach(() => {
@@ -46,14 +57,14 @@ describe("GET /api/simulation/data", () => {
   });
 
   it("returns 401 for unauthenticated requests", async () => {
-    mockGetAuth.mockRejectedValue(new Error("Unauthorized"));
+    mockGetAuthContext.mockRejectedValue(new Error("Unauthorized"));
 
     const response = await GET();
     expect(response.status).toBe(401);
   });
 
   it("returns averageIncome calculated from last 3 months of income", async () => {
-    mockGetAuth.mockResolvedValue("user-1");
+    mockGetAuthContext.mockResolvedValue(defaultAuthContext);
 
     // Income: Nov 2025 = 5000, Dec 2025 = 6000, Jan 2026 = 7000
     mockTransaction.findMany.mockImplementation(
@@ -80,7 +91,7 @@ describe("GET /api/simulation/data", () => {
   });
 
   it("returns 12 months of baseline data starting from current month", async () => {
-    mockGetAuth.mockResolvedValue("user-1");
+    mockGetAuthContext.mockResolvedValue(defaultAuthContext);
 
     mockTransaction.findMany.mockResolvedValue([]);
     mockRecurringExpense.findMany.mockResolvedValue([]);
@@ -100,7 +111,7 @@ describe("GET /api/simulation/data", () => {
   });
 
   it("includes recurring expenses in each month's currentExpenses", async () => {
-    mockGetAuth.mockResolvedValue("user-1");
+    mockGetAuthContext.mockResolvedValue(defaultAuthContext);
 
     mockTransaction.findMany.mockResolvedValue([]);
     mockRecurringExpense.findMany.mockResolvedValue([
@@ -132,7 +143,7 @@ describe("GET /api/simulation/data", () => {
   });
 
   it("includes installments in correct months", async () => {
-    mockGetAuth.mockResolvedValue("user-1");
+    mockGetAuthContext.mockResolvedValue(defaultAuthContext);
 
     mockTransaction.findMany.mockImplementation(
       async (args: { where: { type?: string; isInstallment?: boolean; installmentId?: unknown } }) => {
@@ -171,7 +182,7 @@ describe("GET /api/simulation/data", () => {
   });
 
   it("returns averageIncome 0 when no income exists", async () => {
-    mockGetAuth.mockResolvedValue("user-1");
+    mockGetAuthContext.mockResolvedValue(defaultAuthContext);
 
     mockTransaction.findMany.mockResolvedValue([]);
     mockRecurringExpense.findMany.mockResolvedValue([]);

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const simulations = await prisma.simulation.findMany({
-      where: { userId },
+      where: { userId: ctx.userId },
       include: { category: true },
       orderBy: { createdAt: "desc" },
     });
@@ -18,6 +18,9 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching simulations:", error);
     return NextResponse.json({ error: "Erro ao buscar simulações" }, { status: 500 });
   }
@@ -25,7 +28,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
 
     const { description, totalAmount, totalInstallments, categoryId } = body;
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
         totalAmount: parsedAmount,
         totalInstallments: parsedInstallments,
         categoryId: categoryId || null,
-        userId,
+        userId: ctx.userId,
       },
       include: { category: true },
     });
@@ -62,6 +65,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating simulation:", error);
     return NextResponse.json({ error: "Erro ao criar simulação" }, { status: 500 });

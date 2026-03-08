@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -19,8 +19,9 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get("tag");
     const includeDeleted = searchParams.get("includeDeleted");
 
-    const where: Record<string, unknown> = {
-      userId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      ...ctx.ownerFilter,
     };
 
     // By default, exclude soft-deleted transactions
@@ -90,6 +91,59 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    // In space context with LIMITED role, only show own transactions
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
+      where.createdByUserId = ctx.userId;
+    }
+
+    // In space context, also include personal non-private transactions from members
+    if (ctx.spaceId) {
+      const memberIds = await prisma.spaceMember.findMany({
+        where: { spaceId: ctx.spaceId },
+        select: { userId: true },
+      });
+      const memberUserIds = memberIds.map(m => m.userId);
+
+      // Extract non-ownership filters to apply to both branches of OR
+      const { spaceId: _spaceId, createdByUserId, ...otherFilters } = where;
+
+      // Build OR condition for space context
+      const orConditions: Record<string, unknown>[] = [
+        { spaceId: ctx.spaceId }, // direct space transactions
+        {
+          userId: { in: memberUserIds },
+          spaceId: null,
+          isPrivate: false,
+        }, // personal non-private from members
+      ];
+
+      // If LIMITED role, further restrict the OR conditions
+      if (createdByUserId) {
+        orConditions[0] = { ...orConditions[0], createdByUserId };
+        orConditions[1] = { ...orConditions[1], userId: createdByUserId };
+      }
+
+      // Reconstruct where with OR
+      const newWhere: Record<string, unknown> = {
+        OR: orConditions,
+        ...otherFilters,
+      };
+
+      const transactions = await prisma.transaction.findMany({
+        where: newWhere,
+        include: {
+          category: true,
+          categoryTag: true,
+          installment: true,
+        },
+        orderBy: {
+          date: "desc",
+        },
+      });
+
+      return NextResponse.json(transactions);
+    }
+
     const transactions = await prisma.transaction.findMany({
       where,
       include: {
@@ -107,6 +161,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
       { error: "Erro ao buscar transacoes" },
@@ -117,7 +174,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const {
       description,
@@ -150,7 +207,8 @@ export async function POST(request: NextRequest) {
           installmentAmount: installmentAmount || Math.abs(amount),
           startDate: new Date(date + "T12:00:00"),
           origin,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
         },
       });
 
@@ -174,7 +232,9 @@ export async function POST(request: NextRequest) {
             installmentId: installment.id,
             currentInstallment: i + 1,
             tags: processedTags,
-            userId,
+            userId: ctx.userId,
+            spaceId: ctx.spaceId,
+            createdByUserId: ctx.userId,
           },
           include: {
             category: true,
@@ -197,7 +257,9 @@ export async function POST(request: NextRequest) {
           isFixed: isFixed || false,
           isInstallment: false,
           tags: processedTags,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
         },
         include: {
           category: true,
@@ -209,6 +271,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating transaction:", error);
     return NextResponse.json(

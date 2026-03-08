@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 interface PatternMatch {
   description: string;
@@ -34,7 +34,7 @@ function normalizeDescription(desc: string): string {
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     // Get the last 6 months of transactions
     const sixMonthsAgo = new Date();
@@ -46,7 +46,7 @@ export async function GET() {
         type: "EXPENSE",
         isInstallment: false,
         recurringExpenseId: null,
-        userId,
+        ...ctx.ownerFilter,
       },
       include: {
         category: true,
@@ -58,7 +58,7 @@ export async function GET() {
 
     // Get existing recurring expenses to exclude from suggestions
     const existingRecurring = await prisma.recurringExpense.findMany({
-      where: { userId },
+      where: { ...ctx.ownerFilter },
       select: { description: true },
     });
     const existingDescriptions = new Set(
@@ -133,7 +133,13 @@ export async function GET() {
     suggestions.sort((a, b) => b.occurrences - a.occurrences);
 
     return NextResponse.json(suggestions.slice(0, 10));
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }

@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
     const recurringExpense = await prisma.recurringExpense.findUnique({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         category: true,
         transactions: {
@@ -29,7 +29,13 @@ export async function GET(
     }
 
     return NextResponse.json(recurringExpense);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }
@@ -39,14 +45,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
     const body = await request.json();
     const { description, defaultAmount, dayOfMonth, type, origin, categoryId, isActive, autoGenerate } = body;
 
     const recurringExpense = await prisma.recurringExpense.update({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       data: {
         description,
         defaultAmount: Math.abs(defaultAmount),
@@ -63,7 +69,13 @@ export async function PUT(
     });
 
     return NextResponse.json(recurringExpense);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }
@@ -73,23 +85,29 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
 
     // First, unlink all transactions from this recurring expense
     await prisma.transaction.updateMany({
-      where: { recurringExpenseId: id, userId },
+      where: { recurringExpenseId: id, ...ctx.ownerFilter },
       data: { recurringExpenseId: null },
     });
 
     // Then delete the recurring expense
     await prisma.recurringExpense.delete({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }

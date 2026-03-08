@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { BillPaymentType } from "@/types";
 import { generateBillPaymentTransactions } from "@/lib/bill-payment-transactions";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const origin = searchParams.get("origin");
 
     const where: Record<string, unknown> = {
-      userId,
+      userId: ctx.userId,
     };
 
     if (month) {
@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching bill payments:", error);
     return NextResponse.json(
       { error: "Erro ao buscar pagamentos de fatura" },
@@ -54,7 +57,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const {
       billMonth,
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
     // Check for duplicate bill payment
     const existingPayment = await prisma.billPayment.findFirst({
       where: {
-        userId,
+        userId: ctx.userId,
         billMonth,
         billYear,
         origin,
@@ -147,7 +150,7 @@ export async function POST(request: NextRequest) {
       paymentType,
       installments,
       interestRate,
-      userId,
+      userId: ctx.userId,
     });
 
     // Create bill payment record with generated transaction IDs
@@ -165,7 +168,7 @@ export async function POST(request: NextRequest) {
         entryTransactionId: transactionResult.entryTransactionId,
         carryoverTransactionId: transactionResult.carryoverTransactionId || null,
         installmentId: transactionResult.installmentId || null,
-        userId,
+        userId: ctx.userId,
       },
       include: {
         installment: true,
@@ -176,6 +179,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating bill payment:", error);
     return NextResponse.json(

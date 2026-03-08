@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import {
   isCarryoverTransaction,
   findMatchingBillPayment,
@@ -33,7 +33,7 @@ function matchesRecurring(
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const { transactions, origin } = body;
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     // Fetch ALL active recurring expenses for matching (not just autoGenerate=false)
     const recurringToMatch = await prisma.recurringExpense.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         isActive: true,
       },
       include: {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     // Fetch user's category tags for validation
     const userTagIds = new Set(
       (await prisma.categoryTag.findMany({
-        where: { userId },
+        where: { ...ctx.ownerFilter },
         select: { id: true, categoryId: true },
       })).map(t => `${t.id}:${t.categoryId}`)
     );
@@ -165,7 +165,9 @@ export async function POST(request: NextRequest) {
 
       const transaction = await prisma.transaction.create({
         data: {
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
           description: t.description,
           amount,
           date: transactionDate,
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest) {
             month: transactionMonth + 1, // Convert from 0-indexed to 1-indexed
             year: transactionYear,
             amount: Math.abs(amount),
-            userId,
+            userId: ctx.userId,
           });
 
           if (matchingBillPayment) {
@@ -264,6 +266,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error importing transactions:", error);
     return NextResponse.json(

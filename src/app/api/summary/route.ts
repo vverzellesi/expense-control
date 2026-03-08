@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 // Helper to get Monday of a given week
 function getMondayOfWeek(date: Date): Date {
@@ -192,7 +192,7 @@ function calculatePartialPaymentAdjustment(
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -251,7 +251,7 @@ export async function GET(request: NextRequest) {
       // Query 1: All transactions for 6 months with category and installment info
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           date: {
             gte: sixMonthsAgo,
             lte: endDate,
@@ -267,14 +267,14 @@ export async function GET(request: NextRequest) {
 
       // Query 2: Active budgets with category
       prisma.budget.findMany({
-        where: { userId, isActive: true },
+        where: { ...ctx.ownerFilter, isActive: true },
         include: { category: true },
       }),
 
       // Query 3: Fixed expenses (distinct by description)
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           isFixed: true,
           type: "EXPENSE",
           deletedAt: null,
@@ -289,7 +289,7 @@ export async function GET(request: NextRequest) {
       // Query 4: Future grouped installments (next 3 months)
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           isInstallment: true,
           installmentId: { not: null },
           date: {
@@ -310,7 +310,7 @@ export async function GET(request: NextRequest) {
       // Query 5: Standalone installments for projection
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           isInstallment: true,
           installmentId: null,
           totalInstallments: { not: null },
@@ -324,13 +324,13 @@ export async function GET(request: NextRequest) {
 
       // Query 6: Savings goal setting
       prisma.settings.findUnique({
-        where: { key_userId: { key: "savingsGoal", userId } },
+        where: { key_userId: { key: "savingsGoal", userId: ctx.userId } },
       }),
 
       // Query 7: Bill payments for 6 months (for partial payment adjustments)
       prisma.billPayment.findMany({
         where: {
-          userId,
+          userId: ctx.userId,
           billYear: {
             gte: sixMonthsAgo.getFullYear(),
             lte: targetYear,
@@ -574,7 +574,7 @@ export async function GET(request: NextRequest) {
             month_year_userId: {
               month: targetMonth,
               year: targetYear,
-              userId,
+              userId: ctx.userId,
             },
           },
           update: {
@@ -584,7 +584,7 @@ export async function GET(request: NextRequest) {
             percentage: (currentSavings / savingsGoal) * 100,
           },
           create: {
-            userId,
+            userId: ctx.userId,
             month: targetMonth,
             year: targetYear,
             goal: savingsGoal,
@@ -688,6 +688,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching summary:", error);
     return NextResponse.json(

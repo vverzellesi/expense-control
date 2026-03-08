@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 interface CategorySummary {
   id: string;
@@ -31,12 +31,12 @@ interface InvestmentSummaryResponse {
 
 export async function GET(): Promise<NextResponse<InvestmentSummaryResponse | { error: string }>> {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     // Fetch all investments for the user
     const investments = await prisma.investment.findMany({
       where: {
-        userId,
+        userId: ctx.userId,
       },
       include: {
         category: true,
@@ -116,6 +116,9 @@ export async function GET(): Promise<NextResponse<InvestmentSummaryResponse | { 
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching investment summary:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";

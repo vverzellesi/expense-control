@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { Prisma } from "@prisma/client";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const origins = await prisma.origin.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
       },
       orderBy: {
         name: "asc",
@@ -21,6 +21,9 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching origins:", error);
     return NextResponse.json(
       { error: "Erro ao buscar origens" },
@@ -31,7 +34,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { name } = body;
@@ -48,7 +51,8 @@ export async function POST(request: NextRequest) {
     const origin = await prisma.origin.create({
       data: {
         name: trimmedName,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
     });
 
@@ -56,6 +60,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -76,7 +83,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
@@ -102,7 +109,7 @@ export async function PUT(request: NextRequest) {
 
     // Fetch current origin to get old name
     const currentOrigin = await prisma.origin.findUnique({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!currentOrigin) {
@@ -117,13 +124,13 @@ export async function PUT(request: NextRequest) {
     // Use transaction to update origin and all related transactions
     const origin = await prisma.$transaction(async (tx) => {
       const updated = await tx.origin.update({
-        where: { id, userId },
+        where: { id, ...ctx.ownerFilter },
         data: { name: trimmedName },
       });
 
       // Update all transactions with the old origin name
       await tx.transaction.updateMany({
-        where: { origin: oldName, userId },
+        where: { origin: oldName, ...ctx.ownerFilter },
         data: { origin: trimmedName },
       });
 
@@ -134,6 +141,9 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -154,7 +164,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
@@ -168,7 +178,7 @@ export async function DELETE(request: NextRequest) {
 
     // Check if origin exists
     const origin = await prisma.origin.findUnique({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!origin) {
@@ -179,13 +189,16 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.origin.delete({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting origin:", error);
     return NextResponse.json(
