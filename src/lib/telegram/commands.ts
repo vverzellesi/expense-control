@@ -3,14 +3,22 @@ import {
   sendMessage,
   answerCallbackQuery,
   editMessageText,
+  getFile,
+  downloadFile,
   type TelegramMessage,
   type TelegramCallbackQuery,
   type InlineKeyboardButton,
 } from "./client"
 import { parseExpenseMessage } from "./parser"
+import { parseCSV } from "@/lib/csv-parser"
 import { suggestCategory } from "@/lib/categorizer"
 import { findDuplicate } from "@/lib/dedup"
 import { formatCurrency } from "@/lib/utils"
+import {
+  handleSummaryQuery,
+  handleCategoryQuery,
+  handleTransactionsQuery,
+} from "./queries"
 
 export async function handleStartCommand(
   message: TelegramMessage,
@@ -97,12 +105,19 @@ export async function handleUnlinkCommand(
   )
 }
 
-// Stub — full implementation in Phase 5
 export async function handleMenuCommand(
   chatId: number,
   userId: string
 ) {
-  return sendMessage(chatId, "Menu em construção.")
+  return sendMessage(chatId, "📊 MyPocket - Menu", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📈 Resumo do mês", callback_data: "summary:0" }],
+        [{ text: "🏷️ Gastos por categoria", callback_data: "categories:0" }],
+        [{ text: "📋 Últimas transações", callback_data: "txns:0" }],
+      ],
+    },
+  })
 }
 
 export async function handleCallbackQuery(
@@ -135,8 +150,30 @@ export async function handleCallbackQuery(
     return handleSetCategory(chatId, messageId, categoryId)
   }
 
+  if (data.startsWith("csv_confirm:")) {
+    const importKey = data.replace("csv_confirm:", "")
+    return handleCsvConfirm(chatId, messageId, userId, importKey)
+  }
+
   if (data.startsWith("csv_cancel:")) {
     return editMessageText(chatId, messageId, "Importação cancelada.")
+  }
+
+  if (data.startsWith("summary:")) {
+    return handleSummaryQuery(chatId, userId)
+  }
+
+  if (data.startsWith("categories:")) {
+    return handleCategoryQuery(chatId, userId)
+  }
+
+  if (data.startsWith("txns:")) {
+    const offset = parseInt(data.replace("txns:", "")) || 0
+    return handleTransactionsQuery(chatId, userId, offset)
+  }
+
+  if (data.startsWith("menu:")) {
+    return handleMenuCommand(chatId, userId)
   }
 }
 
@@ -342,13 +379,182 @@ async function handleSetCategory(
   )
 }
 
-// Stub — full implementation in Phase 5
 export async function handleDocumentMessage(
   message: TelegramMessage,
   userId: string
 ) {
-  return sendMessage(
-    message.chat.id,
-    "Importação de CSV em construção. Envie /menu para outras opções."
+  const chatId = message.chat.id
+  const doc = message.document
+
+  if (!doc) return
+
+  // Check file extension
+  const fileName = doc.file_name || ""
+  if (!fileName.toLowerCase().endsWith(".csv")) {
+    return sendMessage(chatId, "Apenas arquivos CSV são suportados.")
+  }
+
+  // Check file size (max 5MB to be safe)
+  if (doc.file_size && doc.file_size > 5 * 1024 * 1024) {
+    return sendMessage(chatId, "Arquivo muito grande. Máximo 5MB.")
+  }
+
+  try {
+    // Download file
+    const filePath = await getFile(doc.file_id)
+    if (!filePath) {
+      return sendMessage(chatId, "Erro ao acessar o arquivo.")
+    }
+
+    const content = await downloadFile(filePath)
+
+    // Parse CSV
+    const origin = "Telegram"
+    const parsed = await parseCSV(content, origin)
+
+    if (parsed.length === 0) {
+      return sendMessage(chatId, "Nenhuma transação encontrada no arquivo.")
+    }
+
+    // Check for duplicates
+    let duplicateCount = 0
+    const uniqueTransactions: typeof parsed = []
+
+    for (const t of parsed) {
+      const amount = t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount)
+      const dup = await findDuplicate({
+        userId,
+        description: t.description,
+        amount,
+        date: t.date,
+      })
+      if (dup) {
+        duplicateCount++
+      } else {
+        uniqueTransactions.push(t)
+      }
+    }
+
+    if (uniqueTransactions.length === 0) {
+      return sendMessage(
+        chatId,
+        `Todas as ${parsed.length} transações já existem no sistema.`
+      )
+    }
+
+    // Store for confirmation in database
+    // Clean expired entries first
+    await prisma.telegramPendingImport.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+
+    const pendingImport = await prisma.telegramPendingImport.create({
+      data: {
+        userId,
+        chatId: String(chatId),
+        payload: JSON.stringify(uniqueTransactions.map(t => ({
+          description: t.description,
+          amount: t.amount,
+          date: t.date,
+          categoryId: t.suggestedCategoryId || null,
+          isInstallment: t.isInstallment || false,
+          currentInstallment: t.currentInstallment || null,
+          totalInstallments: t.totalInstallments || null,
+          type: t.type || "EXPENSE",
+        }))),
+        origin,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    })
+
+    const summaryLines = [
+      `📄 Arquivo: ${fileName}`,
+      `📊 ${parsed.length} transações encontradas`,
+    ]
+    if (duplicateCount > 0) {
+      summaryLines.push(`⚠️ ${duplicateCount} duplicatas ignoradas`)
+    }
+    summaryLines.push(`✅ ${uniqueTransactions.length} prontas para importar`)
+
+    return sendMessage(chatId, summaryLines.join("\n"), {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Importar", callback_data: `csv_confirm:${pendingImport.id}` },
+            { text: "❌ Cancelar", callback_data: `csv_cancel:0` },
+          ],
+        ],
+      },
+    })
+  } catch (error) {
+    console.error("CSV import error:", error)
+    return sendMessage(
+      chatId,
+      "Erro ao processar o arquivo. Verifique se é um CSV válido (C6, Itaú ou BTG)."
+    )
+  }
+}
+
+export async function handleCsvConfirm(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date()) {
+    if (pending) await prisma.telegramPendingImport.delete({ where: { id: importId } })
+    return editMessageText(chatId, messageId, "Importação expirada. Envie o arquivo novamente.")
+  }
+
+  await prisma.telegramPendingImport.delete({ where: { id: importId } })
+
+  const transactions = JSON.parse(pending.payload) as Array<{
+    description: string
+    amount: number
+    date: string | Date
+    categoryId: string | null
+    isInstallment: boolean
+    currentInstallment: number | null
+    totalInstallments: number | null
+    type: string
+  }>
+
+  let importedCount = 0
+  for (const t of transactions) {
+    const type = t.type || "EXPENSE"
+    let amount = t.amount
+    if (type === "EXPENSE" && amount > 0) amount = -amount
+    else if (type === "INCOME" && amount < 0) amount = Math.abs(amount)
+
+    const dateStr = typeof t.date === "string" && !(t.date as string).includes("T")
+      ? t.date + "T12:00:00"
+      : t.date
+    const transactionDate = new Date(dateStr)
+
+    await prisma.transaction.create({
+      data: {
+        userId,
+        description: t.description,
+        amount,
+        date: transactionDate,
+        type,
+        origin: pending!.origin,
+        categoryId: t.categoryId,
+        isFixed: false,
+        isInstallment: t.isInstallment,
+        currentInstallment: t.currentInstallment,
+        totalInstallments: t.totalInstallments,
+      },
+    })
+    importedCount++
+  }
+
+  return editMessageText(
+    chatId,
+    messageId,
+    `✅ ${importedCount} transações importadas com sucesso!`
   )
 }
