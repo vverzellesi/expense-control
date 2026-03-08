@@ -29,16 +29,24 @@ import {
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { PendingInvites } from "@/components/PendingInvites";
+import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 
-const navigation = [
+type PermissionKey = "canViewInvestments" | "canViewBudgets" | "canViewIncomes";
+
+const navigation: {
+  name: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  requiredPermission?: PermissionKey;
+}[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Transações", href: "/transactions", icon: Receipt },
-  { name: "Investimentos", href: "/investments", icon: TrendingUp },
+  { name: "Investimentos", href: "/investments", icon: TrendingUp, requiredPermission: "canViewInvestments" },
   { name: "Faturas", href: "/bills", icon: FileText },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },
   { name: "Parcelas", href: "/installments", icon: CreditCard },
-  { name: "Projeção", href: "/projection", icon: BarChart3 },
-  { name: "Simulador", href: "/simulador", icon: Calculator },
+  { name: "Projeção", href: "/projection", icon: BarChart3, requiredPermission: "canViewBudgets" },
+  { name: "Simulador", href: "/simulador", icon: Calculator, requiredPermission: "canViewBudgets" },
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Categorias", href: "/categories", icon: Tags },
   { name: "Relatórios", href: "/reports", icon: PieChart },
@@ -53,8 +61,14 @@ interface SidebarProps {
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const permissions = useSpacePermissions();
   const [alertCount, setAlertCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const filteredNavigation = navigation.filter((item) => {
+    if (!item.requiredPermission) return true;
+    return permissions[item.requiredPermission];
+  });
 
   useEffect(() => {
     async function fetchAlerts() {
@@ -106,7 +120,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </div>
       <SpaceSwitcher />
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navigation.map((item) => {
+        {filteredNavigation.map((item) => {
           const isActive =
             pathname === item.href ||
             pathname.startsWith(item.href + "/");
