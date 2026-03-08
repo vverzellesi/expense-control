@@ -142,12 +142,12 @@ export async function handleCallbackQuery(
   }
 
   if (data.startsWith("change_cat:")) {
-    return handleShowCategories(chatId, messageId, userId)
+    return handleShowCategories(chatId, messageId, userId, query.message)
   }
 
   if (data.startsWith("set_cat:")) {
     const categoryId = data.replace("set_cat:", "")
-    return handleSetCategory(chatId, messageId, categoryId)
+    return handleSetCategory(chatId, messageId, categoryId, query.message)
   }
 
   if (data.startsWith("csv_confirm:")) {
@@ -310,7 +310,8 @@ async function handleConfirmExpense(
 async function handleShowCategories(
   chatId: number,
   messageId: number,
-  userId: string
+  userId: string,
+  currentMessage?: TelegramMessage
 ) {
   const categories = await prisma.category.findMany({
     where: { userId },
@@ -319,6 +320,17 @@ async function handleShowCategories(
 
   if (categories.length === 0) {
     return editMessageText(chatId, messageId, "Nenhuma categoria cadastrada.")
+  }
+
+  // Preserve expense data lines for when a category is selected
+  let expenseLines = ""
+  const msgText = currentMessage?.text || ""
+  const descLine = msgText.split("\n").find(l => l.startsWith("📝"))
+  const amountLine = msgText.split("\n").find(l => l.startsWith("💰"))
+  const dateLine = msgText.split("\n").find(l => l.startsWith("📅"))
+
+  if (descLine && amountLine && dateLine) {
+    expenseLines = `\n${descLine}\n${amountLine}\n${dateLine}`
   }
 
   // Build keyboard with categories (max 2 per row)
@@ -338,7 +350,7 @@ async function handleShowCategories(
 
   keyboard.push([{ text: "❌ Cancelar", callback_data: "cancel:0" }])
 
-  return editMessageText(chatId, messageId, "Selecione a categoria:", {
+  return editMessageText(chatId, messageId, `Selecione a categoria:${expenseLines}`, {
     reply_markup: { inline_keyboard: keyboard },
   })
 }
@@ -346,7 +358,8 @@ async function handleShowCategories(
 async function handleSetCategory(
   chatId: number,
   messageId: number,
-  categoryId: string
+  categoryId: string,
+  currentMessage?: TelegramMessage
 ) {
   const category = await prisma.category.findUnique({
     where: { id: categoryId },
@@ -356,7 +369,17 @@ async function handleSetCategory(
     return editMessageText(chatId, messageId, "Categoria não encontrada.")
   }
 
-  // Store selected category in callback data for confirm action
+  // Preserve original expense data lines from the message history
+  let expenseLines = ""
+  const msgText = currentMessage?.text || ""
+  const descLine = msgText.split("\n").find(l => l.startsWith("📝"))
+  const amountLine = msgText.split("\n").find(l => l.startsWith("💰"))
+  const dateLine = msgText.split("\n").find(l => l.startsWith("📅"))
+
+  if (descLine && amountLine && dateLine) {
+    expenseLines = `${descLine}\n${amountLine}\n${dateLine}\n`
+  }
+
   const confirmData = `confirm:${categoryId}`
   const changeCatData = `change_cat:0`
   const cancelData = `cancel:0`
@@ -364,7 +387,7 @@ async function handleSetCategory(
   return editMessageText(
     chatId,
     messageId,
-    `Categoria selecionada: ${category.name}\n\nClique em Confirmar para registrar com esta categoria.`,
+    `Nova despesa:\n${expenseLines}🏷️ ${category.name}`,
     {
       reply_markup: {
         inline_keyboard: [
