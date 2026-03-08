@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 // GET - List savings history
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const limit = searchParams.get("limit");
 
     const history = await prisma.savingsHistory.findMany({
       where: {
-        userId,
+        userId: ctx.userId,
       },
       orderBy: [
         { year: "desc" },
@@ -26,6 +26,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching savings history:", error);
     return NextResponse.json(
       { error: "Erro ao buscar historico de economia" },
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
 // POST - Record/update savings for a month
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { month, year, goal, actual } = body;
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
         month_year_userId: {
           month,
           year,
-          userId,
+          userId: ctx.userId,
         },
       },
       update: {
@@ -73,7 +76,7 @@ export async function POST(request: NextRequest) {
         actual,
         isAchieved,
         percentage,
-        userId,
+        userId: ctx.userId,
       },
     });
 
@@ -81,6 +84,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error saving savings history:", error);
     return NextResponse.json(

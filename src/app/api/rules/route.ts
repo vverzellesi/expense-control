@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { invalidateRulesCache } from "@/lib/categorizer";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const rules = await prisma.categoryRule.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
       },
       include: {
         category: true,
@@ -24,6 +24,9 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching rules:", error);
     return NextResponse.json(
       { error: "Erro ao buscar regras" },
@@ -34,7 +37,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { keyword, categoryId } = body;
@@ -50,7 +53,8 @@ export async function POST(request: NextRequest) {
       data: {
         keyword: keyword.toUpperCase(),
         categoryId,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
       include: {
         category: true,
@@ -64,6 +68,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error creating rule:", error);
     return NextResponse.json(
       { error: "Erro ao criar regra" },
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
@@ -87,7 +94,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.categoryRule.delete({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     invalidateRulesCache();
@@ -96,6 +103,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting rule:", error);
     return NextResponse.json(

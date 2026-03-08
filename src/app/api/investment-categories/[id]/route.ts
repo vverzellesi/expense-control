@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
 
@@ -37,7 +37,7 @@ export async function DELETE(
     }
 
     // Cannot delete categories that belong to other users
-    if (category.userId !== userId) {
+    if (category.userId !== ctx.userId) {
       return NextResponse.json(
         { error: "Voce nao tem permissao para excluir esta categoria" },
         { status: 403 }
@@ -60,6 +60,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting investment category:", error);
     return NextResponse.json(
