@@ -6,6 +6,7 @@ import {
   findMatchingBillPayment,
   calculateInterest,
 } from "@/lib/carryover-detector";
+import { findDuplicate } from "@/lib/dedup";
 
 // Normalize text for matching (lowercase, remove accents)
 function normalizeText(text: string): string {
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
 
     const created = [];
     let linkedCount = 0;
+    let skippedCount = 0;
     let carryoverLinkedCount = 0;
     const linkedCarryovers: Array<{
       transactionId: string;
@@ -152,6 +154,18 @@ export async function POST(request: NextRequest) {
         }
       } else {
         linkedCount++;
+      }
+
+      // Check for duplicate transaction
+      const duplicate = await findDuplicate({
+        userId,
+        description: t.description,
+        amount,
+        date: transactionDate,
+      });
+      if (duplicate) {
+        skippedCount++;
+        continue;
       }
 
       // Validate frontend-provided categoryTagId belongs to user and matches category
@@ -240,6 +254,9 @@ export async function POST(request: NextRequest) {
 
     // Build response message
     const messageParts = [`${created.length} transacoes importadas`];
+    if (skippedCount > 0) {
+      messageParts.push(`${skippedCount} duplicatas ignoradas`);
+    }
     if (linkedCount > 0) {
       messageParts.push(`${linkedCount} vinculadas a recorrentes`);
     }
@@ -247,7 +264,7 @@ export async function POST(request: NextRequest) {
       messageParts.push(`${carryoverLinkedCount} vinculadas a saldo rolado`);
     }
     const message =
-      linkedCount > 0 || carryoverLinkedCount > 0
+      skippedCount > 0 || linkedCount > 0 || carryoverLinkedCount > 0
         ? `${messageParts[0]} (${messageParts.slice(1).join(", ")})`
         : `${created.length} transacoes importadas com sucesso`;
 
@@ -255,6 +272,7 @@ export async function POST(request: NextRequest) {
       {
         message,
         count: created.length,
+        skippedCount,
         linkedCount,
         carryoverLinkedCount,
         linkedCarryovers,
