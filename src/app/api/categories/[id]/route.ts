@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
     const category = await prisma.category.findUnique({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         _count: {
           select: { transactions: true },
@@ -31,6 +31,9 @@ export async function GET(
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching category:", error);
     return NextResponse.json(
       { error: "Erro ao buscar categoria" },
@@ -44,14 +47,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
     const body = await request.json();
     const { name, color, icon } = body;
 
     const category = await prisma.category.update({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       data: {
         name,
         color,
@@ -63,6 +66,9 @@ export async function PUT(
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error updating category:", error);
     return NextResponse.json(
@@ -77,13 +83,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const { id } = await params;
 
     // Check if category has transactions
     const category = await prisma.category.findUnique({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         _count: {
           select: { transactions: true },
@@ -106,13 +112,16 @@ export async function DELETE(
     }
 
     await prisma.category.delete({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting category:", error);
     return NextResponse.json(

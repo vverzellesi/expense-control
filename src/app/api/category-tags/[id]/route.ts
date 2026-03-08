@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { invalidateTagsCache } from "@/lib/categorizer";
 
 export async function PUT(
@@ -8,7 +8,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const { name, keywords } = body;
@@ -22,7 +22,7 @@ export async function PUT(
 
     // Verify tag belongs to user
     const existing = await prisma.categoryTag.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existing) {
@@ -49,6 +49,9 @@ export async function PUT(
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error updating category tag:", error);
     return NextResponse.json(
       { error: "Erro ao atualizar tag de categoria" },
@@ -62,12 +65,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     // Verify tag belongs to user
     const existing = await prisma.categoryTag.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existing) {
@@ -87,6 +90,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting category tag:", error);
     return NextResponse.json(

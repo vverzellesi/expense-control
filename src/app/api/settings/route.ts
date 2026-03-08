@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const key = searchParams.get("key");
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         where: {
           key_userId: {
             key,
-            userId,
+            userId: ctx.userId,
           },
         },
       });
@@ -23,13 +23,16 @@ export async function GET(request: NextRequest) {
 
     const settings = await prisma.settings.findMany({
       where: {
-        userId,
+        userId: ctx.userId,
       },
     });
     return NextResponse.json(settings);
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching settings:", error);
     return NextResponse.json(
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { key, value } = body;
@@ -57,17 +60,20 @@ export async function POST(request: NextRequest) {
       where: {
         key_userId: {
           key,
-          userId,
+          userId: ctx.userId,
         },
       },
       update: { value: String(value) },
-      create: { key, value: String(value), userId },
+      create: { key, value: String(value), userId: ctx.userId },
     });
 
     return NextResponse.json(setting);
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error saving setting:", error);
     return NextResponse.json(
@@ -79,7 +85,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const key = searchParams.get("key");
@@ -94,7 +100,7 @@ export async function DELETE(request: NextRequest) {
     await prisma.settings.deleteMany({
       where: {
         key,
-        userId,
+        userId: ctx.userId,
       },
     });
 
@@ -102,6 +108,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting setting:", error);
     return NextResponse.json(

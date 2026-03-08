@@ -39,14 +39,17 @@ import {
   PiggyBank,
   Pencil,
   Trash2,
+  ShieldAlert,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 import type { Investment, InvestmentCategory, InvestmentSummary } from "@/types";
 
 type SortOption = "name" | "value" | "return" | "recent";
 
 export default function InvestmentsPage() {
   const { toast } = useToast();
+  const permissions = useSpacePermissions();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [categories, setCategories] = useState<InvestmentCategory[]>([]);
   const [summary, setSummary] = useState<InvestmentSummary | null>(null);
@@ -338,6 +341,18 @@ export default function InvestmentsPage() {
 
   const sortedInvestments = getSortedInvestments();
   const isPositiveReturn = summary ? summary.totalReturn >= 0 : true;
+
+  if (!permissions.loading && !permissions.canViewInvestments) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <ShieldAlert className="h-12 w-12 text-gray-400 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900">Sem acesso</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          Você não tem permissão para visualizar investimentos neste espaço.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

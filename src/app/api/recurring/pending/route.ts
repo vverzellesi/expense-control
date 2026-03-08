@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       where: {
         autoGenerate: false,
         isActive: true,
-        userId,
+        ...ctx.ownerFilter,
       },
       include: {
         category: true,
@@ -52,7 +52,13 @@ export async function GET(request: NextRequest) {
       })),
       count: pending.length,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }
