@@ -1,0 +1,758 @@
+Unknown skill: implement-plan
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/implementing-plan
+
+# Implementing Plan
+
+## Overview
+
+**You are the ORCHESTRATOR, not the implementer.**
+
+Execute approved plans through skill chains: dispatch to subagents, validate output, manage phase boundaries.
+
+**Core principle:** If you're reading/writing code directly, you're violating the pattern. Dispatch always.
+
+## The Iron Law
+
+```
+NO IMPLEMENTATION COMPLETE WITHOUT IMPLEMENTATION-EXECUTOR SUBAGENT
+```
+
+BEFORE STARTING YOU MUST:
+1. READ THE PLAN README.md
+2. READ THE SUBAGENT-PROMPTS.md
+
+FOR EACH **phase** YOU MUST FOLLOW THE STEPS:
+1. Dispatch implementation-executor subagent (all tasks in phase)
+2. Validate agent output
+3. Phase commit
+4. Phase tests (`Skill(running-automated-checks)`)
+
+After **ALL phases**:
+5. Final review (`Skill(reviewing-code)`)
+6. Validation (`Skill(validating-implementation)`)
+
+**Non-code tasks** (config/docs only) use lighter chain: Implement → Commit
+
+---
+
+## Core Constraints
+
+NEVER skip reading the README.md for the plan.
+
+NEVER skip reading the SUBAGENT-PROMPTS.md for the subagent.
+
+NEVER implement tasks yourself - always dispatch to implementation-executor subagent.
+
+NEVER skip review or validation because "tests pass" - the chain is non-negotiable.
+
+NEVER redesign mid-implementation - trust the plan, document concerns in learnings.
+
+NEVER show "Implementation Complete" without review AND validation verdicts.
+
+**Violating the letter of these rules is violating the spirit of these rules. STOP and START OVER.**
+
+---
+
+## When to Use
+
+- User runs `/implement-plan` or references a plan in `ai_docs/plans/`
+- An approved plan exists and needs execution
+- After plan has been reviewed and user has approved
+
+## When NOT to Use
+
+- No approved plan exists (use `writing-plans` skill first)
+- Plan is still being reviewed
+- User wants to explore or research (not implement)
+
+---
+
+## Quick Reference
+
+| Step | Action | Output |
+|------|--------|--------|
+| Load plan | Read README.md, identify phases | Phase list |
+| Per phase | Dispatch implementation-executor (ONE subagent per phase) | TDD results |
+| Validate | Check agent output structure | PASS/FAIL |
+| Commit | `git commit --no-verify -m "feat: [phase summary]"` | Commit hash |
+| Tests | `Skill(running-automated-checks)` | PASS/FAIL |
+| Final review | `Skill(reviewing-code)` | APPROVED/FIXES |
+| Validation | `Skill(validating-implementation)` | Complete/Issues |
+
+---
+
+## Workflow Checklist
+
+```
+Implementation Progress:
+- [ ] Step 0: Load plan, identify phases and tasks
+- [ ] For each PHASE:
+  - [ ] Dispatch ONE implementation-executor agent for entire phase
+  - [ ] Validate agent output (all tasks TDD results, plan updates)
+  - [ ] Handle re-dispatch if validation fails (max 3)
+  - [ ] Phase commit with --no-verify
+  - [ ] Skill(running-automated-checks) → wait for verdict
+  - [ ] Update README.md dashboard (status, learnings)
+- [ ] All phases complete (DO NOT SHOW SUMMARY YET)
+- [ ] Skill(reviewing-code) → wait for verdict
+- [ ] Review passes → Skill(validating-implementation)
+- [ ] Validation passes → NOW show summary to user
+```
+
+---
+
+## Process
+
+### Step 0: Load Plan
+
+1. **Determine plan structure:**
+   - Directory → Read `README.md` for overview
+   - Single `.md` file → Legacy plan
+
+2. **Identify phases and status:**
+   ```
+   ai_docs/plans/YYYY-MM-DD-description/
+   ├── README.md           # Overview, phase status
+   ├── phase-1-[name].md   # Load when implementing phase 1
+   └── phase-N-[name].md   # Load when implementing phase N
+   ```
+
+3. **Load only current phase file.** Don't load all at once - wastes context.
+
+### Step 1: Execute Phase
+
+**For each PHASE, dispatch ONE implementation-executor subagent:**
+
+```python
+Task(
+  subagent_type="implementation-executor",
+  model="opus",
+  description=f"Implement Phase {phase_number}: {phase_name}",
+  prompt=f"""
+    Phase: {phase_number} - {phase_name}
+    Plan file: {plan_file_path}
+
+    Execute all tasks in this phase using TDD:
+    1. For each task: RED → GREEN → REFACTOR
+    2. Update plan file checkboxes
+    3. Capture learnings
+    4. Return Phase Execution Report
+  """
+)
+```
+
+**CRITICAL:**
+- ONE subagent per PHASE, not per task
+- Subagent handles ALL tasks internally
+- You validate output and manage phase boundaries
+
+### Step 1a: Validate Agent Output
+
+Parse Phase Execution Report. Check:
+
+| Check | Pass Condition | Fail Action |
+|-------|----------------|-------------|
+| Status | "PASS" in Summary | Re-dispatch with error context |
+| TDD Results | RED+GREEN PASS for each task | Re-dispatch with failure details |
+| Plan Updates | All checkboxes marked | Re-dispatch to update |
+
+**After 3 failures → escalate to user** with attempt history.
+
+### Step 2: Phase Commit and Tests
+
+After validation passes:
+
+```bash
+git commit --no-verify -m "feat: [phase summary]"
+```
+
+Then run tests:
+```
+Skill(running-automated-checks)
+```
+
+If tests fail: fix, amend commit, re-run tests.
+
+### Step 3: Update Dashboard
+
+Edit README.md after each phase:
+- Update phase status to "complete"
+- Add learnings from implementation
+
+### Step 4: Final Review and Validation
+
+**When ALL phases complete:**
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  STOP - YOU ARE NOT DONE YET                                   ║
+║                                                                 ║
+║  "Tests pass" ≠ "Implementation complete"                      ║
+║                                                                 ║
+║  You MUST still run:                                           ║
+║  1. Skill(reviewing-code)                                      ║
+║  2. Skill(validating-implementation)                           ║
+║                                                                 ║
+║  Do NOT show summary to user until BOTH complete.              ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+1. `Skill(reviewing-code)` → Wait for APPROVED/FIXES
+2. If FIXES: fix, amend, re-run review
+3. Review APPROVED → `Skill(validating-implementation)`
+4. Validation passes → NOW show summary
+
+---
+
+## Trust the Plan
+
+**The plan is your approved roadmap. Execute it, don't redesign it.**
+
+### What This Means
+
+| Trust the Plan | Don't Trust Blindly |
+|----------------|---------------------|
+| Follow the plan's approach | Fix actual bugs when they appear |
+| Stay within scope boundaries | Adapt when reality differs slightly |
+| Use patterns the plan specifies | Handle edge cases within scope |
+| Don't research alternatives | Debug issues intelligently |
+
+### When to Escalate (Not Redesign)
+
+If you encounter:
+- Plan code has fundamental flaw (not just typo)
+- Required API doesn't exist
+- Approach is incompatible with reality
+
+**STOP. Report to user. Do NOT redesign.**
+
+```
+ESCALATION:
+Task: [task name]
+Issue: [what's wrong]
+Evidence: [error message, missing file]
+
+The plan may need adjustment. How would you like to proceed?
+```
+
+### Missing Dependencies
+
+If plan code references something that doesn't exist (like a `delay` function):
+
+1. Check if it's defined elsewhere in plan
+2. Check if it exists in codebase (grep)
+3. If truly missing: **add minimal implementation** (utility function)
+4. Document in learnings
+
+**This is NOT redesign.** Adding a missing utility to make plan code work is implementation, not architecture change.
+
+---
+
+## Context Preservation
+
+**Main context is for USER DISCUSSION and PHASE TRACKING only.**
+
+| Main Context | Subagents |
+|--------------|-----------|
+| Phase progress | All implementation |
+| User checkpoints | TDD execution |
+| Escalations | File reading/writing |
+| Final summary | Code review |
+
+### Red Flags (Context Pollution)
+
+If in main context you're doing ANY of:
+- Reading files not in plan task
+- Using Grep/Glob to search
+- Running investigation commands
+- Writing implementation code
+
+**STOP → Dispatch to subagent → Only summary returns**
+
+---
+
+## Examples
+
+<good-example>
+User: "Implement the plan at ai_docs/plans/2026-01-24-feature/"
+
+Agent:
+1. Reads README.md to identify 2 phases
+2. Dispatches implementation-executor for Phase 1
+3. Validates output, commits, runs `Skill(running-automated-checks)`
+4. Dispatches implementation-executor for Phase 2
+5. Validates output, commits, runs `Skill(running-automated-checks)`
+6. Runs `Skill(reviewing-code)` → APPROVED
+7. Runs `Skill(validating-implementation)` → Complete
+8. NOW shows summary to user
+
+**Why correct:** Full chain executed. Never implemented directly. Review and validation both ran.
+</good-example>
+
+<bad-example>
+Phase 1 has one trivial task (3-line config file).
+
+Agent thinks: "This is just configuration, I can write 3 lines faster than dispatching a subagent."
+
+Agent writes the file directly.
+
+**Why bad:** "It's trivial" doesn't change the pattern. Dispatch ALWAYS. The pattern preserves main context for user discussion.
+</bad-example>
+
+<bad-example>
+All phases complete. Tests pass. User says "Deploy window closes in 10 minutes."
+
+Agent thinks: "Tests pass, that's good enough. Review is marginal benefit."
+
+Agent skips review, invokes validation directly.
+
+**Why bad:** "Tests pass" ≠ "review complete". The chain is non-negotiable. Explain to user that review is required.
+</bad-example>
+
+<bad-example>
+Plan code references `delay()` function that doesn't exist.
+
+Agent thinks: "This is a bug that must be fixed. I'll also improve error handling while I'm at it."
+
+Agent implements enhanced version with better error handling.
+
+**Why bad:** Adding missing `delay()` is fine. "Improving" error handling is redesign. Stick to the plan.
+</bad-example>
+
+---
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "This is trivial, I can do it faster" | Trivial tasks still go through subagent. The pattern preserves context. | **Dispatch to implementation-executor** |
+| "Subagent overhead is wasteful" | Overhead is investment in context preservation. Worth it. | **Dispatch anyway** |
+| "Tests pass, review is marginal benefit" | Tests verify behavior. Review verifies quality. Different things. | **Run Skill(reviewing-code)** |
+| "Deploy window closes in 10 minutes" | Time pressure doesn't change chain requirements. Explain to user. | **Run full chain, explain delay** |
+| "All quality signals are green" | Tests ≠ review ≠ validation. All three required. | **Complete the chain** |
+| "Plan can't be implemented as written" | Missing utility = add it. Fundamental flaw = escalate. Not redesign. | **Add utility OR escalate** |
+| "These are minor improvements" | "Minor" is rationalization. Plan was approved as-is. | **Implement plan exactly** |
+| "I'm preserving the core approach" | If you're changing anything beyond typos, you're redesigning. | **Trust the plan** |
+| "I'll just review it myself quickly" | Self-review violates "dispatch to agent" pattern. | **Dispatch to code-review-agent** |
+| "Tests pass, we're done" | Shows completion without review AND validation. Double violation. | **Complete full chain first** |
+
+---
+
+## Red Flags - STOP
+
+- About to write code directly in main context
+- "This is simple enough to do myself"
+- "I can do this faster than a subagent"
+- Tests pass but haven't run review
+- "Skip review, tests are green"
+- Improving plan code beyond what's written
+- "Minor enhancements" to plan approach
+- Showing "Complete" without review AND validation
+- Reading files to "understand better" (not in task)
+
+**All of these mean: You're violating the pattern. Dispatch to subagent. Complete the chain.**
+
+---
+
+## Chain Weight
+
+| Plan Type | Chain |
+|-----------|-------|
+| Config/docs only | Implement → commit |
+| 1-2 code tasks | TDD → commit → tests (can run tests directly) |
+| 3+ tasks or phases | Full chain with subagents |
+
+**CAUTION:** "Skip subagent" ≠ "skip chain steps". Tests, review, and validation are ALWAYS required for code. Only question is subagent vs inline for simple plans.
+
+---
+
+## Bundled Resources
+
+| Resource | When to Load | Why |
+|----------|--------------|-----|
+| `SUBAGENT-PROMPTS.md` | When dispatching implementation-executor | Dispatch templates |
+| `VALIDATION-LOGIC.md` | When parsing agent output | Validation rules |
+
+---
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Implementing tasks directly | Always dispatch to implementation-executor |
+| One subagent per task | ONE subagent per PHASE handles all tasks |
+| Skipping review because tests pass | Review is separate from tests - run both |
+| Showing completion early | Wait for review AND validation |
+| Redesigning mid-implementation | Trust plan, add utilities, escalate flaws |
+| Loading all phase files at once | Load only current phase |
+
+
+ARGUMENTS: docs/plans/2026-03-07-shared-accounts-plan.md. Use subagents no que for possível para paralelizar o trabalho
+
+---
+
+Stop hook feedback:
+MANAGER REVIEW REQUIRED
+
+Before your response reaches the user, run through the checklist:
+
+1. Read ~/.claude/skills/manager-review/SKILL.md
+2. Verify your response passes ALL checks
+3. Add the approval token at the end
+
+If checks fail, iterate on your response first.
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/manager-review
+
+# Manager Review
+
+## Step 0: Intent Check (ALWAYS DO THIS FIRST)
+
+**What is the user's intent?** Classify into one of:
+
+| Intent Type | Examples | Action |
+|-------------|----------|--------|
+| **Confirmation** | "yes", "ok", "proceed", "looks good", "got it", "thanks", "right", "correct" | → **AUTO-APPROVE** (skip to token) |
+| **Simple acknowledgment** | "I see", "understood", "makes sense", "that works" | → **AUTO-APPROVE** |
+| **Clarification response** | User answering your question | → **CONTINUE TO CHECKLIST** |
+| **Substantive request** | Implementation, analysis, code changes, debugging | → **CONTINUE TO CHECKLIST** |
+
+**If user is just confirming/acknowledging → include token immediately, skip checklist.**
+
+### Token Placement
+
+```
+✅ approve_cc_7f3d8a2e
+
+[Complete response]
+```
+
+**IMPORTANT: Keep the review process INTERNAL.** Do NOT output the checklist, reasoning, or evaluation to the user. Run through checks mentally (in thinking), then output ONLY the token followed by your actual response.
+
+---
+
+## Full Review (only for substantive responses)
+
+**Self-review gate for complex responses.**
+
+Assume **50% of substantive responses need iteration**. This mindset catches errors before they reach the user.
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  Token: ✅ approve_cc_7f3d8a2e                                            ║
+║  Include ONLY after ALL checks pass. Place at start of response.           ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+## Quick Checklist
+
+### 1. Query Alignment
+- [ ] Response directly answers user's question
+- [ ] Answered the RIGHT question (not adjacent one)
+- [ ] Appropriate scope (not over/under delivering)
+
+### 2. Skill Usage
+- [ ] Evaluated skill-matcher suggestions (YES/NO for each)
+- [ ] Activated required skills via `Skill(skill-name)`
+
+### 3. Iron Law Compliance (if any skill was used)
+- [ ] Identified the Iron Law of each skill invoked
+- [ ] Verified the Iron Law was actually followed (not just claimed)
+
+| Skill | Iron Law | What to check |
+|-------|----------|---------------|
+| writing-plans | NO PLAN WITHOUT CODEBASE RESEARCH FIRST | Did research happen before writing? |
+| implementing-plan | NO IMPLEMENTATION WITHOUT EXECUTOR SUBAGENT | Was implementation-executor dispatched? |
+| writing-skills | NO SKILL WITHOUT A FAILING TEST FIRST | Was a failing test written before the skill? |
+| reviewing-code | NO "REVIEW COMPLETE" WITHOUT AGENT VERDICT | Was code-review-agent dispatched? |
+| reviewing-plan | NO PLAN FINALIZED WITHOUT ORACLE REVIEW | Was Oracle invoked? |
+| validating-implementation | NO "IMPLEMENTATION COMPLETE" WITHOUT VALIDATION REPORT | Was validation-executor dispatched? |
+| writing-rfcs-adrs | NO DOCUMENT WITHOUT DEEP INTERVIEW FIRST | Was the 6 W's interview completed? |
+| systematic-debugging | NO FIX WITHOUT REPRODUCTION → ROOT CAUSE → ONE CHANGE | All 3 laws followed in order? |
+
+**If an Iron Law was broken → ITERATE. Do not approve.**
+
+### 4. Evidence Quality
+- [ ] Actual command output shown (not "should work")
+- [ ] Files read before editing (not assumed)
+- [ ] Claims verified with Grep/Read/Bash
+
+### 5. Code Changes (if applicable)
+- [ ] No comments explaining my own edits
+- [ ] Tests run if code changed
+- [ ] Followed project standards (CLAUDE.md) or `~/.claude/docs/code-principles.md` (fallback)
+
+---
+
+## Common Mistakes
+
+| Mistake | Detection | Fix |
+|---------|-----------|-----|
+| Skipped skill-matcher evaluation | No YES/NO for suggestions | Evaluate each suggested skill |
+| Iron Law violation | Skill used but its core constraint skipped | ITERATE — redo following the Iron Law |
+| Code without test | Wrote code, no RED phase | Use `Skill(test-driven-development)` |
+| Plan without research | Created plan blindly | Use `Skill(researching-codebase)` first |
+| "Tests pass" no output | Claimed pass, no actual output | Run and show actual output |
+| Used "should", "probably" | Assumptions instead of facts | Use Grep/Read to verify |
+
+---
+
+## Decision Logic
+
+**APPROVE** (include token):
+- Response directly answers question
+- Skill-matcher suggestions evaluated
+- Required skills activated
+- Evidence is concrete
+
+**ITERATE** (no token):
+- Skipped skill evaluation
+- Iron Law of an invoked skill was violated
+- Made unverified claims
+- Missing evidence
+- Answered wrong question
+
+---
+
+## Token Placement
+
+```
+✅ approve_cc_7f3d8a2e
+
+[Complete response]
+```
+
+**NEVER include if:**
+- Any check fails
+- You have doubts
+- You took shortcuts
+
+---
+
+talvez esteja fora da worktree, mas ele existe. https://github.com/vverzellesi/expense-control/blob/main/docs/plans/2026-03-07-shared-accounts-plan.md
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/running-automated-checks
+
+# Running Automated Checks
+
+## Overview
+
+Run auto-fix, lint, typecheck, and tests in sequence. Report failures with structured output showing file:line:error for quick fixes.
+
+## When to Use
+
+- After implementing a feature or fix
+- Before committing changes
+- When user asks to "run tests", "check code", or "validate"
+- After plan implementation phases
+
+## When NOT to Use
+
+- For exploratory code changes (run manually)
+- When user explicitly says "skip tests"
+
+## Steps
+
+**Step 1: Discover Commands**
+[WHY: Projects use different tooling; wrong commands waste time. Project docs define preferred commands]
+
+Check files in this order (stop when you find commands):
+
+1. **Project AI docs** (highest priority):
+   - `AGENTS.md` or `CLAUDE.md` - AI-specific instructions
+
+2. **Project docs**:
+   - `README.md` - development/testing section
+
+3. **Build files** (fallback):
+   - `Makefile` - targets (lint, test, typecheck)
+   - `package.json` - `scripts` section
+   - `Cargo.toml` - Rust → `cargo test`, `cargo clippy`
+   - `pyproject.toml` - Python → pytest, ruff, mypy
+
+**Step 2: Run Auto-fix FIRST**
+[WHY: Most lint errors (semicolons, quotes, indentation) are auto-fixable. Running auto-fix first prevents wasting time manually editing errors that tools fix instantly]
+
+```bash
+npm run lint:fix    # or: make lint-fix, cargo fmt, ruff format
+```
+
+NEVER manually edit lint/format errors before running auto-fix.
+
+**Step 3: Run Lint**
+[WHY: Static analysis catches bugs, not just style]
+
+```bash
+npm run lint        # or: make lint, cargo clippy
+```
+
+**Step 4: Run Type Check**
+[WHY: Type errors indicate logic bugs]
+
+```bash
+npm run typecheck   # or: tsc --noEmit, mypy, cargo check
+```
+
+**Step 5: Run Tests**
+[WHY: Full suite catches integration issues]
+
+```bash
+npm test            # or: make test, cargo test, pytest
+```
+
+**Step 6: Report Results**
+[WHY: Structured output enables quick navigation to errors and traceability of what ran and why]
+
+Output a **markdown report** with these sections:
+
+```markdown
+## Automated Checks Report
+
+### Commands Discovered
+
+| Step | Command | Source | Why |
+|------|---------|--------|-----|
+| Auto-fix | `npm run lint:fix` | package.json | Fix auto-fixable lint/format errors before manual review |
+| Lint | `npm run lint` | CLAUDE.md | Static analysis catches bugs beyond style |
+| TypeCheck | `tsc --noEmit` | package.json | Type errors indicate logic bugs |
+| Tests | `npm test` | package.json | Full suite catches integration issues |
+
+### Execution Results
+
+| Step | Command | Status |
+|------|---------|--------|
+| Auto-fix | `npm run lint:fix` | ✓ PASS |
+| Lint | `npm run lint` | ✗ FAIL |
+| TypeCheck | `tsc --noEmit` | ✓ PASS |
+| Tests | `npm test` | ✓ PASS (15 passed) |
+
+### Errors
+
+#### Lint — 2 errors
+
+| File | Line | Error |
+|------|------|-------|
+| src/foo.ts | 42 | 'x' is declared but never used |
+| src/bar.ts | 10 | Missing return type annotation |
+
+> Showing 15 of 47 errors
+
+### Status: NEEDS FIXES
+```
+
+**Report rules:**
+- **Commands Discovered**: List every command found in Step 1, its source file, and why it's run
+- **Execution Results**: Show the exact command executed and its pass/fail status
+- **Errors**: One subsection per failing step, max 15 errors each. If more exist, note total count
+- **Status**: `READY` (all pass) or `NEEDS FIXES` (any fail)
+- If a step was skipped (command not found), show `⊘ SKIPPED — no command found` in the results table
+
+Parse file:line:error from tool output:
+- ESLint: `file:line:col: message`
+- TypeScript: `file(line,col): error`
+- Jest: `at Object.<anonymous> (file:line:col)`
+- Pytest: `file:line: message`
+
+## Quick Reference
+
+| Step | Action | On Fail |
+|------|--------|---------|
+| Discover | Check AGENTS.md/CLAUDE.md → README.md → Makefile/package.json | - |
+| Auto-fix | `npm run lint:fix` or project-specific | Continue to lint |
+| Lint | `npm run lint` or project-specific | Parse errors → table (max 15) |
+| TypeCheck | `npm run typecheck` or project-specific | Parse errors → table (max 15) |
+| Tests | `npm test` or project-specific | Parse failures → table (max 15) |
+
+## Examples
+
+<good-example>
+User: "Run tests"
+
+Agent runs auto-fix first, then lint, typecheck, tests. Reports in structured markdown:
+
+```markdown
+## Automated Checks Report
+
+### Commands Discovered
+
+| Step | Command | Source | Why |
+|------|---------|--------|-----|
+| Auto-fix | `npm run lint:fix` | package.json | Fix auto-fixable lint/format errors before manual review |
+| Lint | `npm run lint` | package.json | Static analysis catches bugs beyond style |
+| TypeCheck | `tsc --noEmit` | CLAUDE.md | Type errors indicate logic bugs |
+| Tests | `npm test` | package.json | Full suite catches integration issues |
+
+### Execution Results
+
+| Step | Command | Status |
+|------|---------|--------|
+| Auto-fix | `npm run lint:fix` | ✓ PASS |
+| Lint | `npm run lint` | ✓ PASS |
+| TypeCheck | `tsc --noEmit` | ✗ FAIL |
+| Tests | `npm test` | ✓ PASS (15 passed) |
+
+### Errors
+
+#### TypeCheck — 2 errors
+
+| File | Line | Error |
+|------|------|-------|
+| src/api/client.ts | 127 | Property 'data' does not exist |
+| src/api/client.ts | 134 | Type 'string' not assignable |
+
+### Status: NEEDS FIXES
+```
+</good-example>
+
+<bad-example>
+User: "Fix these lint errors" (8 formatting errors shown)
+
+Agent reads files, then uses Edit tool to fix each error manually:
+- Edit line 12: add semicolon
+- Edit line 18: fix indentation
+- ... (6 more manual edits)
+
+**Why bad:** Should run `npm run lint --fix` FIRST. One command fixes all 8 errors. Manual editing wastes time and tokens.
+</bad-example>
+
+<bad-example>
+User: "Run tests"
+
+Agent reports:
+```
+Lint: FAIL
+TypeCheck: PASS
+Tests: PASS
+```
+
+**Why bad:** No file:line:error details, no commands discovered, no source traceability. User has no idea what commands ran or where they came from.
+</bad-example>
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Manually fixing lint errors one-by-one | Run `lint --fix` FIRST |
+| Only showing PASS/FAIL | Include error table with file:line:error |
+| Stopping at first failure | Run all steps, report all errors |
+| Raw tool output dump | Parse into structured table |
+| Omitting Commands Discovered table | Always show what commands were found, from where, and why |
+| Not showing which source file defined the command | Include Source column tracing back to CLAUDE.md, package.json, etc. |
+
+---
+
+Stop hook feedback:
+MANAGER REVIEW REQUIRED
+
+Before your response reaches the user, run through the checklist:
+
+1. Read ~/.claude/skills/manager-review/SKILL.md
+2. Verify your response passes ALL checks
+3. Add the approval token at the end
+
+If checks fail, iterate on your response first.

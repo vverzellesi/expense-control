@@ -1,0 +1,59 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "c3eda51ae2bb",
+  "strategy": "manual-commit",
+  "branch": "feature/shared-accounts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".claude/settings.local.json",
+    "prisma/migrations/backfill-created-by.sql",
+    "src/app/api/invites/[code]/accept/route.ts",
+    "src/app/api/invites/pending/route.ts",
+    "src/app/api/spaces/[spaceId]/invites/route.ts",
+    "src/app/api/spaces/[spaceId]/members/[memberId]/route.ts",
+    "src/app/api/spaces/[spaceId]/members/route.ts",
+    "src/app/api/spaces/[spaceId]/migrate/route.ts",
+    "src/app/api/spaces/active/permissions/route.test.ts",
+    "src/app/api/spaces/active/permissions/route.ts",
+    "src/app/api/spaces/active/route.ts",
+    "src/app/api/spaces/route.ts",
+    "src/app/dashboard/DashboardPage.test.tsx",
+    "src/app/investments/InvestmentsPage.test.tsx",
+    "src/app/spaces/[spaceId]/settings/page.test.tsx",
+    "src/app/spaces/[spaceId]/settings/page.tsx",
+    "src/components/PendingInvites.test.tsx",
+    "src/components/PendingInvites.tsx",
+    "src/components/Sidebar.test.tsx",
+    "src/components/SpaceSwitcher.test.tsx",
+    "src/components/SpaceSwitcher.tsx",
+    "src/components/TransactionForm.test.tsx",
+    "src/components/landing/Benefits.tsx",
+    "src/components/landing/FAQ.tsx",
+    "src/components/landing/FeatureCategories.tsx",
+    "src/lib/auth-utils.test.ts",
+    "src/lib/hooks/useSpacePermissions.test.ts",
+    "src/lib/hooks/useSpacePermissions.ts",
+    "src/lib/space-context.test.ts",
+    "src/lib/space-context.ts",
+    "src/types/testing-library.d.ts",
+    "tests/integration/api/space-flow.test.ts",
+    "tests/integration/api/space-invites.test.ts",
+    "tests/integration/api/spaces.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c3/eda51ae2bb/0/metadata.json",
+      "transcript": "/c3/eda51ae2bb/0/full.jsonl",
+      "context": "/c3/eda51ae2bb/0/context.md",
+      "content_hash": "/c3/eda51ae2bb/0/content_hash.txt",
+      "prompt": "/c3/eda51ae2bb/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2673,
+    "cache_creation_tokens": 99139,
+    "cache_read_tokens": 4288380,
+    "output_tokens": 18399,
+    "api_call_count": 63
+  }
+}
