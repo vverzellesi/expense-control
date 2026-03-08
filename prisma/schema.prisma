@@ -37,15 +37,20 @@ model User {
   savingsHistories  SavingsHistory[]
 
   // Investment models
-  investmentCategories  InvestmentCategory[]
-  investments           Investment[]
-  investmentSnapshots   InvestmentSnapshot[]
+  investmentCategories InvestmentCategory[]
+  investments          Investment[]
+  investmentSnapshots  InvestmentSnapshot[]
 
   // Bill payment models
-  billPayments          BillPayment[]
+  billPayments BillPayment[]
 
   // Simulation models
-  simulations           Simulation[]
+  simulations Simulation[]
+
+  // Shared space models
+  createdSpaces       Space[]       @relation("CreatedSpaces")
+  spaceMemberships    SpaceMember[]
+  createdTransactions Transaction[] @relation("CreatedTransactions")
 }
 
 model Account {
@@ -116,7 +121,7 @@ model Transaction {
   recurringExpense   RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
   tags               String? // JSON array: '["trabalho", "viagem"]'
   categoryTagId      String?
-  categoryTag        CategoryTag?  @relation(fields: [categoryTagId], references: [id], onDelete: SetNull)
+  categoryTag        CategoryTag?      @relation(fields: [categoryTagId], references: [id], onDelete: SetNull)
   deletedAt          DateTime? // Soft delete - null means active
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -124,6 +129,13 @@ model Transaction {
   // User relationship
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Shared space fields
+  spaceId         String?
+  space           Space?  @relation("SpaceTransactions", fields: [spaceId], references: [id], onDelete: SetNull)
+  isPrivate       Boolean @default(false)
+  createdByUserId String?
+  createdByUser   User?   @relation("CreatedTransactions", fields: [createdByUserId], references: [id])
 
   // Investment transaction link (reverse relation)
   investmentTransaction InvestmentTransaction?
@@ -134,6 +146,8 @@ model Transaction {
   @@index([userId, deletedAt, date])
   @@index([userId, isFixed, deletedAt])
   @@index([userId, isInstallment, deletedAt])
+  @@index([spaceId])
+  @@index([createdByUserId])
 }
 
 model RecurringExpense {
@@ -155,6 +169,10 @@ model RecurringExpense {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceRecurring", fields: [spaceId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -174,7 +192,12 @@ model Category {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceCategories", fields: [spaceId], references: [id], onDelete: Cascade)
+
   @@unique([name, userId])
+  @@unique([name, spaceId])
   @@index([userId])
 }
 
@@ -189,11 +212,15 @@ model Installment {
   transactions      Transaction[]
 
   // Bill payment back-reference (for financed bills)
-  billPayment       BillPayment?
+  billPayment BillPayment?
 
   // User relationship
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceInstallments", fields: [spaceId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -206,7 +233,12 @@ model Origin {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceOrigins", fields: [spaceId], references: [id], onDelete: Cascade)
+
   @@unique([name, userId])
+  @@unique([name, spaceId])
   @@index([userId])
 }
 
@@ -221,7 +253,12 @@ model Budget {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceBudgets", fields: [spaceId], references: [id], onDelete: Cascade)
+
   @@unique([categoryId, userId])
+  @@unique([categoryId, spaceId])
   @@index([userId])
   @@index([userId, isActive])
 }
@@ -236,23 +273,33 @@ model CategoryRule {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceRules", fields: [spaceId], references: [id], onDelete: Cascade)
+
   @@unique([keyword, categoryId, userId])
+  @@unique([keyword, categoryId, spaceId])
   @@index([userId])
 }
 
 model CategoryTag {
-  id         String        @id @default(cuid())
-  name       String
-  keywords   String // Comma-separated: "shell,ipiranga,posto"
-  categoryId String
-  category   Category      @relation(fields: [categoryId], references: [id])
+  id           String        @id @default(cuid())
+  name         String
+  keywords     String // Comma-separated: "shell,ipiranga,posto"
+  categoryId   String
+  category     Category      @relation(fields: [categoryId], references: [id])
   transactions Transaction[]
 
   // User relationship
   userId String?
-  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceTags", fields: [spaceId], references: [id], onDelete: Cascade)
 
   @@unique([name, categoryId, userId])
+  @@unique([name, categoryId, spaceId])
   @@index([userId])
   @@index([categoryId])
 }
@@ -296,7 +343,7 @@ model SavingsHistory {
 model InvestmentCategory {
   id        String  @id @default(cuid())
   name      String
-  color     String  // Hex color
+  color     String // Hex color
   icon      String? // Lucide icon name
   isDefault Boolean @default(false)
 
@@ -304,17 +351,21 @@ model InvestmentCategory {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceInvestmentCategories", fields: [spaceId], references: [id], onDelete: Cascade)
+
   investments Investment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([name, userId])
+  @@unique([name, userId, spaceId])
   @@index([userId])
 }
 
 model Investment {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
 
@@ -325,12 +376,16 @@ model Investment {
   totalInvested  Float // Total aportado
   totalWithdrawn Float @default(0) // Total resgatado
 
-  goalAmount Float?  // Meta (opcional)
+  goalAmount Float? // Meta (opcional)
   broker     String? // Corretora/banco (opcional)
 
   // User relationship
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Shared space
+  spaceId String?
+  space   Space?  @relation("SpaceInvestments", fields: [spaceId], references: [id], onDelete: Cascade)
 
   transactions InvestmentTransaction[]
 
@@ -387,25 +442,25 @@ model InvestmentSnapshot {
 // ==========================================
 
 model BillPayment {
-  id              String    @id @default(cuid())
-  billMonth       Int
-  billYear        Int
-  origin          String
-  totalBillAmount Float
-  amountPaid      Float
-  amountCarried   Float
-  paymentType     String    // "PARTIAL" or "FINANCED"
-  installmentId   String?   @unique
-  installment     Installment? @relation(fields: [installmentId], references: [id])
-  interestRate    Float?
-  interestAmount  Float?
-  entryTransactionId    String?
+  id                     String       @id @default(cuid())
+  billMonth              Int
+  billYear               Int
+  origin                 String
+  totalBillAmount        Float
+  amountPaid             Float
+  amountCarried          Float
+  paymentType            String // "PARTIAL" or "FINANCED"
+  installmentId          String?      @unique
+  installment            Installment? @relation(fields: [installmentId], references: [id])
+  interestRate           Float?
+  interestAmount         Float?
+  entryTransactionId     String?
   carryoverTransactionId String?
-  linkedTransactionId   String?
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  linkedTransactionId    String?
+  userId                 String
+  user                   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   @@index([userId])
   @@index([billMonth, billYear, origin])
@@ -431,4 +486,69 @@ model Simulation {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ==========================================
+// SHARED SPACE MODELS
+// ==========================================
+
+enum SpaceRole {
+  ADMIN
+  MEMBER
+  LIMITED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+model Space {
+  id        String   @id @default(cuid())
+  name      String
+  createdBy String
+  creator   User     @relation("CreatedSpaces", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members              SpaceMember[]
+  invites              SpaceInvite[]
+  transactions         Transaction[]        @relation("SpaceTransactions")
+  categories           Category[]           @relation("SpaceCategories")
+  origins              Origin[]             @relation("SpaceOrigins")
+  budgets              Budget[]             @relation("SpaceBudgets")
+  rules                CategoryRule[]       @relation("SpaceRules")
+  tags                 CategoryTag[]        @relation("SpaceTags")
+  recurring            RecurringExpense[]   @relation("SpaceRecurring")
+  installments         Installment[]        @relation("SpaceInstallments")
+  investments          Investment[]         @relation("SpaceInvestments")
+  investmentCategories InvestmentCategory[] @relation("SpaceInvestmentCategories")
+}
+
+model SpaceMember {
+  id       String    @id @default(cuid())
+  spaceId  String
+  space    Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     SpaceRole
+  joinedAt DateTime  @default(now())
+
+  @@unique([spaceId, userId])
+}
+
+model SpaceInvite {
+  id        String       @id @default(cuid())
+  spaceId   String
+  space     Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  email     String?
+  code      String       @unique
+  role      SpaceRole
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  @@index([code])
+  @@index([email])
 }
