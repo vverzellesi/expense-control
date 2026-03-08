@@ -22,6 +22,8 @@ flowchart TB
         MAIN["main > children"]
     end
 
+    SB --> SSW["SpaceSwitcher"]
+    SB --> PI["PendingInvites"]
     SB --> OBM["OnboardingModal"]
     OBM --> OBS["OnboardingSlide"]
     OBM --> OBD["OnboardingDots"]
@@ -106,6 +108,13 @@ flowchart TB
         RGT --> RGC["RecurringGrowthChart"]
     end
 
+    subgraph SPACES["Spaces"]
+        SSP["SpaceSettingsPage"]
+        SSP --> MI["MembersList"]
+        SSP --> INV2["InvitesList"]
+        SSP --> IG["InviteGenerator"]
+    end
+
     subgraph BILLS["Bills"]
         BP["BillsPage"]
         BP --> BPM["BillPaymentModal"]
@@ -142,4 +151,4 @@ flowchart LR
     end
 ```
 
-Hierarquia completa dos componentes React. O root layout envolve tudo em SessionProvider > AppLayout > Toaster. AppLayout renderiza Sidebar + MobileHeader para rotas autenticadas. Paginas complexas (Dashboard, Reports, Simulador) compoe feature components especificos, enquanto paginas simples (Categories, Settings, Trash) usam apenas UI primitives diretamente.
+Hierarquia completa dos componentes React. O root layout envolve tudo em SessionProvider > AppLayout > Toaster. AppLayout renderiza Sidebar + MobileHeader para rotas autenticadas. A Sidebar inclui SpaceSwitcher (alternância entre contexto pessoal e espaço compartilhado) e PendingInvites (notificação de convites pendentes). Páginas complexas (Dashboard, Reports, Simulador) compõem feature components específicos, enquanto páginas simples (Categories, Settings, Trash) usam apenas UI primitives diretamente. A seção Spaces adiciona SpaceSettingsPage com gerenciamento de membros e convites.
