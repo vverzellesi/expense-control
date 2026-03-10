@@ -3,7 +3,7 @@
   "checkpoint_id": "bebc9bbfd32c",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 6,
   "files_touched": [
     ".worktrees/fix-user-bugs/prisma/migrations/20260309000000_add_import_batch_id/migration.sql",
     ".worktrees/fix-user-bugs/prisma/schema.prisma",
@@ -17,7 +17,9 @@
     "src/app/api/import/route.ts",
     "src/app/api/transactions/[id]/route.ts",
     "src/app/bills/page.tsx",
-    "src/app/import/page.tsx"
+    "src/app/import/page.tsx",
+    "src/app/transactions/page.tsx",
+    "src/components/FilterDrawer.tsx"
   ],
   "sessions": [
     {
@@ -26,13 +28,20 @@
       "context": "/be/bc9bbfd32c/0/context.md",
       "content_hash": "/be/bc9bbfd32c/0/content_hash.txt",
       "prompt": "/be/bc9bbfd32c/0/prompt.txt"
+    },
+    {
+      "metadata": "/be/bc9bbfd32c/1/metadata.json",
+      "transcript": "/be/bc9bbfd32c/1/full.jsonl",
+      "context": "/be/bc9bbfd32c/1/context.md",
+      "content_hash": "/be/bc9bbfd32c/1/content_hash.txt",
+      "prompt": "/be/bc9bbfd32c/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 104,
-    "cache_creation_tokens": 278640,
-    "cache_read_tokens": 7167299,
-    "output_tokens": 24967,
-    "api_call_count": 90
+    "input_tokens": 134,
+    "cache_creation_tokens": 312521,
+    "cache_read_tokens": 7872650,
+    "output_tokens": 28855,
+    "api_call_count": 111
   }
 }
