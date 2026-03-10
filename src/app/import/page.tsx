@@ -181,6 +181,7 @@ export default function ImportPage() {
   const [invoiceMonth, setInvoiceMonth] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
+  const [lastImportBatchId, setLastImportBatchId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -780,7 +781,7 @@ export default function ImportPage() {
     });
   }
 
-  async function suggestTag(description: string, categoryId: string) {
+  async function suggestTag(description: string, categoryId: string, transactionIndex?: number) {
     // Don't suggest if a tag already matches
     const existingMatch = matchTag(description, categoryId);
     if (existingMatch) return;
@@ -812,6 +813,13 @@ export default function ImportPage() {
               if (res.ok) {
                 const newTag = await res.json();
                 setCategoryTags(prev => [...prev, newTag]);
+                // Retroactively assign the new tag to the transaction that triggered this
+                if (transactionIndex !== undefined) {
+                  updateTransaction(transactionIndex, {
+                    categoryTagId: newTag.id,
+                    categoryTagName: newTag.name,
+                  });
+                }
                 toast({
                   title: "Tag criada",
                   description: `Tag "${keyword}" adicionada em ${category.name}`,
@@ -886,6 +894,7 @@ export default function ImportPage() {
         description: `${data.count} transações importadas com sucesso`,
       });
 
+      setLastImportBatchId(data.importBatchId || null);
       setStep("done");
     } catch (error) {
       toast({
@@ -1299,7 +1308,7 @@ export default function ImportPage() {
                                 });
                                 if (value && value !== t.categoryId) {
                                   suggestRule(t.description, value);
-                                  suggestTag(t.description, value);
+                                  suggestTag(t.description, value, index);
                                 }
                               }}
                             >
@@ -1592,7 +1601,7 @@ export default function ImportPage() {
                               });
                               if (value && value !== t.categoryId) {
                                 suggestRule(t.description, value);
-                                suggestTag(t.description, value);
+                                suggestTag(t.description, value, index);
                               }
                             }}
                           >
@@ -1673,13 +1682,47 @@ export default function ImportPage() {
               <p className="mt-2 text-gray-500">
                 As transações foram importadas com sucesso.
               </p>
-              <div className="mt-6 flex gap-4">
-                <Button variant="outline" onClick={resetForm}>
-                  Importar mais
-                </Button>
-                <Button onClick={() => (window.location.href = "/transactions")}>
-                  Ver transações
-                </Button>
+              <div className="mt-6 flex flex-col items-center gap-4">
+                <div className="flex gap-4">
+                  <Button variant="outline" onClick={resetForm}>
+                    Importar mais
+                  </Button>
+                  <Button onClick={() => (window.location.href = "/transactions")}>
+                    Ver transações
+                  </Button>
+                </div>
+                {lastImportBatchId && (
+                  <Button
+                    variant="ghost"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/import?batchId=${lastImportBatchId}`, {
+                          method: "DELETE",
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          toast({
+                            title: "Importação desfeita",
+                            description: `${data.count} transações removidas`,
+                          });
+                          setLastImportBatchId(null);
+                        } else {
+                          throw new Error("Erro ao desfazer");
+                        }
+                      } catch {
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível desfazer a importação",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Desfazer importação
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>

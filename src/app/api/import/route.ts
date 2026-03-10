@@ -31,6 +31,54 @@ function matchesRecurring(
   return keywords.some((keyword) => normalizedTransaction.includes(keyword));
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const userId = await getAuthenticatedUserId();
+    const searchParams = request.nextUrl.searchParams;
+    const batchId = searchParams.get("batchId");
+
+    if (!batchId) {
+      return NextResponse.json(
+        { error: "ID do lote e obrigatorio" },
+        { status: 400 }
+      );
+    }
+
+    // Soft delete all transactions from this import batch
+    const result = await prisma.transaction.updateMany({
+      where: {
+        userId,
+        importBatchId: batchId,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Nenhuma transacao encontrada para este lote" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      message: `${result.count} transacoes removidas`,
+      count: result.count,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Error deleting import batch:", error);
+    return NextResponse.json(
+      { error: "Erro ao remover importacao" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -65,6 +113,9 @@ export async function POST(request: NextRequest) {
         select: { id: true, categoryId: true },
       })).map(t => `${t.id}:${t.categoryId}`)
     );
+
+    // Generate a batch ID for this import
+    const importBatchId = crypto.randomUUID();
 
     const created = [];
     let linkedCount = 0;
@@ -178,6 +229,7 @@ export async function POST(request: NextRequest) {
           currentInstallment: t.currentInstallment || null,
           totalInstallments: t.totalInstallments || null,
           recurringExpenseId: matchedRecurringId,
+          importBatchId,
         },
         include: {
           category: true,
@@ -258,6 +310,7 @@ export async function POST(request: NextRequest) {
         linkedCount,
         carryoverLinkedCount,
         linkedCarryovers,
+        importBatchId,
       },
       { status: 201 }
     );
