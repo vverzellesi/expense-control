@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "bebc9bbfd32c",
+  "session_id": "5758ffdf-7a3f-45e8-8d09-47001809676c",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-10T00:50:23.606252Z",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".worktrees/fix-user-bugs/prisma/migrations/20260309000000_add_import_batch_id/migration.sql",
+    ".worktrees/fix-user-bugs/prisma/schema.prisma",
+    ".worktrees/fix-user-bugs/src/app/api/import/route.ts",
+    ".worktrees/fix-user-bugs/src/app/api/transactions/[id]/route.ts",
+    ".worktrees/fix-user-bugs/src/app/bills/page.tsx",
+    ".worktrees/fix-user-bugs/src/app/import/page.tsx",
+    ".worktrees/fix-user-bugs/tests/integration/api/import.test.ts",
+    "prisma/migrations/20260309000000_add_import_batch_id/migration.sql",
+    "prisma/schema.prisma",
+    "src/app/api/import/route.ts",
+    "src/app/api/transactions/[id]/route.ts",
+    "src/app/bills/page.tsx",
+    "src/app/import/page.tsx"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 104,
+    "cache_creation_tokens": 278640,
+    "cache_read_tokens": 7167299,
+    "output_tokens": 24967,
+    "api_call_count": 90
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-10T00:50:23.353958Z",
+    "agent_lines": 159,
+    "human_added": 75237,
+    "human_modified": 8,
+    "human_removed": 0,
+    "total_committed": 75404,
+    "agent_percentage": 0.21086414513818894
+  }
+}

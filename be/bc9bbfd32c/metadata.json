@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "bebc9bbfd32c",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".worktrees/fix-user-bugs/prisma/migrations/20260309000000_add_import_batch_id/migration.sql",
+    ".worktrees/fix-user-bugs/prisma/schema.prisma",
+    ".worktrees/fix-user-bugs/src/app/api/import/route.ts",
+    ".worktrees/fix-user-bugs/src/app/api/transactions/[id]/route.ts",
+    ".worktrees/fix-user-bugs/src/app/bills/page.tsx",
+    ".worktrees/fix-user-bugs/src/app/import/page.tsx",
+    ".worktrees/fix-user-bugs/tests/integration/api/import.test.ts",
+    "prisma/migrations/20260309000000_add_import_batch_id/migration.sql",
+    "prisma/schema.prisma",
+    "src/app/api/import/route.ts",
+    "src/app/api/transactions/[id]/route.ts",
+    "src/app/bills/page.tsx",
+    "src/app/import/page.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/be/bc9bbfd32c/0/metadata.json",
+      "transcript": "/be/bc9bbfd32c/0/full.jsonl",
+      "context": "/be/bc9bbfd32c/0/context.md",
+      "content_hash": "/be/bc9bbfd32c/0/content_hash.txt",
+      "prompt": "/be/bc9bbfd32c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 104,
+    "cache_creation_tokens": 278640,
+    "cache_read_tokens": 7167299,
+    "output_tokens": 24967,
+    "api_call_count": 90
+  }
+}
