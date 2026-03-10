@@ -264,16 +264,16 @@ export function FilterDrawer({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Tag</Label>
               <Select
-                value={localFilters.tag}
+                value={localFilters.tag || "__all__"}
                 onValueChange={(value) =>
-                  setLocalFilters({ ...localFilters, tag: value })
+                  setLocalFilters({ ...localFilters, tag: value === "__all__" ? "" : value })
                 }
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="__all__">Todas</SelectItem>
                   {allTags.map((tag) => (
                     <SelectItem key={tag} value={tag}>
                       <div className="flex items-center gap-1">
