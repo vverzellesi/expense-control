@@ -91,15 +91,36 @@ export default function BillsPage() {
   const [origins, setOrigins] = useState<Origin[]>([]);
   const [loading, setLoading] = useState(true);
   const [closingDay, setClosingDay] = useState(13);
+  const [closingDayLoaded, setClosingDayLoaded] = useState(false);
   const [selectedOrigin, setSelectedOrigin] = useState<string>("");
   const [expandedBill, setExpandedBill] = useState<number | null>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
 
+  // Load saved closing day from settings
   useEffect(() => {
-    fetchBills();
-  }, [closingDay, selectedOrigin]);
+    async function loadClosingDay() {
+      try {
+        const res = await fetch("/api/settings?key=billClosingDay");
+        const data = await res.json();
+        if (data?.value) {
+          setClosingDay(parseInt(data.value) || 13);
+        }
+      } catch (error) {
+        console.error("Error loading closing day:", error);
+      } finally {
+        setClosingDayLoaded(true);
+      }
+    }
+    loadClosingDay();
+  }, []);
+
+  useEffect(() => {
+    if (closingDayLoaded) {
+      fetchBills();
+    }
+  }, [closingDay, selectedOrigin, closingDayLoaded]);
 
   async function fetchBills() {
     setLoading(true);
@@ -178,7 +199,16 @@ export default function BillsPage() {
                   min={1}
                   max={28}
                   value={closingDay}
-                  onChange={(e) => setClosingDay(parseInt(e.target.value) || 13)}
+                  onChange={(e) => {
+                    const newDay = parseInt(e.target.value) || 13;
+                    setClosingDay(newDay);
+                    // Persist to settings
+                    fetch("/api/settings", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ key: "billClosingDay", value: String(newDay) }),
+                    }).catch((err) => console.error("Error saving closing day:", err));
+                  }}
                   className="w-24"
                 />
               </div>
