@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +116,19 @@ export default function BillsPage() {
     loadClosingDay();
   }, []);
 
+  // Debounced save for closing day
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const saveClosingDay = useCallback((day: number) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "billClosingDay", value: String(day) }),
+      }).catch((err) => console.error("Error saving closing day:", err));
+    }, 500);
+  }, []);
+
   useEffect(() => {
     if (closingDayLoaded) {
       fetchBills();
@@ -200,14 +213,10 @@ export default function BillsPage() {
                   max={28}
                   value={closingDay}
                   onChange={(e) => {
-                    const newDay = parseInt(e.target.value) || 13;
+                    const parsed = parseInt(e.target.value);
+                    const newDay = isNaN(parsed) ? 13 : Math.min(28, Math.max(1, parsed));
                     setClosingDay(newDay);
-                    // Persist to settings
-                    fetch("/api/settings", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ key: "billClosingDay", value: String(newDay) }),
-                    }).catch((err) => console.error("Error saving closing day:", err));
+                    saveClosingDay(newDay);
                   }}
                   className="w-24"
                 />
