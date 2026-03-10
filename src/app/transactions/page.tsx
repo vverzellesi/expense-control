@@ -449,12 +449,12 @@ function TransactionsContent() {
               {allTags.length > 0 && (
                 <div>
                   <Label>Tag</Label>
-                  <Select value={filterTag} onValueChange={setFilterTag}>
+                  <Select value={filterTag || "__all__"} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas</SelectItem>
+                      <SelectItem value="__all__">Todas</SelectItem>
                       {allTags.map((tag) => (
                         <SelectItem key={tag} value={tag}>
                           <div className="flex items-center gap-1">
