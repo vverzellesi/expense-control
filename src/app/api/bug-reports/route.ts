@@ -8,37 +8,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_IMAGES = 3;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif"];
 
-// Rate limiting: max 5 bug reports per user per 15-minute window
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-
-interface RateLimitEntry {
-  timestamps: number[];
-}
-
-export const rateLimitMap = new Map<string, RateLimitEntry>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry) {
-    rateLimitMap.set(userId, { timestamps: [now] });
-    return false;
-  }
-
-  // Remove expired timestamps
-  entry.timestamps = entry.timestamps.filter(
-    (ts) => now - ts < RATE_LIMIT_WINDOW_MS
-  );
-
-  if (entry.timestamps.length >= RATE_LIMIT_MAX) {
-    return true;
-  }
-
-  entry.timestamps.push(now);
-  return false;
-}
+import { isRateLimited } from "@/lib/rate-limit";
 
 function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN;
