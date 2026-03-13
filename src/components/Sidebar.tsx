@@ -25,8 +25,10 @@ import {
   HelpCircle,
   PieChart,
   Calculator,
+  Bug,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
+import { BugReportModal } from "@/components/BugReportModal";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -53,6 +55,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { data: session } = useSession();
   const [alertCount, setAlertCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
 
   useEffect(() => {
     async function fetchAlerts() {
@@ -133,6 +136,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         })}
       </nav>
       <div className="border-t p-3">
+        <button
+          onClick={() => {
+            setShowBugReport(true);
+            handleNavClick();
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-emerald-50/50 hover:text-gray-900"
+          title="Reportar um bug"
+        >
+          <Bug className="h-5 w-5" />
+          Reportar Bug
+        </button>
         <button
           onClick={() => {
             setShowOnboarding(true);
@@ -224,6 +238,12 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <OnboardingModal
         open={showOnboarding}
         onComplete={() => setShowOnboarding(false)}
+      />
+
+      {/* Bug Report Modal - opened via Reportar Bug button */}
+      <BugReportModal
+        isOpen={showBugReport}
+        onClose={() => setShowBugReport(false)}
       />
     </>
   );
