@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
   default: {
     transaction: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 }))
@@ -13,6 +14,7 @@ vi.mock("@/lib/db", () => ({
 import prisma from "@/lib/db"
 
 const mockFindFirst = vi.mocked(prisma.transaction.findFirst)
+const mockFindMany = vi.mocked(prisma.transaction.findMany)
 
 describe("findDuplicate", () => {
   beforeEach(() => {
@@ -113,13 +115,14 @@ describe("filterDuplicates", () => {
   })
 
   it("separates unique and duplicate transactions", async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ id: "existing" } as never) // first is dup
-      .mockResolvedValueOnce(null) // second is unique
+    // Mock findMany to return existing transactions that match "DUP"
+    mockFindMany.mockResolvedValue([
+      { description: "DUP", amount: -10, date: new Date("2026-03-05T12:00:00") },
+    ] as never)
 
     const transactions = [
-      { description: "DUP", amount: -10, date: new Date("2026-03-05") },
-      { description: "NEW", amount: -20, date: new Date("2026-03-05") },
+      { description: "DUP", amount: -10, date: new Date("2026-03-05T12:00:00") },
+      { description: "NEW", amount: -20, date: new Date("2026-03-05T12:00:00") },
     ]
 
     const result = await filterDuplicates("user1", transactions)
@@ -127,5 +130,27 @@ describe("filterDuplicates", () => {
     expect(result.unique).toHaveLength(1)
     expect(result.unique[0].description).toBe("NEW")
     expect(result.duplicateCount).toBe(1)
+  })
+
+  it("returns all as unique when no existing transactions", async () => {
+    mockFindMany.mockResolvedValue([])
+
+    const transactions = [
+      { description: "NEW1", amount: -10, date: new Date("2026-03-05") },
+      { description: "NEW2", amount: -20, date: new Date("2026-03-06") },
+    ]
+
+    const result = await filterDuplicates("user1", transactions)
+
+    expect(result.unique).toHaveLength(2)
+    expect(result.duplicateCount).toBe(0)
+  })
+
+  it("returns empty for empty input", async () => {
+    const result = await filterDuplicates("user1", [])
+
+    expect(result.unique).toHaveLength(0)
+    expect(result.duplicateCount).toBe(0)
+    expect(mockFindMany).not.toHaveBeenCalled()
   })
 })

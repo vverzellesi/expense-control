@@ -24,7 +24,7 @@ export async function handleSummaryQuery(chatId: number, userId: string) {
   let income = 0
   let expense = 0
   for (const t of transactions) {
-    if ((t as Record<string, unknown>).investmentTransaction) continue
+    if ("investmentTransaction" in t && t.investmentTransaction) continue
     if (t.type === "TRANSFER") continue
     if (t.type === "INCOME") income += Math.abs(t.amount)
     else if (t.type === "EXPENSE") expense += Math.abs(t.amount)
