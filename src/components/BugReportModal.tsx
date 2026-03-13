@@ -59,9 +59,10 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
 
   function validateAndAddFiles(files: FileList | File[]) {
     const fileArray = Array.from(files);
+    const newImages: ImagePreview[] = [];
 
     for (const file of fileArray) {
-      if (images.length >= MAX_IMAGES) {
+      if (images.length + newImages.length >= MAX_IMAGES) {
         toast({
           title: "Limite de imagens",
           description: `Máximo de ${MAX_IMAGES} imagens permitidas.`,
@@ -88,8 +89,11 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
         continue;
       }
 
-      const previewUrl = URL.createObjectURL(file);
-      setImages((prev) => [...prev, { file, previewUrl }]);
+      newImages.push({ file, previewUrl: URL.createObjectURL(file) });
+    }
+
+    if (newImages.length > 0) {
+      setImages((prev) => [...prev, ...newImages]);
     }
   }
 
@@ -196,6 +200,7 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={loading}
+              maxLength={200}
             />
           </div>
 
@@ -208,6 +213,7 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
               onChange={(e) => setDescription(e.target.value)}
               disabled={loading}
               rows={4}
+              maxLength={5000}
             />
           </div>
 

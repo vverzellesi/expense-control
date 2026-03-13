@@ -99,11 +99,10 @@ async function createGitHubIssue(
 }
 
 async function addIssueToProject(token: string, issueNodeId: string): Promise<boolean> {
-  // First, get the project node ID from the project number
   const projectQuery = `
-    query {
-      user(login: "${GITHUB_OWNER}") {
-        projectV2(number: ${GITHUB_PROJECT_NUMBER}) {
+    query($login: String!, $number: Int!) {
+      user(login: $login) {
+        projectV2(number: $number) {
           id
         }
       }
@@ -116,7 +115,10 @@ async function addIssueToProject(token: string, issueNodeId: string): Promise<bo
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query: projectQuery }),
+    body: JSON.stringify({
+      query: projectQuery,
+      variables: { login: GITHUB_OWNER, number: GITHUB_PROJECT_NUMBER },
+    }),
   });
 
   if (!projectResponse.ok) {
@@ -132,12 +134,11 @@ async function addIssueToProject(token: string, issueNodeId: string): Promise<bo
     return false;
   }
 
-  // Add the issue to the project
   const mutation = `
-    mutation {
+    mutation($projectId: ID!, $contentId: ID!) {
       addProjectV2ItemById(input: {
-        projectId: "${projectId}"
-        contentId: "${issueNodeId}"
+        projectId: $projectId
+        contentId: $contentId
       }) {
         item {
           id
@@ -152,7 +153,10 @@ async function addIssueToProject(token: string, issueNodeId: string): Promise<bo
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query: mutation }),
+    body: JSON.stringify({
+      query: mutation,
+      variables: { projectId, contentId: issueNodeId },
+    }),
   });
 
   if (!response.ok) {
@@ -188,7 +192,7 @@ function buildIssueBody(
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    await getAuthenticatedUserId(); // auth gate only
 
     const token = getGitHubToken();
     if (!token) {
@@ -207,6 +211,20 @@ export async function POST(request: NextRequest) {
     if (!title?.trim() || !description?.trim()) {
       return NextResponse.json(
         { error: "Título e descrição são obrigatórios." },
+        { status: 400 }
+      );
+    }
+
+    if (title.trim().length > 200) {
+      return NextResponse.json(
+        { error: "Título muito longo (máximo 200 caracteres)." },
+        { status: 400 }
+      );
+    }
+
+    if (description.trim().length > 5000) {
+      return NextResponse.json(
+        { error: "Descrição muito longa (máximo 5000 caracteres)." },
         { status: 400 }
       );
     }
