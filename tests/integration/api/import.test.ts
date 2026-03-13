@@ -8,10 +8,14 @@ vi.mock('@/lib/db', () => ({
     recurringExpense: {
       findMany: vi.fn()
     },
+    categoryTag: {
+      findMany: vi.fn()
+    },
     transaction: {
       create: vi.fn(),
       findFirst: vi.fn(),
-      update: vi.fn()
+      update: vi.fn(),
+      updateMany: vi.fn()
     },
     categoryTag: {
       findMany: vi.fn()
@@ -24,7 +28,7 @@ vi.mock('@/lib/db', () => ({
 }))
 
 // Import route handlers and prisma mock after mocking
-import { POST } from '@/app/api/import/route'
+import { POST, DELETE } from '@/app/api/import/route'
 import prisma from '@/lib/db'
 
 // Type assertion for mocked prisma
@@ -32,10 +36,14 @@ const mockPrisma = prisma as unknown as {
   recurringExpense: {
     findMany: ReturnType<typeof vi.fn>
   }
+  categoryTag: {
+    findMany: ReturnType<typeof vi.fn>
+  }
   transaction: {
     create: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
+    updateMany: ReturnType<typeof vi.fn>
   }
   categoryTag: {
     findMany: ReturnType<typeof vi.fn>
@@ -1065,6 +1073,88 @@ describe('POST /api/import - Carryover Linking', () => {
       expect(response.status).toBe(201)
       expect(data.carryoverLinkedCount).toBe(1)
       expect(data.linkedCarryovers[0].interestRate).toBe(40)
+    })
+  })
+
+  describe('DELETE /api/import - Undo import batch', () => {
+    it('should soft-delete all transactions in a batch', async () => {
+      mockPrisma.transaction.updateMany.mockResolvedValue({ count: 5 })
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import?batchId=test-batch-123'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.count).toBe(5)
+      expect(data.message).toContain('5 transacoes removidas')
+
+      expect(mockPrisma.transaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: testUser.id,
+          importBatchId: 'test-batch-123',
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: expect.any(Date),
+        },
+      })
+    })
+
+    it('should return 400 when batchId is missing', async () => {
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('ID do lote e obrigatorio')
+    })
+
+    it('should return 404 when no transactions match the batch', async () => {
+      mockPrisma.transaction.updateMany.mockResolvedValue({ count: 0 })
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import?batchId=nonexistent-batch'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(404)
+      expect(data.error).toBe('Nenhuma transacao encontrada para este lote')
+    })
+
+    it('should include importBatchId in POST response', async () => {
+      const mockTransaction = createMockTransaction(
+        'txn-batch',
+        'NETFLIX',
+        -39.90,
+        '2024-02-15'
+      )
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'NETFLIX', amount: 39.90, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.importBatchId).toBeDefined()
+      expect(typeof data.importBatchId).toBe('string')
+      expect(data.importBatchId.length).toBeGreaterThan(0)
     })
   })
 

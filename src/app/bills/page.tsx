@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,15 +91,49 @@ export default function BillsPage() {
   const [origins, setOrigins] = useState<Origin[]>([]);
   const [loading, setLoading] = useState(true);
   const [closingDay, setClosingDay] = useState(13);
+  const [closingDayLoaded, setClosingDayLoaded] = useState(false);
   const [selectedOrigin, setSelectedOrigin] = useState<string>("");
   const [expandedBill, setExpandedBill] = useState<number | null>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
 
+  // Load saved closing day from settings
   useEffect(() => {
-    fetchBills();
-  }, [closingDay, selectedOrigin]);
+    async function loadClosingDay() {
+      try {
+        const res = await fetch("/api/settings?key=billClosingDay");
+        const data = await res.json();
+        if (data?.value) {
+          setClosingDay(parseInt(data.value) || 13);
+        }
+      } catch (error) {
+        console.error("Error loading closing day:", error);
+      } finally {
+        setClosingDayLoaded(true);
+      }
+    }
+    loadClosingDay();
+  }, []);
+
+  // Debounced save for closing day
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const saveClosingDay = useCallback((day: number) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "billClosingDay", value: String(day) }),
+      }).catch((err) => console.error("Error saving closing day:", err));
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    if (closingDayLoaded) {
+      fetchBills();
+    }
+  }, [closingDay, selectedOrigin, closingDayLoaded]);
 
   async function fetchBills() {
     setLoading(true);
@@ -178,7 +212,12 @@ export default function BillsPage() {
                   min={1}
                   max={28}
                   value={closingDay}
-                  onChange={(e) => setClosingDay(parseInt(e.target.value) || 13)}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    const newDay = isNaN(parsed) ? 13 : Math.min(28, Math.max(1, parsed));
+                    setClosingDay(newDay);
+                    saveClosingDay(newDay);
+                  }}
                   className="w-24"
                 />
               </div>

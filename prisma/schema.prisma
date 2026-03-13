@@ -122,6 +122,7 @@ model Transaction {
   tags               String? // JSON array: '["trabalho", "viagem"]'
   categoryTagId      String?
   categoryTag        CategoryTag?  @relation(fields: [categoryTagId], references: [id], onDelete: SetNull)
+  importBatchId      String? // Groups transactions from same import
   deletedAt          DateTime? // Soft delete - null means active
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -139,6 +140,7 @@ model Transaction {
   @@index([userId, deletedAt, date])
   @@index([userId, isFixed, deletedAt])
   @@index([userId, isInstallment, deletedAt])
+  @@index([userId, importBatchId])
 }
 
 model RecurringExpense {

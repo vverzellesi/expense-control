@@ -1,6 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
 import { importTransactions } from "@/lib/import-service";
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const userId = await getAuthenticatedUserId();
+    const searchParams = request.nextUrl.searchParams;
+    const batchId = searchParams.get("batchId");
+
+    if (!batchId) {
+      return NextResponse.json(
+        { error: "ID do lote e obrigatorio" },
+        { status: 400 }
+      );
+    }
+
+    // Soft delete all transactions from this import batch
+    const result = await prisma.transaction.updateMany({
+      where: {
+        userId,
+        importBatchId: batchId,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Nenhuma transacao encontrada para este lote" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      message: `${result.count} transacoes removidas`,
+      count: result.count,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Error deleting import batch:", error);
+    return NextResponse.json(
+      { error: "Erro ao remover importacao" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +90,7 @@ export async function POST(request: NextRequest) {
         linkedCount: result.linkedCount,
         carryoverLinkedCount: result.carryoverLinkedCount,
         linkedCarryovers: result.linkedCarryovers,
+        importBatchId: result.importBatchId,
       },
       { status: 201 }
     );
