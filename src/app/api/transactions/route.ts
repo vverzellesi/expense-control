@@ -32,19 +32,19 @@ export async function GET(request: NextRequest) {
     // Custom date range filter takes priority
     if (startDate && endDate) {
       where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: parseDateLocal(startDate),
+        lte: new Date(parseDateLocal(endDate).setHours(23, 59, 59, 999)),
       };
     } else if (month && year) {
       const monthStart = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const monthEnd = new Date(parseInt(year), parseInt(month), 0);
+      const monthEnd = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
       where.date = {
         gte: monthStart,
         lte: monthEnd,
       };
     } else if (year) {
       const yearStart = new Date(parseInt(year), 0, 1);
-      const yearEnd = new Date(parseInt(year), 11, 31);
+      const yearEnd = new Date(parseInt(year), 11, 31, 23, 59, 59, 999);
       where.date = {
         gte: yearStart,
         lte: yearEnd,

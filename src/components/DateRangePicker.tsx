@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { formatDate, toLocalDateString } from "@/lib/utils";
+import { formatDate, toLocalDateString, parseDateLocal } from "@/lib/utils";
 
 interface DateRangePickerProps {
   startDate: string;
@@ -64,7 +64,7 @@ export function DateRangePicker({
   }
 
   function navigateMonth(direction: "prev" | "next") {
-    const currentStart = new Date(startDate);
+    const currentStart = parseDateLocal(startDate);
     const offset = direction === "prev" ? -1 : 1;
 
     const newStart = new Date(currentStart.getFullYear(), currentStart.getMonth() + offset, 1);

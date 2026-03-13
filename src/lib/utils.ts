@@ -13,7 +13,14 @@ export function formatCurrency(value: number): string {
 }
 
 export function formatDate(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
+  let d: Date;
+  if (typeof date === "string") {
+    // YYYY-MM-DD strings: parse with local timezone to avoid UTC shift
+    // Strings with time component (T): use Date constructor directly
+    d = date.includes("T") ? new Date(date) : parseDateLocal(date);
+  } else {
+    d = date;
+  }
   return new Intl.DateTimeFormat("pt-BR").format(d);
 }
 
