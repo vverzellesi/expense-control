@@ -46,6 +46,11 @@ model User {
 
   // Simulation models
   simulations           Simulation[]
+
+  // Telegram integration
+  telegramLink           TelegramLink?
+  telegramLinkTokens     TelegramLinkToken[]
+  telegramPendingImports TelegramPendingImport[]
 }
 
 model Account {
@@ -431,6 +436,48 @@ model Simulation {
   // User relationship
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ==========================================
+// TELEGRAM INTEGRATION MODELS
+// ==========================================
+
+model TelegramLink {
+  id       String   @id @default(cuid())
+  userId   String   @unique
+  chatId   String   @unique
+  linkedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model TelegramLinkToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model TelegramPendingImport {
+  id        String   @id @default(cuid())
+  userId    String
+  chatId    String
+  payload   String   // JSON array of transactions
+  origin    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
