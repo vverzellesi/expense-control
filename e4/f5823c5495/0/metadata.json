@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "e4f5823c5495",
+  "session_id": "68208bb3-2255-4d19-b53c-9d7c7272e6ef",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-13T02:48:27.841007Z",
+  "branch": "vverzellesi/gh-project-integration",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "ai_docs/brainstorm/2026-03-12-bug-report-github-design.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/README.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/phase-1-api-textarea.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/phase-2-modal-sidebar.md",
+    "src/app/api/bug-reports/route.ts",
+    "src/components/BugReportModal.tsx"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "aac0972f-e8ea-4e1b-874c-92c5842b04cd",
+  "checkpoint_transcript_start": 620,
+  "transcript_lines_at_start": 620,
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 32656,
+    "cache_read_tokens": 1862696,
+    "output_tokens": 2269,
+    "api_call_count": 12
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-13T02:48:27.628052Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 297,
+    "human_removed": 1169,
+    "total_committed": 287,
+    "agent_percentage": 0
+  }
+}

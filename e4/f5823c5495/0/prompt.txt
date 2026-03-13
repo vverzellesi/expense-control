@@ -1,0 +1,2325 @@
+<system_instruction>
+You are working inside Conductor, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/victor/conductor/workspaces/expense-control/conakry directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with Conductor, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+Quero que você planeje uma feature dentro do app de report de bugs. E nesse report deve ser um modal simples ou alguma UI bem minimalista e interessante, onde vai ter simplesmente um título de inscrição e opcionalmente anexos para colocar imagens. E o objetivo é que esse isho reportado dentro da plataforma já vá direto para o meu projeto do GitHub que eu criei dentro desse repositório.
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/brainstorming
+
+# Brainstorming Ideas Into Designs
+
+## Overview
+
+Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+
+Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design in small sections (200-300 words), checking after each section whether it looks right so far.
+
+## The Process
+
+**Understanding the idea:**
+- Check out the current project state first (files, docs, recent commits)
+- Ask questions one at a time to refine the idea
+- Prefer multiple choice questions when possible, but open-ended is fine too
+- Only one question per message - if a topic needs more exploration, break it into multiple questions
+- Focus on understanding: purpose, constraints, success criteria
+
+**Exploring approaches:**
+- Propose 2-3 different approaches with trade-offs
+- Present options conversationally with your recommendation and reasoning
+- Lead with your recommended option and explain why
+
+**Presenting the design:**
+- Once you believe you understand what you're building, present the design
+- Break it into sections of 200-300 words
+- Ask after each section whether it looks right so far
+- Cover: architecture, components, data flow, error handling, testing
+- Be ready to go back and clarify if something doesn't make sense
+
+## After the Design
+
+**Documentation:**
+- Write the validated design to `ai_docs/brainstorm/YYYY-MM-DD-<topic>-design.md`
+- Commit the design document to git
+
+**Implementation (if continuing):**
+- Ask: "Ready to set up for implementation?"
+- Use writing-plans to create detailed implementation plan, you must send the absolute path to the brainstorming document
+
+## Qualidade Linguística
+
+Quando o usuário se comunica em Português Brasileiro, TODOS os artefatos gerados (documento de design, perguntas, opções, descrições) DEVEM usar acentuação correta: á, à, â, ã, é, ê, í, ó, ô, õ, ú, ü, ç. Texto sem acentos em PT-BR é defeito. Verificar antes de salvar o documento de design.
+
+**Exceção:** Código, nomes de variáveis, e termos técnicos em inglês mantêm sua grafia original.
+
+## Key Principles
+
+- **One question at a time** - Don't overwhelm with multiple questions
+- **Multiple choice preferred** - Easier to answer than open-ended when possible
+- **YAGNI ruthlessly** - Remove unnecessary features from all designs
+- **Explore alternatives** - Always propose 2-3 approaches before settling
+- **Incremental validation** - Present design in sections, validate each
+- **Be flexible** - Go back and clarify when something doesn't make sense
+
+---
+
+B - o projeto é o https://github.com/users/vverzellesi/projects/2
+
+---
+
+B
+
+---
+
+descrição também, obrigatória
+
+---
+
+B, se for possível
+
+---
+
+A
+
+---
+
+A
+
+---
+
+sim
+
+---
+
+sim
+
+---
+
+Faça o que for mais simples e menos custoso para a aplicação.
+
+Eu tinha pensado em enviar a imagem direto para o GitHub para a gente não precisar armazenar do nosso lado. Mas se for mais fácil armazenar no servidor e depois de criar a issue, remover do servidor, aí tudo bem também.
+
+---
+
+sim, segue
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/writing-plans
+
+# Writing Implementation Plans
+
+## Overview
+
+Create detailed, actionable implementation plans through interactive research before writing code.
+
+**Core principle:** A plan is a specification that enables mechanical implementation. If implementation requires invention or decision-making, the plan has failed.
+
+**This skill is a WORKFLOW.** Execute it step-by-step. Every step has explicit transitions. NEVER skip steps. NEVER invent your own order.
+
+## When to Use
+
+Use when ANY of these apply:
+- Starting work on a new feature or ticket
+- Task requires understanding existing patterns before coding
+- Requirements span multiple files or systems
+- You need to coordinate phases of work
+- Success criteria need to be explicit
+
+## When NOT to Use
+
+Skip when:
+- Simple bug fix with obvious solution
+- Task is well-understood and can be completed quickly
+- User explicitly wants code, not a plan
+
+---
+
+## The Five Iron Laws
+
+### 1. No Plan Without Research
+
+```
+NO PLAN WITHOUT CODEBASE RESEARCH FIRST
+```
+
+Skip research? Your plan is worthless. Start over.
+
+### 2. Plans Contain Code
+
+```
+THE PLAN IS THE CODE, JUST NOT YET IN FILES
+```
+
+If implementing requires thinking/designing, the plan is incomplete.
+
+### 3. Tests Are Not a Separate Phase
+
+```
+EACH PHASE INCLUDES ITS TESTS
+```
+
+A phase without its tests is NOT shippable.
+
+### 4. Phase Count Matches Complexity
+
+```
+SMALL CHANGES = SINGLE PHASE
+```
+
+Would a senior engineer split this into multiple PRs? NO → single phase.
+
+### 5. 100% Rule (No Gaps, No Overlaps)
+
+```
+PLAN CAPTURES ALL WORK - NOTHING MORE, NOTHING LESS
+```
+
+---
+
+## Execution Model: Know Your Consumer
+
+Your plan is consumed by `implementing-plan`. Understanding its execution chain shapes how you write plans.
+
+### Per Phase:
+1. ONE `implementation-executor` subagent dispatched (200K context window)
+2. Executor reads phase file + all `Load Before Implementing` files
+3. Executor runs TDD per task: RED → GREEN → REFACTOR
+4. Executor produces structured **Phase Execution Report** (validated by orchestrator)
+5. On validation failure: re-dispatch with error context (max 3 attempts → user escalation)
+6. `git commit --no-verify`
+7. `Skill(running-automated-checks)`
+8. README dashboard updated (phase status + learnings)
+
+### After ALL Phases:
+9. `Skill(reviewing-code)` — mandatory, non-negotiable
+10. `Skill(validating-implementation)` — mandatory, non-negotiable
+
+### What This Means For Plan Writing
+
+| Constraint | Implication |
+|------------|-------------|
+| **≤3 tasks per phase** | Hard limit. More tasks = context overload. Split into more phases instead. |
+| **One executor per phase** | Phase = dispatch unit. Phase sizing determines executor workload. |
+| **Plan code is executed verbatim** | Wrong imports, missing functions, bad file paths → re-dispatch. |
+| **Executor has 200K context** | Phase file + all referenced files + TDD code must fit. |
+| **TDD: YES/NO feeds validation** | Executor report includes per-task TDD results. Mark accurately. |
+| **Max 3 re-dispatches** | After 3 failures, user gets escalated. Write plans that succeed first try. |
+| **Review + validation are mandatory** | Plan code must be review-ready, not just "works." |
+
+---
+
+## CRITICAL: Preserve Main Context
+
+**The main conversation is for USER DISCUSSION ONLY.**
+
+| DO in Main Context | DO in Subagents |
+|--------------------|-----------------|
+| Read explicitly mentioned files | ALL research via `researching-codebase` skill |
+| Read the research document | The skill handles locator, analyzer, pattern-finder internally |
+| Present findings to user | |
+| Ask clarifying questions | |
+| Iterate on plan structure | |
+| Write the plan document | |
+
+**NEVER spawn `codebase-locator`, `codebase-analyzer`, or `codebase-pattern-finder` directly.**
+These are INTERNAL agents of `researching-codebase`. Spawning them separately wastes context and duplicates work.
+
+---
+
+## The Workflow
+
+Execute these steps IN ORDER. Every step has explicit transitions.
+NEVER skip a step. NEVER proceed past ⛔ without user response.
+
+### STEP 1: Read Mentioned Files
+
+**WHY:** Build initial context from what the user already provided.
+
+- Read ALL mentioned files COMPLETELY (tickets, research docs, related plans)
+- Use Read tool WITHOUT limit/offset
+- NEVER read partially
+
+→ Go to **STEP 2**
+
+### STEP 2: Research
+
+**WHY:** Understand the codebase before planning. `researching-codebase` produces an optimized, structured document.
+
+- Invoke `researching-codebase` via subagent:
+
+  ```
+  Task(
+    subagent_type: "general-purpose",
+    description: "Research [FEATURE/SYSTEM]",
+    prompt: "Use Skill(researching-codebase) to research how [FEATURE/SYSTEM] currently works in preparation for [TASK]. Save findings to ai_docs/research/YYYY-MM-DD-description.md. Return summary of key findings."
+  )
+  ```
+
+- Read the research document COMPLETELY in main context
+- DO NOT re-read raw files the research already covers
+
+→ Go to **STEP 3**
+
+### STEP 3: Research Quality Gate
+
+**WHY:** Insufficient research produces plans that fail during implementation.
+
+Answer ALL 7 questions:
+
+1. What files will I modify and why?
+2. What existing code does something similar?
+3. What patterns/conventions must I follow?
+4. What will break if I get this wrong?
+5. How is similar code tested in this codebase?
+6. What related systems exist that I'm NOT changing but might affect understanding?
+7. Have I traced the full data flow lifecycle?
+   - When does each component initialize?
+   - When does config/data flow from source to consumer?
+   - Are there timing dependencies between components?
+
+**Branching:**
+
+- ALL 7 answered → Go to **STEP 4**
+- SPECIFIC file detail missing → Read that ONE file directly → Go to **STEP 3**
+- BROAD gap remains → Re-invoke `researching-codebase` with targeted query → Go to **STEP 2**
+- Need USER clarification → AskUserQuestion → incorporate answer → Go to **STEP 3**
+
+### STEP 4: ⛔ Present Findings
+
+**WHY:** User must confirm understanding before structure work begins.
+
+Present using this format:
+
+```
+Based on [task], I understand we need to [summary].
+
+I've found that:
+- [Current implementation detail with file:line]
+- [Pattern or constraint discovered]
+
+Questions that my research couldn't answer:
+- [Technical question requiring judgment]
+- [Business logic clarification]
+
+Ready to proceed to structure development?
+```
+
+**⛔ STOP. Wait for user response.**
+
+**Branching:**
+
+- User confirms → Go to **STEP 6**
+- User corrects or adds info → Go to **STEP 5**
+
+### STEP 5: Verify Corrections
+
+**WHY:** User corrections must be verified against actual code. DO NOT accept blindly.
+
+- Re-invoke `researching-codebase` with targeted follow-up query
+- Read new research document
+- NEVER just accept a correction without verification
+
+→ Go to **STEP 3**
+
+### STEP 6: Propose Structure
+
+**WHY:** Get alignment on scope and phasing before writing details. Phasing is the most important structural decision — it determines how the executor consumes the plan.
+
+- Determine phase count using Iron Law #4
+- **Hard limit: ≤3 tasks per phase.** The executor processes one phase in a single context window. More tasks = more files to load + more TDD cycles = context exhaustion. Prefer more phases with fewer tasks over fewer phases with many tasks.
+- Phase count = ceil(tasks / 3). 6 tasks → 2 phases, 9 tasks → 3, 12 tasks → 4, 15 tasks → 5. Do NOT default to any fixed number.
+
+#### How to Phase Well
+
+**The goal:** Each phase produces a working, demonstrable increment. Phase 1 should produce something you can run and see working — not just a library or a schema.
+
+**The Tracer Bullet Principle applied to phases:**
+- Phase 1 = end-to-end skeleton. A minimal working system touching ALL layers.
+- Subsequent phases = expand capabilities on top of the working skeleton.
+
+**Phase Quality Checklist:**
+1. **Working increment** — After this phase, can you demo something? If not, merge it with the next phase.
+2. **Vertical, not horizontal** — Each phase touches all necessary layers (types → logic → API → test), not one layer at a time.
+3. **Natural boundary** — Phase boundary aligns with a commit/PR point. Would a senior engineer pause here for review?
+4. **Minimal coupling** — Later phases don't force changes to earlier phases. Dependencies flow forward.
+5. **Tests included** — Each phase has its own tests. No "tests phase" at the end.
+
+**Common phasing mistakes:**
+
+| Bad Phasing | Why It Fails | Better Phasing |
+|-------------|-------------|----------------|
+| P1: All types/interfaces, P2: All logic, P3: All tests | Horizontal layers. Nothing works until P3. | P1: One feature end-to-end with types+logic+tests. P2: Next feature. |
+| P1: Core library, P2: API using library | P1 has no demo. You can't run it. | P1: Library + one API endpoint + test = runnable. P2: Remaining endpoints. |
+| P1: Backend, P2: Frontend | Nothing user-facing until P2. | P1: One user flow end-to-end. P2: Additional flows. |
+| P1: Setup/scaffolding, P2: Real work | P1 delivers zero value. | Merge scaffolding into P1 as first tasks. |
+
+**Task budget per phase:**
+- **Hard limit: ≤3 tasks per phase.** Non-negotiable.
+- One `implementation-executor` handles ALL tasks in the phase (200K context window)
+- 3 tasks × ~3 files each = ~9 files loaded. Leaves ample room for TDD cycles.
+- If you're tempted to add a 4th task, create a new phase instead
+
+For **single-phase plans** (most common):
+
+```
+Here's my proposed plan structure:
+
+## Overview
+[1-2 sentence summary]
+
+## Implementation (single phase)
+- [File 1]: [change summary]
+- [File 2]: [change summary]
+- Tests: [what tests]
+
+This is a small, focused change - single phase is appropriate.
+Does this make sense?
+```
+
+For **multi-phase plans** (only when justified):
+
+```
+Here's my proposed plan structure:
+
+## Overview
+[1-2 sentence summary]
+
+## Why multiple phases:
+[Explain why this can't be a single phase]
+
+## Implementation Phases:
+1. [Phase name] - [what it delivers as a working increment]
+2. [Phase name] - [what it adds on top of Phase 1]
+... (as many phases as the task count requires — do NOT default to any fixed number)
+
+Phase 1 produces: [what you can run/demo after Phase 1]
+
+Does this phasing make sense?
+```
+
+→ Go to **STEP 7**
+
+### STEP 7: ⛔ Structure Approval
+
+**WHY:** Writing a full plan for the wrong structure wastes everyone's time.
+
+**⛔ STOP. Wait for user response.**
+
+**Branching:**
+
+- User approves → Go to **STEP 8**
+- User adjusts → Modify structure → Go to **STEP 7**
+
+### STEP 8: Write Plan
+
+**WHY:** The plan document enables mechanical implementation.
+
+1. Check for existing directory/file collision
+2. Create directory `ai_docs/plans/YYYY-MM-DD-description/`
+3. Write README.md — load [references/readme-template.md](./references/readme-template.md)
+4. Write phase-N files — load [references/plan-template.md](./references/plan-template.md)
+5. Every task uses the required task template format
+
+**Rules during writing:**
+
+- **Greenfield Calibration:** High complexity = full code, Medium = intent + signatures, Low/Trivial = inline in parent task
+- **Tracer Bullet:** first task in each phase = end-to-end skeleton for that phase's scope
+- **YAGNI:** only build what the first case exercises
+- **Trivial tasks** (< 5 lines, zero decisions) → inline in parent task, NOT separate tasks
+- **Phase Quality:** Re-verify each phase delivers a working increment (see STEP 6 checklist). If a phase only produces types or scaffolding with nothing runnable, merge it into the next phase.
+
+→ Go to **STEP 9**
+
+### STEP 9: Quality Gates
+
+**WHY:** Quality gates catch plan deficiencies before implementation.
+
+Load [references/quality-gates.md](./references/quality-gates.md) for full checklists.
+
+Run ALL gates:
+
+1. **Template Compliance Gate** — all required plan sections present
+2. **100% Rule Verification** — no gaps, no overlaps, all tasks complete
+3. **Implementation-Ready Verification** — copy/paste ready, no placeholders
+4. **Phasing Quality Gate** — each phase is a vertical working increment, not a horizontal layer
+5. **Executor Compatibility Gate** — dependency completeness, no dead references, context budget
+
+**Branching:**
+
+- ALL gates pass → Go to **STEP 10**
+- ANY gate fails → Fix the plan → Go to **STEP 9**
+
+### STEP 10: Self-Check
+
+**WHY:** Catch issues before presenting to user and Oracle.
+
+Verify ALL:
+
+- [ ] Did I examine actual code files (not just docs)?
+- [ ] Can I cite specific files for each pattern I'm using?
+- [ ] Does my plan contain actual implementation code?
+- [ ] Can implementation be done by copy/paste without thinking?
+- [ ] Did I complete the 100% Rule verification?
+- [ ] Does every task have Load Before Implementing listed?
+- [ ] Is every acceptance criterion in Given-When-Then format?
+
+**Branching:**
+
+- ALL yes → Go to **STEP 11**
+- ANY no → Fix → Go to **STEP 9**
+
+### STEP 11: ⛔ Present Plan
+
+**WHY:** Oracle reviews BEFORE user sees the plan. This catches issues humans miss.
+
+1. Chain to `reviewing-plan` skill (Oracle reviews)
+2. Evaluate and apply valid Oracle suggestions
+3. Present final plan to user
+
+**⛔ STOP. Wait for user response.**
+
+**Branching:**
+
+- User accepts → **DONE**
+- User has feedback → Go to **STEP 12**
+
+### STEP 12: Iterate
+
+**WHY:** User feedback must be incorporated and re-validated.
+
+- Apply user feedback
+- If feedback requires new research → Go to **STEP 2**
+- If feedback is structural → Go to **STEP 6**
+- If feedback is about plan details → Fix → Go to **STEP 9**
+
+---
+
+## Quick Reference
+
+| Step | Action | Gate | Transition |
+|------|--------|------|------------|
+| 1 | Read mentioned files | — | → 2 |
+| 2 | Research via researching-codebase | — | → 3 |
+| 3 | Research Quality Gate (7 Qs) | Loop if insufficient | → 4 or loop |
+| 4 | ⛔ Present findings | User confirms | → 5 or 6 |
+| 5 | Verify corrections | — | → 3 |
+| 6 | Propose structure | — | → 7 |
+| 7 | ⛔ Structure approval | User approves | → 8 or loop |
+| 8 | Write plan | — | → 9 |
+| 9 | Quality gates | Loop if fail | → 10 or loop |
+| 10 | Self-check | Loop if fail | → 11 or → 9 |
+| 11 | ⛔ Present plan (Oracle first) | User accepts | → Done or 12 |
+| 12 | Iterate on feedback | — | → 2, 6, or 9 |
+
+---
+
+## Examples
+
+<good-example>
+**Agent follows workflow step transitions:**
+
+```
+STEP 1: Reading ticket file...done.
+STEP 2: Invoking researching-codebase...
+         Research document saved. Reading it...done.
+STEP 3: Research Quality Gate:
+  Q1: ✅ Files to modify: src/auth/handler.ts, src/middleware/auth.ts
+  Q2: ✅ Similar code: src/auth/oauth.ts uses same pattern
+  Q3: ✅ Conventions: JWT tokens, Express middleware chain
+  Q4: ✅ Risk: breaking existing auth flow
+  Q5: ✅ Tests: src/__tests__/auth.test.ts
+  Q6: ✅ Related: session store (not changing)
+  Q7: ✅ Lifecycle: auth middleware runs before handlers
+  ALL PASS → Go to STEP 4
+STEP 4: ⛔ Presenting findings to user...waiting for response.
+```
+</good-example>
+
+<bad-example>
+**Agent treats skill as chapters, invents own order:**
+
+```
+Let me research the codebase...
+[Invokes researching-codebase]
+[Also spawns codebase-analyzer for more detail]
+[Reads 4 files directly]
+Now let me write the plan structure...
+[Skips presenting findings to user]
+[Skips quality gates]
+Here's the plan:
+```
+
+**Why bad:** Skipped STEP 3 (quality gate), skipped STEP 4 (user checkpoint), spawned raw agent (codebase-analyzer), jumped from research directly to writing without user approval.
+</bad-example>
+
+---
+
+## Success Criteria Format
+
+**ALWAYS separate into two categories:**
+
+### Automated Verification
+
+Use `Skill(running-automated-checks)` — discovers and runs project-specific checks.
+
+**Do NOT duplicate checks that `running-automated-checks` already handles.**
+Only add additional automated checks for things the skill does NOT cover (e.g., database migrations, deployment verification, build).
+
+### Human Verification (only when automation impossible)
+
+**Ask human ONLY when ALL true:**
+
+1. No automated test exists that covers this behavior
+2. You cannot write a test (truly impossible, not just hard)
+3. Verification requires human judgment (aesthetics, UX, domain expertise)
+
+---
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "User said trust me / just write it" | Trust means delivering quality. Unresearched plans fail. | **Insist on codebase research** |
+| "I know this pattern already" | You know the pattern. You don't know THIS codebase. | **Run researching-codebase skill** |
+| "TBD is acceptable for unclear items" | TBD in a plan = unfinished work. | **Resolve before finalizing** |
+| "The implementer will figure out the code" | The plan IS the code. | **Include actual code (copy/paste ready)** |
+| "Tests can be a separate phase" | Each phase must be shippable. | **Include tests in same phase** |
+| "Let's split this into phases" | Most tasks are single-phase. | **Apply Iron Law of Phase Count** |
+| "First, let's build the database layer" | Horizontal slicing anti-pattern. | **Start with tracer bullet** |
+| "Load Before Implementing is optional" | AI needs explicit context to load. | **Every task needs files + line ranges** |
+| "Pre-conditions are obvious" | AI can't infer prerequisites. | **Explicit checklist required** |
+| "On Failure is unnecessary" | AI needs recovery guidance. | **Include recovery actions** |
+| "Acceptance criteria are obvious" | Obvious to you ≠ testable by AI. | **Use Given-When-Then format** |
+| "I know how this system works" | Domain knowledge ≠ codebase knowledge. | **Verify against actual code** |
+| "I found the files to modify" | Knowing WHAT files ≠ understanding WHEN they execute. | **Trace the full data flow lifecycle** |
+| "This pattern works elsewhere" | Same pattern, different lifecycle context. | **Verify lifecycle matches** |
+| "Add npm test / lint / typecheck to success criteria" | `running-automated-checks` already handles these. | **Use `Skill(running-automated-checks)`** |
+| "Build the complete framework/module" | Brainstorm scope ≠ first-phase scope. | **Apply YAGNI Rule** |
+| "Every file needs the full task template" | 35 lines of template for 3 lines of code is absurd. | **Inline trivial tasks** |
+| "The plan must include full code for all new files" | Greenfield plans become code dumps. | **Apply Greenfield Calibration** |
+| "I need codebase-analyzer for more detail" | `researching-codebase` orchestrates all agents internally. | **Re-invoke `researching-codebase` with targeted query** |
+| "I can skip steps because the task is simple" | Simple tasks still need research and user approval. | **Follow ALL steps in order** |
+| "I'll present findings and structure together" | User confirms understanding BEFORE seeing structure. | **Separate STEP 4 and STEP 6** |
+| "The executor will figure out the missing import" | Executor copies plan code verbatim. Missing imports = failed TDD = re-dispatch. | **Verify all imports and references exist** |
+| "Phase 1 needs to set up the foundation first" | Foundations without runnable output = horizontal layering. | **Phase 1 must produce something demonstrable** |
+| "Infrastructure should be its own phase" | Separating infra from functionality = horizontal slice. | **Merge setup into the first functional phase** |
+| "Review and validation are implementing-plan's job" | Plans that aren't review-ready produce friction and rework. | **Write review-ready code from the start** |
+| "I can fit more tasks in one phase" | 4+ tasks = too many files loaded + too many TDD cycles = context exhaustion. | **≤3 tasks per phase, no exceptions** |
+
+---
+
+## Qualidade Linguística
+
+Quando o usuário se comunica em Português Brasileiro, TODOS os artefatos gerados (README.md, phase files, descrições, learnings, acceptance criteria em texto livre) DEVEM usar acentuação correta: á, à, â, ã, é, ê, í, ó, ô, õ, ú, ü, ç. Texto sem acentos em PT-BR é considerado defeito no plano. Verificar antes de salvar.
+
+**Exceção:** Código, nomes de variáveis, e termos técnicos em inglês mantêm sua grafia original.
+
+---
+
+## Red Flags - STOP
+
+- Planning without reading code first
+- Writing full plan before structure approval
+- Leaving open questions in final plan
+- **Skipping ANY numbered step**
+- **Proceeding past ⛔ without user response**
+- **Creating multiple phases for small tasks**
+- **"Create a function that..."** instead of actual code
+- **Phase with code but no tests**
+- **Tasks without Load Before Implementing**
+- **Tasks without Pre-conditions**
+- **Tasks without On Failure**
+- **Acceptance criteria without Given-When-Then**
+- **First task is "database schema" or "backend infrastructure"**
+- **No Depends On field on tasks**
+- **Spawning codebase-analyzer/locator/pattern-finder directly**
+- **Phase 1 produces only types/interfaces/scaffolding with nothing runnable**
+- **Phase named "Setup" or "Foundation" that delivers no working functionality**
+- **Greenfield plan implements all variants from brainstorm**
+- **Separate task for barrel/re-export file**
+- **Phase with more than 3 tasks** (hard limit — split immediately)
+- **Plan code imports functions that don't exist in codebase and aren't created by earlier tasks**
+- **Success criteria missing review + validation as final gates**
+
+**If you catch yourself doing these:** Stop. Go back to the correct STEP.
+
+---
+
+## Bundled Resources
+
+| Resource | When to Load | Why |
+|----------|--------------|-----|
+| `references/readme-template.md` | STEP 8: Writing README.md | Plan dashboard template |
+| `references/plan-template.md` | STEP 8: Writing phase files | Task template + phase structure |
+| `references/quality-gates.md` | STEP 9: Running quality gates | Full gate checklists |
+
+---
+
+## References
+
+### Research Foundation
+
+This skill produces plans optimized for **AI agent implementation**. Based on:
+
+- **INEST Criteria** (adapted from INVEST) - AI-optimized task validation
+- **WBS 100% Rule** (PMI) - Completeness verification
+- **Tracer Bullets** (Pragmatic Programmer) - End-to-end first
+- **Given-When-Then** (BDD) - Unambiguous acceptance criteria
+- **Context Loading** - Explicit file paths + line ranges for AI context management
+- **Failure Recovery** - On Failure instructions for AI agent resilience
+
+
+ARGUMENTS: REDACTED.md
+
+---
+
+sim
+
+---
+
+segue
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/reviewing-plan
+
+# Reviewing Plan
+
+## Overview
+
+After a plan is written, invoke Oracle (GPT-5.2) to review it. Treat Oracle's output as a **junior review** - valuable input that requires senior evaluation before applying.
+
+## When to Use
+
+This skill is automatically chained from `writing-plans`. Do not invoke directly unless reviewing an existing plan.
+
+## Workflow Checklist
+
+Copy and track progress:
+
+```
+Plan Review Progress:
+- [ ] Step 1: Spawn Oracle subagent with plan file
+- [ ] Step 2: Evaluate each Oracle suggestion
+  - [ ] Valid + important → Apply
+  - [ ] Valid but minor → Apply if quick
+  - [ ] Incorrect assumption → Discard
+  - [ ] Over-engineering → Discard
+  - [ ] Already covered → Discard
+- [ ] Step 3: Update plan with valid suggestions
+- [ ] Step 4: Present final plan to user
+```
+
+## The Iron Law
+
+```
+NO PLAN FINALIZED WITHOUT ORACLE REVIEW
+```
+
+**But also:**
+
+```
+NO ORACLE SUGGESTION APPLIED WITHOUT EVALUATION
+```
+
+Oracle is smart but lacks context. Evaluate every suggestion.
+
+## Process
+
+### Step 1: Spawn Oracle Subagent
+
+Use the Task tool with `subagent_type: oracle` to avoid context pollution:
+
+```
+Task tool parameters:
+  subagent_type: "oracle"
+  description: "Review implementation plan"
+  prompt: |
+    Review this implementation plan for issues.
+
+    Plan file: /absolute/path/to/ai_docs/plans/YYYY-MM-DD-description.md
+```
+
+**Important:** Use absolute path for the plan file (e.g., `/home/user/project/ai_docs/plans/2025-01-15-feature.md`)
+
+### Handling Directory-Based Plans
+
+When the plan path is a directory (new structure):
+
+1. **Detect plan format:**
+   ```
+   If path ends with `/` or is a directory → Directory-based plan
+   If path ends with `.md` → Legacy single-file plan
+   ```
+
+2. **For directory-based plans, pass to Oracle:**
+   ```
+   Task tool parameters:
+     subagent_type: "oracle"
+     description: "Review implementation plan"
+     prompt: |
+       Review this implementation plan for issues.
+
+       Plan directory: /absolute/path/to/ai_docs/plans/YYYY-MM-DD-description/
+
+       Read README.md first for overview, then review each phase-N-*.md file.
+       Focus on phase dependencies, success criteria completeness, and code quality.
+   ```
+
+3. **Supported inputs:**
+   - Directory path: `ai_docs/plans/2026-01-21-feature/`
+   - README path: `REDACTED.md` (treated as directory)
+   - Legacy file: `ai_docs/plans/2026-01-21-feature.md` (single-file plan)
+
+### Step 2: Evaluate as Junior Review
+
+When Oracle returns, evaluate EACH suggestion:
+
+#### CRITICAL: Scope Change Protection
+
+```
+IF ORACLE SUGGESTS REMOVING USER-REQUESTED FUNCTIONALITY → STOP
+```
+
+**This is a SCOPE CHANGE, not a technical decision.**
+
+When Oracle says something is "impossible" or recommends removing a feature the user requested:
+1. **STOP** - Do not unilaterally remove the feature
+2. **Present OPTIONS to user:**
+   - Option A: Simplify as Oracle suggests (explain trade-off)
+   - Option B: Alternative approach to achieve user's goal
+   - Option C: Defer to future phase
+3. **Never decide for the user** - They requested the feature for a reason
+
+**Example:**
+```
+Oracle says: "Per-environment config is impossible due to lifecycle timing"
+
+WRONG: Remove per-environment config from plan
+RIGHT: Present to user:
+  "Oracle identified that per-env config conflicts with current initialization order.
+   Options:
+   (a) Global-only config (simpler)
+   (b) Refactor initialization to support per-env (more work)
+   (c) Defer per-env to Phase 2 after foundation is solid
+
+   Which approach do you prefer?"
+```
+
+#### Evaluation Criteria
+
+| Evaluation | Action |
+|------------|--------|
+| **Valid and important** | Apply to plan immediately |
+| **Valid but minor** | Apply if quick, note if not |
+| **Incorrect assumption** | Discard, Oracle lacks codebase context |
+| **Over-engineering** | Discard, keep plan simple |
+| **Already covered** | Discard, Oracle missed it in plan |
+| **Out of scope** | Discard, addresses different problem |
+| **Conflicts with user preference** | Discard, user explicitly chose different approach |
+| **Premature optimization** | Discard, good idea but not for initial implementation |
+
+#### Example Evaluation
+
+**Oracle says:** "Add retry logic with exponential backoff to all API calls in Phase 2"
+
+| Question | Answer |
+|----------|--------|
+| Is this valid? | Yes, retry logic is a real concern |
+| Is it important for initial implementation? | No, can add later if needed |
+| Does user want this? | Not mentioned in requirements |
+| **Verdict** | Premature optimization → **Discard** |
+
+**Oracle says:** "Task 3 has no success criteria - add: 'User can log in with new credentials'"
+
+| Question | Answer |
+|----------|--------|
+| Is this valid? | Yes, success criteria is missing |
+| Is it important? | Yes, unclear when task is done |
+| **Verdict** | Valid and important → **Apply** |
+
+### Step 3: Update Plan
+
+For valid suggestions:
+1. Edit the plan file directly
+2. Note what was changed and why
+
+### Step 4: Present Final Plan
+
+```
+Oracle Review Complete
+
+Applied suggestions:
+- [Suggestion 1] - Added to Phase X
+- [Suggestion 2] - Updated success criteria
+
+Discarded suggestions:
+- [Suggestion 3] - Reason: Oracle assumed X but codebase actually does Y
+
+Plan ready at: ai_docs/plans/[filename].md
+```
+
+### Step 5: Offer Phasing Option
+
+After presenting the reviewed plan, offer the user a choice:
+
+```
+Plan ready for implementation.
+
+Options:
+1. **Implement now** → Proceed with full plan implementation
+2. **Break into phases** → Split into smaller PRs for incremental delivery
+
+Which would you prefer?
+```
+
+**If user chooses "Break into phases":**
+
+```
+CHAIN: Invoking phasing-plan skill...
+```
+
+Then invoke: `Skill(phasing-plan)`
+
+**If user chooses "Implement now":**
+- Do not invoke phasing-plan
+- User can proceed with `/implement-plan`
+
+## Red Flags
+
+- Applying Oracle suggestions without evaluation
+- Discarding all suggestions without consideration
+- Letting Oracle review pollute main context (use subagent)
+- Skipping Oracle review because "plan is simple"
+- Presenting plan to user before Oracle review completes
+- **Removing user-requested functionality because Oracle said it's "impossible"**
+- **Making scope decisions without user approval**
+
+## The Junior Review Principle
+
+Oracle is smart but lacks:
+- Full codebase context
+- Project history
+- Your human partner's preferences
+- Understanding of trade-offs already made
+
+Treat it like a junior developer's code review - often catches things you missed, sometimes wrong, always worth reading.
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "Plan is simple, skip Oracle" | Simple plans still have blind spots. Review takes 30 seconds. | **Always invoke Oracle review**, regardless of plan size or perceived clarity |
+| "Oracle always over-engineers" | Then discard those suggestions. But read them first. | **Evaluate each suggestion individually** using the evaluation criteria before discarding |
+| "I already know what Oracle will say" | Then Oracle review costs nothing. Do it anyway. | **Run Oracle review anyway** to identify blind spots you may have missed |
+| "Time pressure" | Oracle review is faster than rework from missed issues. | **Prioritize Oracle review** as a time-investment that prevents costly rework |
+| "Oracle said it's impossible, so I removed it" | Oracle lacks user context. "Impossible" means "needs different approach." | **STOP and present options to user** - removing user-requested features requires explicit approval |
+| "Simplifying is better for the user" | You don't know what the user values. That's their decision. | **Present trade-offs, let user decide** - never unilaterally remove requested functionality |
+
+## Qualidade Linguística
+
+Quando o plano foi escrito em Português Brasileiro, as sugestões aplicadas, notas de descarte e apresentação ao usuário DEVEM usar acentuação correta: á, à, â, ã, é, ê, í, ó, ô, õ, ú, ü, ç. Texto sem acentos em PT-BR é defeito.
+
+---
+
+## Chain Completion
+
+After review is complete and plan updated:
+- Present final plan to user for approval
+- Offer phasing option (Step 5)
+- Do NOT proceed to implementation until user decides
+
+---
+
+<task-notification>
+<task-id>bsx7bxmtr</task-id>
+<tool-use-id>toolu_01HhV79Zizcjubzkkjf2H7zY</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-victor-conductor-workspaces-expense-control-conakry/tasks/bsx7bxmtr.output</output-file>
+<status>completed</status>
+<summary>Background command "Oracle plan review of GitHub bug report feature" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-victor-conductor-workspaces-expense-control-conakry/tasks/bsx7bxmtr.output
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/implementing-plan
+
+# Implementing Plan
+
+## Overview
+
+**You are the ORCHESTRATOR, not the implementer.**
+
+Execute approved plans through skill chains: dispatch to subagents, validate output, manage phase boundaries.
+
+**Core principle:** If you're reading/writing code directly, you're violating the pattern. Dispatch always.
+
+## The Iron Law
+
+```
+NO IMPLEMENTATION COMPLETE WITHOUT IMPLEMENTATION-EXECUTOR SUBAGENT
+```
+
+BEFORE STARTING YOU MUST:
+1. READ THE PLAN README.md
+2. READ THE SUBAGENT-PROMPTS.md
+
+FOR EACH **phase** YOU MUST FOLLOW THE STEPS:
+1. Dispatch implementation-executor subagent (all tasks in phase)
+2. Validate agent output
+3. Phase commit
+4. Phase tests (`Skill(running-automated-checks)`)
+
+After **ALL phases**:
+5. Final review (`Skill(reviewing-code)`)
+6. Validation (`Skill(validating-implementation)`)
+
+**Non-code tasks** (config/docs only) use lighter chain: Implement → Commit
+
+---
+
+## Core Constraints
+
+NEVER skip reading the README.md for the plan.
+
+NEVER skip reading the SUBAGENT-PROMPTS.md for the subagent.
+
+NEVER implement tasks yourself - always dispatch to implementation-executor subagent.
+
+NEVER skip review or validation because "tests pass" - the chain is non-negotiable.
+
+NEVER redesign mid-implementation - trust the plan, document concerns in learnings.
+
+NEVER show "Implementation Complete" without review AND validation verdicts.
+
+**Violating the letter of these rules is violating the spirit of these rules. STOP and START OVER.**
+
+---
+
+## When to Use
+
+- User runs `/implement-plan` or references a plan in `ai_docs/plans/`
+- An approved plan exists and needs execution
+- After plan has been reviewed and user has approved
+
+## When NOT to Use
+
+- No approved plan exists (use `writing-plans` skill first)
+- Plan is still being reviewed
+- User wants to explore or research (not implement)
+
+---
+
+## Quick Reference
+
+| Step | Action | Output |
+|------|--------|--------|
+| Load plan | Read README.md, identify phases | Phase list |
+| Per phase | Dispatch implementation-executor (ONE subagent per phase) | TDD results |
+| Validate | Check agent output structure | PASS/FAIL |
+| Commit | `git commit --no-verify -m "feat: [phase summary]"` | Commit hash |
+| Tests | `Skill(running-automated-checks)` | PASS/FAIL |
+| Final review | `Skill(reviewing-code)` | APPROVED/FIXES |
+| Validation | `Skill(validating-implementation)` | Complete/Issues |
+
+---
+
+## Workflow Checklist
+
+```
+Implementation Progress:
+- [ ] Step 0: Load plan, identify phases and tasks
+- [ ] For each PHASE:
+  - [ ] Dispatch ONE implementation-executor agent for entire phase
+  - [ ] Validate agent output (all tasks TDD results, plan updates)
+  - [ ] Handle re-dispatch if validation fails (max 3)
+  - [ ] Phase commit with --no-verify
+  - [ ] Skill(running-automated-checks) → wait for verdict
+  - [ ] Update README.md dashboard (status, learnings)
+- [ ] All phases complete (DO NOT SHOW SUMMARY YET)
+- [ ] Skill(reviewing-code) → wait for verdict
+- [ ] Review passes → Skill(validating-implementation)
+- [ ] Validation passes → NOW show summary to user
+```
+
+---
+
+## Process
+
+### Step 0: Load Plan
+
+1. **Determine plan structure:**
+   - Directory → Read `README.md` for overview
+   - Single `.md` file → Legacy plan
+
+2. **Identify phases and status:**
+   ```
+   ai_docs/plans/YYYY-MM-DD-description/
+   ├── README.md           # Overview, phase status
+   ├── phase-1-[name].md   # Load when implementing phase 1
+   └── phase-N-[name].md   # Load when implementing phase N
+   ```
+
+3. **Load only current phase file.** Don't load all at once - wastes context.
+
+### Step 1: Execute Phase
+
+**For each PHASE, dispatch ONE implementation-executor subagent:**
+
+```python
+Task(
+  subagent_type="implementation-executor",
+  model="opus",
+  description=f"Implement Phase {phase_number}: {phase_name}",
+  prompt=f"""
+    Phase: {phase_number} - {phase_name}
+    Plan file: {plan_file_path}
+
+    Execute all tasks in this phase using TDD:
+    1. For each task: RED → GREEN → REFACTOR
+    2. Update plan file checkboxes
+    3. Capture learnings
+    4. Return Phase Execution Report
+  """
+)
+```
+
+**CRITICAL:**
+- ONE subagent per PHASE, not per task
+- Subagent handles ALL tasks internally
+- You validate output and manage phase boundaries
+
+### Step 1a: Validate Agent Output
+
+Parse Phase Execution Report. Check:
+
+| Check | Pass Condition | Fail Action |
+|-------|----------------|-------------|
+| Status | "PASS" in Summary | Re-dispatch with error context |
+| TDD Results | RED+GREEN PASS for each task | Re-dispatch with failure details |
+| Plan Updates | All checkboxes marked | Re-dispatch to update |
+
+**After 3 failures → escalate to user** with attempt history.
+
+### Step 2: Phase Commit and Tests
+
+After validation passes:
+
+```bash
+git commit --no-verify -m "feat: [phase summary]"
+```
+
+Then run tests:
+```
+Skill(running-automated-checks)
+```
+
+If tests fail: fix, amend commit, re-run tests.
+
+### Step 3: Update Dashboard
+
+Edit README.md after each phase:
+- Update phase status to "complete"
+- Add learnings from implementation
+
+### Step 4: Final Review and Validation
+
+**When ALL phases complete:**
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  STOP - YOU ARE NOT DONE YET                                   ║
+║                                                                 ║
+║  "Tests pass" ≠ "Implementation complete"                      ║
+║                                                                 ║
+║  You MUST still run:                                           ║
+║  1. Skill(reviewing-code)                                      ║
+║  2. Skill(validating-implementation)                           ║
+║                                                                 ║
+║  Do NOT show summary to user until BOTH complete.              ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+1. `Skill(reviewing-code)` → Wait for APPROVED/FIXES
+2. If FIXES: fix, amend, re-run review
+3. Review APPROVED → `Skill(validating-implementation)`
+4. Validation passes → NOW show summary
+
+---
+
+## Trust the Plan
+
+**The plan is your approved roadmap. Execute it, don't redesign it.**
+
+### What This Means
+
+| Trust the Plan | Don't Trust Blindly |
+|----------------|---------------------|
+| Follow the plan's approach | Fix actual bugs when they appear |
+| Stay within scope boundaries | Adapt when reality differs slightly |
+| Use patterns the plan specifies | Handle edge cases within scope |
+| Don't research alternatives | Debug issues intelligently |
+
+### When to Escalate (Not Redesign)
+
+If you encounter:
+- Plan code has fundamental flaw (not just typo)
+- Required API doesn't exist
+- Approach is incompatible with reality
+
+**STOP. Report to user. Do NOT redesign.**
+
+```
+ESCALATION:
+Task: [task name]
+Issue: [what's wrong]
+Evidence: [error message, missing file]
+
+The plan may need adjustment. How would you like to proceed?
+```
+
+### Missing Dependencies
+
+If plan code references something that doesn't exist (like a `delay` function):
+
+1. Check if it's defined elsewhere in plan
+2. Check if it exists in codebase (grep)
+3. If truly missing: **add minimal implementation** (utility function)
+4. Document in learnings
+
+**This is NOT redesign.** Adding a missing utility to make plan code work is implementation, not architecture change.
+
+---
+
+## Context Preservation
+
+**Main context is for USER DISCUSSION and PHASE TRACKING only.**
+
+| Main Context | Subagents |
+|--------------|-----------|
+| Phase progress | All implementation |
+| User checkpoints | TDD execution |
+| Escalations | File reading/writing |
+| Final summary | Code review |
+
+### Red Flags (Context Pollution)
+
+If in main context you're doing ANY of:
+- Reading files not in plan task
+- Using Grep/Glob to search
+- Running investigation commands
+- Writing implementation code
+
+**STOP → Dispatch to subagent → Only summary returns**
+
+---
+
+## Examples
+
+<good-example>
+User: "Implement the plan at ai_docs/plans/2026-01-24-feature/"
+
+Agent:
+1. Reads README.md to identify 2 phases
+2. Dispatches implementation-executor for Phase 1
+3. Validates output, commits, runs `Skill(running-automated-checks)`
+4. Dispatches implementation-executor for Phase 2
+5. Validates output, commits, runs `Skill(running-automated-checks)`
+6. Runs `Skill(reviewing-code)` → APPROVED
+7. Runs `Skill(validating-implementation)` → Complete
+8. NOW shows summary to user
+
+**Why correct:** Full chain executed. Never implemented directly. Review and validation both ran.
+</good-example>
+
+<bad-example>
+Phase 1 has one trivial task (3-line config file).
+
+Agent thinks: "This is just configuration, I can write 3 lines faster than dispatching a subagent."
+
+Agent writes the file directly.
+
+**Why bad:** "It's trivial" doesn't change the pattern. Dispatch ALWAYS. The pattern preserves main context for user discussion.
+</bad-example>
+
+<bad-example>
+All phases complete. Tests pass. User says "Deploy window closes in 10 minutes."
+
+Agent thinks: "Tests pass, that's good enough. Review is marginal benefit."
+
+Agent skips review, invokes validation directly.
+
+**Why bad:** "Tests pass" ≠ "review complete". The chain is non-negotiable. Explain to user that review is required.
+</bad-example>
+
+<bad-example>
+Plan code references `delay()` function that doesn't exist.
+
+Agent thinks: "This is a bug that must be fixed. I'll also improve error handling while I'm at it."
+
+Agent implements enhanced version with better error handling.
+
+**Why bad:** Adding missing `delay()` is fine. "Improving" error handling is redesign. Stick to the plan.
+</bad-example>
+
+---
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "This is trivial, I can do it faster" | Trivial tasks still go through subagent. The pattern preserves context. | **Dispatch to implementation-executor** |
+| "Subagent overhead is wasteful" | Overhead is investment in context preservation. Worth it. | **Dispatch anyway** |
+| "Tests pass, review is marginal benefit" | Tests verify behavior. Review verifies quality. Different things. | **Run Skill(reviewing-code)** |
+| "Deploy window closes in 10 minutes" | Time pressure doesn't change chain requirements. Explain to user. | **Run full chain, explain delay** |
+| "All quality signals are green" | Tests ≠ review ≠ validation. All three required. | **Complete the chain** |
+| "Plan can't be implemented as written" | Missing utility = add it. Fundamental flaw = escalate. Not redesign. | **Add utility OR escalate** |
+| "These are minor improvements" | "Minor" is rationalization. Plan was approved as-is. | **Implement plan exactly** |
+| "I'm preserving the core approach" | If you're changing anything beyond typos, you're redesigning. | **Trust the plan** |
+| "I'll just review it myself quickly" | Self-review violates "dispatch to agent" pattern. | **Dispatch to code-review-agent** |
+| "Tests pass, we're done" | Shows completion without review AND validation. Double violation. | **Complete full chain first** |
+
+---
+
+## Red Flags - STOP
+
+- About to write code directly in main context
+- "This is simple enough to do myself"
+- "I can do this faster than a subagent"
+- Tests pass but haven't run review
+- "Skip review, tests are green"
+- Improving plan code beyond what's written
+- "Minor enhancements" to plan approach
+- Showing "Complete" without review AND validation
+- Reading files to "understand better" (not in task)
+
+**All of these mean: You're violating the pattern. Dispatch to subagent. Complete the chain.**
+
+---
+
+## Chain Weight
+
+| Plan Type | Chain |
+|-----------|-------|
+| Config/docs only | Implement → commit |
+| 1-2 code tasks | TDD → commit → tests (can run tests directly) |
+| 3+ tasks or phases | Full chain with subagents |
+
+**CAUTION:** "Skip subagent" ≠ "skip chain steps". Tests, review, and validation are ALWAYS required for code. Only question is subagent vs inline for simple plans.
+
+---
+
+## Bundled Resources
+
+| Resource | When to Load | Why |
+|----------|--------------|-----|
+| `SUBAGENT-PROMPTS.md` | When dispatching implementation-executor | Dispatch templates |
+| `VALIDATION-LOGIC.md` | When parsing agent output | Validation rules |
+
+---
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Implementing tasks directly | Always dispatch to implementation-executor |
+| One subagent per task | ONE subagent per PHASE handles all tasks |
+| Skipping review because tests pass | Review is separate from tests - run both |
+| Showing completion early | Wait for review AND validation |
+| Redesigning mid-implementation | Trust plan, add utilities, escalate flaws |
+| Loading all phase files at once | Load only current phase |
+
+
+ARGUMENTS: ai_docs/plans/2026-03-12-bug-report-github/
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/running-automated-checks
+
+# Running Automated Checks
+
+## Overview
+
+Run auto-fix, lint, typecheck, and tests in sequence. Report failures with structured output showing file:line:error for quick fixes.
+
+## When to Use
+
+- After implementing a feature or fix
+- Before committing changes
+- When user asks to "run tests", "check code", or "validate"
+- After plan implementation phases
+
+## When NOT to Use
+
+- For exploratory code changes (run manually)
+- When user explicitly says "skip tests"
+
+## Steps
+
+**Step 1: Discover Commands**
+[WHY: Projects use different tooling; wrong commands waste time. Project docs define preferred commands]
+
+Check files in this order (stop when you find commands):
+
+1. **Project AI docs** (highest priority):
+   - `AGENTS.md` or `CLAUDE.md` - AI-specific instructions
+
+2. **Project docs**:
+   - `README.md` - development/testing section
+
+3. **Build files** (fallback):
+   - `Makefile` - targets (lint, test, typecheck)
+   - `package.json` - `scripts` section
+   - `Cargo.toml` - Rust → `cargo test`, `cargo clippy`
+   - `pyproject.toml` - Python → pytest, ruff, mypy
+
+**Step 2: Run Auto-fix FIRST**
+[WHY: Most lint errors (semicolons, quotes, indentation) are auto-fixable. Running auto-fix first prevents wasting time manually editing errors that tools fix instantly]
+
+```bash
+npm run lint:fix    # or: make lint-fix, cargo fmt, ruff format
+```
+
+NEVER manually edit lint/format errors before running auto-fix.
+
+**Step 3: Run Lint**
+[WHY: Static analysis catches bugs, not just style]
+
+```bash
+npm run lint        # or: make lint, cargo clippy
+```
+
+**Step 4: Run Type Check**
+[WHY: Type errors indicate logic bugs]
+
+```bash
+npm run typecheck   # or: tsc --noEmit, mypy, cargo check
+```
+
+**Step 5: Run Tests**
+[WHY: Full suite catches integration issues]
+
+```bash
+npm test            # or: make test, cargo test, pytest
+```
+
+**Step 6: Report Results**
+[WHY: Structured output enables quick navigation to errors and traceability of what ran and why]
+
+Output a **markdown report** with these sections:
+
+```markdown
+## Automated Checks Report
+
+### Commands Discovered
+
+| Step | Command | Source | Why |
+|------|---------|--------|-----|
+| Auto-fix | `npm run lint:fix` | package.json | Fix auto-fixable lint/format errors before manual review |
+| Lint | `npm run lint` | CLAUDE.md | Static analysis catches bugs beyond style |
+| TypeCheck | `tsc --noEmit` | package.json | Type errors indicate logic bugs |
+| Tests | `npm test` | package.json | Full suite catches integration issues |
+
+### Execution Results
+
+| Step | Command | Status |
+|------|---------|--------|
+| Auto-fix | `npm run lint:fix` | ✓ PASS |
+| Lint | `npm run lint` | ✗ FAIL |
+| TypeCheck | `tsc --noEmit` | ✓ PASS |
+| Tests | `npm test` | ✓ PASS (15 passed) |
+
+### Errors
+
+#### Lint — 2 errors
+
+| File | Line | Error |
+|------|------|-------|
+| src/foo.ts | 42 | 'x' is declared but never used |
+| src/bar.ts | 10 | Missing return type annotation |
+
+> Showing 15 of 47 errors
+
+### Status: NEEDS FIXES
+```
+
+**Report rules:**
+- **Commands Discovered**: List every command found in Step 1, its source file, and why it's run
+- **Execution Results**: Show the exact command executed and its pass/fail status
+- **Errors**: One subsection per failing step, max 15 errors each. If more exist, note total count
+- **Status**: `READY` (all pass) or `NEEDS FIXES` (any fail)
+- If a step was skipped (command not found), show `⊘ SKIPPED — no command found` in the results table
+
+Parse file:line:error from tool output:
+- ESLint: `file:line:col: message`
+- TypeScript: `file(line,col): error`
+- Jest: `at Object.<anonymous> (file:line:col)`
+- Pytest: `file:line: message`
+
+## Quick Reference
+
+| Step | Action | On Fail |
+|------|--------|---------|
+| Discover | Check AGENTS.md/CLAUDE.md → README.md → Makefile/package.json | - |
+| Auto-fix | `npm run lint:fix` or project-specific | Continue to lint |
+| Lint | `npm run lint` or project-specific | Parse errors → table (max 15) |
+| TypeCheck | `npm run typecheck` or project-specific | Parse errors → table (max 15) |
+| Tests | `npm test` or project-specific | Parse failures → table (max 15) |
+
+## Examples
+
+<good-example>
+User: "Run tests"
+
+Agent runs auto-fix first, then lint, typecheck, tests. Reports in structured markdown:
+
+```markdown
+## Automated Checks Report
+
+### Commands Discovered
+
+| Step | Command | Source | Why |
+|------|---------|--------|-----|
+| Auto-fix | `npm run lint:fix` | package.json | Fix auto-fixable lint/format errors before manual review |
+| Lint | `npm run lint` | package.json | Static analysis catches bugs beyond style |
+| TypeCheck | `tsc --noEmit` | CLAUDE.md | Type errors indicate logic bugs |
+| Tests | `npm test` | package.json | Full suite catches integration issues |
+
+### Execution Results
+
+| Step | Command | Status |
+|------|---------|--------|
+| Auto-fix | `npm run lint:fix` | ✓ PASS |
+| Lint | `npm run lint` | ✓ PASS |
+| TypeCheck | `tsc --noEmit` | ✗ FAIL |
+| Tests | `npm test` | ✓ PASS (15 passed) |
+
+### Errors
+
+#### TypeCheck — 2 errors
+
+| File | Line | Error |
+|------|------|-------|
+| src/api/client.ts | 127 | Property 'data' does not exist |
+| src/api/client.ts | 134 | Type 'string' not assignable |
+
+### Status: NEEDS FIXES
+```
+</good-example>
+
+<bad-example>
+User: "Fix these lint errors" (8 formatting errors shown)
+
+Agent reads files, then uses Edit tool to fix each error manually:
+- Edit line 12: add semicolon
+- Edit line 18: fix indentation
+- ... (6 more manual edits)
+
+**Why bad:** Should run `npm run lint --fix` FIRST. One command fixes all 8 errors. Manual editing wastes time and tokens.
+</bad-example>
+
+<bad-example>
+User: "Run tests"
+
+Agent reports:
+```
+Lint: FAIL
+TypeCheck: PASS
+Tests: PASS
+```
+
+**Why bad:** No file:line:error details, no commands discovered, no source traceability. User has no idea what commands ran or where they came from.
+</bad-example>
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Manually fixing lint errors one-by-one | Run `lint --fix` FIRST |
+| Only showing PASS/FAIL | Include error table with file:line:error |
+| Stopping at first failure | Run all steps, report all errors |
+| Raw tool output dump | Parse into structured table |
+| Omitting Commands Discovered table | Always show what commands were found, from where, and why |
+| Not showing which source file defined the command | Include Source column tracing back to CLAUDE.md, package.json, etc. |
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/reviewing-code
+
+# Reviewing Code
+
+## Overview
+
+You are the **orchestrator** for code reviews. Your job:
+1. Determine **all** applicable review types
+2. Gather context
+3. Build structured input **per type**
+4. Dispatch to code-review-agent — **one Task per type, in parallel**
+5. Merge verdicts into combined report
+
+**You do NOT review code yourself.** You dispatch to the agent.
+
+## The Iron Law
+
+```
+NO "REVIEW COMPLETE" WITHOUT AGENT VERDICT
+```
+
+## Workflow Checklist
+
+```
+Code Review Orchestration:
+- [ ] Step 1: Determine review types (plural — reason about changes)
+- [ ] Step 2: Gather context
+- [ ] Step 3: Build structured input per type
+- [ ] Step 4: Dispatch to code-review-agent (one per type, in parallel)
+- [ ] Step 5: Parse and merge agent verdicts
+- [ ] Step 6: Handle combined result (fix or chain)
+```
+
+## Step 1: Determine Review Types
+
+Select **ALL** applicable review types. This is NOT a cascading if/else — multiple types can and should be selected.
+
+### Available Types
+
+| Review Type | Covers | Triggers |
+|-------------|--------|----------|
+| `plan_compliance` | Implementation matches approved plan | Called from `implementing-plan` |
+| `quality` | SOLID, functional programming, code smells, clean code | **Always included** (baseline) |
+| `bug_fix` | Root cause fixed, regression test exists | Change metadata contains "fix" or "bug" |
+| `refactoring` | Behavior preserved, no functional changes | Change metadata contains "refactor" |
+| `feature` | Requirements, architecture, test coverage | New feature / capability added |
+| `performance` | Benchmarks, profiling, trade-offs | Change metadata contains "perf" or "optimize" |
+| `security` | STRIDE threat model, OWASP, high-confidence vulns | Called via /security-review, OR changes touch auth/crypto/secrets/validation/API boundaries |
+
+### Selection Logic
+
+```
+1. Select primary type from context:
+   - From implementing-plan → plan_compliance
+   - From /security-review → security
+   - Else match change metadata: bug_fix, refactoring, performance, feature
+
+2. ALWAYS add quality as a SEPARATE dispatch (unless it IS the primary type)
+   quality is the baseline review — it is never skipped.
+   Do NOT rely on quality sections embedded in other type files (e.g.,
+   plan-compliance.md's "Quality Review (Secondary)"). Those are summaries,
+   not substitutes. The full quality.md (384 lines) must be dispatched
+   as its own code-review-agent Task.
+
+3. Reason about changed files to add more types:
+   - security: IF changes touch authentication, authorization,
+     cryptography, secrets, input validation, API boundaries,
+     or file paths containing auth|security|crypto|token|session|password
+   - performance: IF changes touch database queries, caching,
+     connection pooling, hot paths, algorithms with complexity concerns,
+     or file paths containing cache|pool|query|perf|benchmark
+
+Result: Set of 2+ review types (primary + quality at minimum).
+Exception: general review with no specific context → quality alone is valid.
+```
+
+### Example Selections
+
+| Context | Selected Types |
+|---------|---------------|
+| From implementing-plan, normal code | `plan_compliance`, `quality` |
+| From implementing-plan, auth code changed | `plan_compliance`, `quality`, `security` |
+| Standalone bug fix | `bug_fix`, `quality` |
+| Bug fix touching query cache | `bug_fix`, `quality`, `performance` |
+| /security-review | `security`, `quality` |
+| General review | `quality` |
+
+## Step 2: Gather Context
+
+### For All Review Types
+
+```bash
+# Get files to review
+git diff --name-only HEAD~1
+
+# Or for specific commit range
+git diff --name-only <base>..<head>
+
+# Get project standards
+cat CLAUDE.md 2>/dev/null || cat $HOME/.claude/docs/code-principles.md
+```
+
+### For plan_compliance
+
+```bash
+# Load the plan
+cat ai_docs/plans/<plan-file>.md
+
+# Extract requirements (lines with - [ ] or - [x])
+grep -E '^\s*-\s*\[' ai_docs/plans/<plan-file>.md
+```
+
+### For bug_fix
+
+- Ticket/issue description
+- Root cause explanation
+- Expected regression test location
+
+### For refactoring
+
+- What improvement is claimed
+- Which tests should pass unchanged
+
+### For performance
+
+- Benchmark results (before/after)
+- Environment information
+
+## Step 3: Build Structured Input (Per Type)
+
+Build **one input per selected review type**. Each input follows the same format from `agents/code-review-agent/INPUT-OUTPUT.md`, but loads type-specific instructions.
+
+**For each type in selected_types:**
+
+```markdown
+# Code Review Request
+
+## Metadata
+- **Review ID:** [generate-uuid or timestamp]-[review_type]
+- **Review Type:** [this specific type]
+- **Timestamp:** [ISO-8601]
+
+## Files to Review
+- [file1.ts]
+- [file2.ts]
+
+## Review Type Instructions
+[Load contents from: agents/code-review-agent/types/{review_type}.md]
+
+## Context
+
+### Plan (only for plan_compliance)
+**Path:** [plan file path]
+
+**Requirements:**
+[Copy requirements from plan]
+
+**Success Criteria:**
+[Copy success criteria from plan]
+
+### Project Standards
+**Source:** [CLAUDE.md or fallback]
+
+```
+[Contents of standards]
+```
+
+### Change Metadata
+- **Ticket:** [if available]
+- **Description:** [commit message or PR description]
+- **Commit Range:** [if available]
+```
+
+Files to Review and Context sections are **shared** across all inputs. Only Metadata (Review Type) and Review Type Instructions differ per input.
+
+## Step 4: Dispatch to Agent (Parallel)
+
+Dispatch **all review types in a single message** so they run in parallel:
+
+```python
+# All Task() calls in ONE message — parallel execution
+for review_type in selected_types:
+  Task(
+    subagent_type="code-review-agent",
+    model="opus",
+    description="Code review: {review_type}",
+    prompt=structured_input_for[review_type]
+  )
+```
+
+**Wait for ALL agents to return structured output.**
+
+Each agent receives a single-type review request and returns a single-type report. The orchestrator (you) merges them in Step 5.
+
+**Why parallel, not sequential:** Parallel dispatch has the same wall-clock time as a single dispatch. Sequential dispatch tempts early termination ("first failed, stop"), which skips reviews and misses issues in other dimensions. Always dispatch all types together.
+
+## Step 5: Parse and Merge Agent Verdicts
+
+From **each** agent's output, extract:
+
+1. **Overall Verdict:** `APPROVED` or `NEEDS_FIXES`
+2. **Compliance Verdict:** `COMPLIANT`, `NOT_COMPLIANT`, or `N/A`
+3. **Quality Verdict:** `APPROVED` or `NEEDS_FIXES`
+4. **Issues:** Count of Critical, Major, Minor
+5. **Required Before Merge:** List of blocking issues
+
+### Merge Rules
+
+```
+Combined Overall Verdict:
+  NEEDS_FIXES if ANY agent returned NEEDS_FIXES
+  APPROVED only if ALL agents returned APPROVED
+
+Compliance Verdict:
+  From plan_compliance agent (or N/A if not dispatched)
+
+Quality Verdict:
+  From quality agent (or N/A if not dispatched)
+
+Issues:
+  Union of all issues from all agents
+  Deduplicate by file:line (same location, same issue = count once)
+
+Required Before Merge:
+  Union of all blocking items from all agents
+```
+
+### Per-Review Summary
+
+Build a per-review verdict table:
+
+```
+| Review Type | Verdict | Issues |
+|-------------|---------|--------|
+| plan_compliance | COMPLIANT | 0 Critical, 0 Major |
+| quality | NEEDS_FIXES | 1 Critical, 2 Major |
+| security | APPROVED | 0 Critical, 1 Minor |
+```
+
+## Step 6: Handle Combined Result
+
+### If ALL APPROVED
+
+```
+Code Review Complete
+====================
+Reviews: [list of types dispatched]
+Overall: APPROVED
+
+Per-Review Verdicts:
+  plan_compliance: COMPLIANT ✅
+  quality: APPROVED ✅
+  [security: APPROVED ✅]
+
+CHAIN: Invoking validating-implementation skill...
+```
+
+Then invoke:
+```
+Skill(validating-implementation)
+```
+
+### If ANY NEEDS_FIXES
+
+Present combined issues from ALL agents (don't invoke validation yet):
+
+```
+Code Review: NEEDS_FIXES
+========================
+Reviews: [list of types dispatched]
+
+Per-Review Verdicts:
+  plan_compliance: COMPLIANT ✅
+  quality: NEEDS_FIXES ❌
+  [security: APPROVED ✅]
+
+## Required Before Merge
+
+### Critical Issues
+[List from ALL agent outputs with file:line, fix, and source review type]
+
+### Major Issues
+[List from ALL agent outputs with file:line, fix, and source review type]
+
+## Recommended (Non-blocking)
+[Minor issues from ALL agents]
+
+---
+Fix the required issues, then I'll re-run the review.
+```
+
+**After fixes:**
+1. Stage and commit fixes
+2. Re-run this skill from Step 3 (rebuild inputs with new files)
+3. Dispatch again (all types — not just the failing ones)
+
+### Feedback Loop
+
+```
+Build inputs → Dispatch (parallel) → Parse all verdicts → Merge
+                                                            ↓
+                                               ALL APPROVED → Chain to validation
+                                                            ↓
+                                             ANY NEEDS_FIXES → Present combined issues
+                                                            ↓
+                                                        Fix issues
+                                                            ↓
+                                              Re-build inputs, re-dispatch all ←─┘
+```
+
+## Auto-Fix Rules
+
+For minor issues, fix immediately without asking:
+
+| Issue Type | Fix |
+|------------|-----|
+| Linting | `npm run lint --fix` or `make lint-fix` |
+| Formatting | `npm run format` |
+| Type errors | Add explicit types |
+| Import sorting | `npx eslint --fix` |
+
+After auto-fixing:
+```bash
+git add .
+git commit --amend --no-verify --no-edit
+```
+
+Then re-dispatch to agent.
+
+## Integration with implementing-plan
+
+When called from `implementing-plan` (final review):
+
+1. Review types: `plan_compliance` + `quality` (minimum)
+   - Also `security` if changes touch auth/crypto/secrets/validation/API boundaries
+   - Also `performance` if changes touch queries/caching/hot paths
+2. Plan file path should be passed as context
+3. After ALL reviews APPROVED, chain to `validating-implementation`
+
+```
+implementing-plan (after ALL phases)
+       ↓
+reviewing-code (this skill) → dispatches MULTIPLE code-review-agents in parallel
+       ↓ (all APPROVED)
+validating-implementation
+```
+
+## Standalone Usage
+
+For reviews not part of implementing-plan:
+
+1. User invokes `/review-code` or asks for review
+2. Determine review types from context (Step 1 selection logic applies)
+3. Follow same flow (parallel dispatch, merge verdicts)
+4. After ALL APPROVED, present summary (no validation chain needed)
+
+## Red Flags
+
+- Reviewing code yourself instead of dispatching to agent
+- Dispatching only ONE review type (except when quality is the sole type for a general review)
+- Skipping the quality review — quality is ALWAYS included
+- Skipping Step 3 (building structured input)
+- Not loading the review type instructions
+- Marking complete without APPROVED verdict from ALL dispatched agents
+- Not chaining to validation after APPROVED (when from implementing-plan)
+- Re-dispatching only failing types after fixes (re-dispatch ALL types)
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "This is simple, I'll review it myself" | Agent has comprehensive checklists you'll miss | **Always dispatch to code-review-agent** |
+| "One review type is enough" | Each type covers non-overlapping concerns. plan_compliance doesn't check SOLID. quality doesn't check plan adherence. | **Select ALL applicable types** |
+| "Quality review is redundant with plan_compliance" | plan_compliance checks adherence to plan. quality checks SOLID, FP, code smells, clean code — entirely different checklists (384 lines). | **Always include quality** |
+| "I'll just dispatch the primary type to save time" | Parallel dispatch costs no extra wall-clock time. Skipping types means missed issues. | **Dispatch all types in parallel** |
+| "Only the failing review needs re-dispatch" | Fixes may introduce new issues in other review dimensions | **Re-dispatch ALL types after fixes** |
+| "Agent output looks fine" | Parse and verify the verdict explicitly | **Extract Overall Verdict from Summary table** |
+| "Issues are minor, let's proceed" | Minor issues compound. Fix or document. | **Fix required issues before proceeding** |
+| "I'll chain to validation now" | Only after ALL agents return APPROVED | **Wait for ALL agents APPROVED before chaining** |
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/validating-implementation
+
+# Validating Implementation
+
+## Overview
+
+**You are the ORCHESTRATOR, not the validator.**
+
+Dispatch to validation-executor subagent, receive structured report, present to user.
+
+**Core principle:** If you're running grep/reading files directly, you're violating the pattern. Dispatch always.
+
+## The Iron Law
+
+```
+NO "IMPLEMENTATION COMPLETE" WITHOUT VALIDATION REPORT
+```
+
+Validation must complete:
+1. Dispatch validation-executor subagent
+2. Validate agent output (structured report)
+3. Present to user with verdict
+
+---
+
+## Core Constraints
+
+NEVER validate tasks yourself - always dispatch to validation-executor subagent.
+
+NEVER skip plan verification because "tests pass" - must verify plan checkboxes.
+
+NEVER show "Complete" without a validation report from the subagent.
+
+**Violating the letter of these rules is violating the spirit of these rules.**
+
+---
+
+## When to Use
+
+- Automatically chained from `implementing-plan` when all tasks are done
+- User runs `/validate-plan-implementation`
+- After all plan tasks are marked complete
+
+## When NOT to Use
+
+- Plan tasks are still in progress
+- No plan exists to validate against
+- User wants to explore or research (not validate)
+
+---
+
+## Quick Reference
+
+| Step | Action | Output |
+|------|--------|--------|
+| Load plan path | Identify plan file/directory | Plan path |
+| Dispatch | validation-executor subagent | Validation Report |
+| Validate output | Check report structure | PASS/FAIL |
+| Present | Show verdict to user | Complete/Issues |
+
+---
+
+## Workflow Checklist
+
+```
+Validation Progress:
+- [ ] Step 1: Identify plan path
+- [ ] Step 2: Dispatch validation-executor subagent
+- [ ] Step 3: Validate agent output structure
+  - [ ] Has plan verification results
+  - [ ] Has automated check results
+  - [ ] Has manual items list
+  - [ ] Has verdict
+- [ ] Step 4: Handle result
+  - [ ] If PASS: Present report to user
+  - [ ] If FAIL: Present issues, ask how to proceed
+```
+
+---
+
+## Process
+
+### Step 1: Identify Plan
+
+Determine the plan to validate against:
+- From `implementing-plan` context: use the same plan path
+- From user input: parse the referenced plan
+
+Do NOT read the plan yourself - the subagent will do that.
+
+### Step 2: Dispatch Validation
+
+**Dispatch ONE validation-executor subagent:**
+
+```python
+Task(
+  subagent_type="general-purpose",
+  model="opus",
+  description="Validate implementation against plan",
+  prompt=f"""
+    You are a validation executor.
+
+    Read the agent definition first:
+    Read(agents/validation-executor.md)
+
+    ## Validation Target
+
+    Plan Path: {plan_file_path}
+
+    ## Instructions
+
+    1. Follow the validation-executor agent workflow exactly
+    2. Plan Verification MUST pass before running automated checks
+    3. If plan verification fails, STOP and report INCOMPLETE
+    4. Return the structured Validation Report
+
+    ## Required Output Format
+
+    ## Validation Report
+
+    ### Plan: [plan name]
+
+    ### Plan Verification
+    - Unchecked items: [count] (must be 0)
+    - Test directives verified: [X/Y]
+    - Files exist: [X/Y]
+    - Status: PASS/FAIL
+
+    ### Automated Checks
+    - Tests: [PASS/FAIL] - [details]
+    - Lint: [PASS/FAIL] - [details]
+    - Typecheck: [PASS/FAIL] - [details]
+
+    ### Manual Verification Needed
+    - [ ] [Item 1]
+    - [ ] [Item 2]
+
+    ### Verdict
+    [COMPLETE / INCOMPLETE - reason]
+  """
+)
+```
+
+**CRITICAL:**
+- ONE subagent handles all validation
+- Subagent reads plan, runs checks, generates report
+- You only receive and present the report
+
+### Step 3: Validate Agent Output
+
+Parse Validation Report. Check:
+
+| Check | Pass Condition | Fail Action |
+|-------|----------------|-------------|
+| Plan Verification | Status: PASS | Report incomplete items |
+| Automated Checks | All PASS | Report failures |
+| Report Structure | Has all sections | Re-dispatch with format reminder |
+
+**After 3 failures → escalate to user** with attempt history.
+
+### Step 4: Present to User
+
+**If validation PASSES:**
+```
+Implementation validated successfully.
+
+Automated checks: All passing
+Manual verification needed: [X items]
+
+Please verify the manual items when ready.
+```
+
+**If validation FAILS:**
+```
+Validation found issues:
+
+[Issues from report]
+
+How would you like to proceed?
+```
+
+---
+
+## Context Preservation
+
+**Main context is for USER DISCUSSION only.**
+
+| Main Context | Subagent |
+|--------------|----------|
+| Plan path | All file reading |
+| Verdict presentation | All grep/search |
+| User discussion | All check execution |
+| Issue escalation | Report generation |
+
+### Red Flags (Context Pollution)
+
+If in main context you're doing ANY of:
+- Reading plan files directly
+- Using Grep to count checkboxes
+- Running test/lint/typecheck commands
+- Searching for test files
+
+**STOP → Dispatch to validation-executor → Only report returns**
+
+---
+
+## Examples
+
+<good-example>
+Called from implementing-plan after all phases complete.
+
+Agent:
+1. Identifies plan path from context
+2. Dispatches validation-executor with plan path
+3. Receives Validation Report with COMPLETE verdict
+4. Presents report to user
+
+**Why correct:** Never read files directly. Subagent did all verification work.
+</good-example>
+
+<bad-example>
+Agent thinks: "Validation is just counting checkboxes, I can do that faster than spawning a subagent."
+
+Agent runs `grep -c '\- \[ \]' plan.md` directly.
+
+**Why bad:** "It's just grep" doesn't change the pattern. Dispatch ALWAYS. The pattern preserves main context.
+</bad-example>
+
+<bad-example>
+Agent receives validation report showing 2 unchecked items.
+
+Agent thinks: "Let me quickly check if those items are actually important."
+
+Agent reads the plan file to investigate.
+
+**Why bad:** Investigation is not your job. Present the issues to user and ask how to proceed.
+</bad-example>
+
+---
+
+## Common Rationalizations
+
+| Rationalization | Why It's WRONG | Required Action |
+|-----------------|----------------|-----------------|
+| "Validation is simple, I can do it myself" | Simple tasks still go through subagent. Pattern preserves context. | **Dispatch to validation-executor** |
+| "Just one grep command" | One command pollutes main context. Subagent handles all commands. | **Dispatch anyway** |
+| "Tests already passed in implementing-plan" | Validation verifies plan compliance, not just tests. Different check. | **Run full validation** |
+| "I'll just quickly check the checkboxes" | "Quickly" is rationalization. Let subagent handle all verification. | **Dispatch to subagent** |
+| "Report seems incomplete, let me investigate" | Your job is to present, not investigate. Ask user if unclear. | **Present issues, ask user** |
+
+---
+
+## Red Flags - STOP
+
+- About to run grep/read in main context
+- "This is simple enough to do myself"
+- "I can validate faster than a subagent"
+- "Let me just check one thing"
+- Investigating issues instead of presenting them
+- Reading plan file directly
+
+**All of these mean: You're violating the pattern. Dispatch to subagent.**
+
+---
+
+## Feedback Loop
+
+```
+Dispatch validation
+      ↓
+ Issues found? ──yes──→ Present to user
+      ↓ no                    ↓
+  COMPLETE           User decides action
+```
+
+If validation finds issues:
+1. Present specific issues from report
+2. Ask user how to proceed
+3. If user fixes: re-dispatch validation
+4. Loop until validation passes
+
+**Never mark complete with failing validation.** Loop until green.
+
+---
+
+## Bundled Resources
+
+| Resource | When to Load | Why |
+|----------|--------------|-----|
+| `SUBAGENT-PROMPTS.md` | When dispatching validation-executor | Dispatch template with variable substitution |
+| `VALIDATION-LOGIC.md` | When parsing agent output | Validation rules and parsing patterns |
+
+---
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Running grep/commands directly | Always dispatch to validation-executor |
+| Reading plan files in main context | Let subagent read all files |
+| Investigating failures yourself | Present issues to user, let them decide |
+| Skipping validation because "tests pass" | Tests ≠ plan compliance. Run validation. |
+| Showing completion without report | Must have validation report to complete |
+
+
+ARGUMENTS: ai_docs/plans/2026-03-12-bug-report-github/
+
+---
+
+abre pr pra main
+
+---
+
+# Create Pull Request
+
+## Overview
+Automate the creation of well-structured commits and pull requests by analyzing code changes and following established conventions.
+
+## Context
+- Current branch: vverzellesi/gh-project-integration
+- Current git status: On branch vverzellesi/gh-project-integration
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	.claude/commands/
+	ai_docs/plans/2026-03-12-bug-report-github/
+
+nothing added to commit but untracked files present (use "git add" to track)
+- Current git diff (staged and unstaged changes): 
+- Recent commits: 20982d5 fix: address code review findings - GraphQL variables, stale closure, input length limits Entire-Checkpoint: 1baacc2be5f7
+40da0b2 feat: add BugReportModal component and integrate in Sidebar Entire-Checkpoint: 5f4f076c90c3
+56b9117 feat: add bug report API route with GitHub Issues integration + Textarea UI component Entire-Checkpoint: 3edd949503e8
+a25f128 fix: use sentinel value for tag filter Select to avoid Radix empty string crash Entire-Checkpoint: bebc9bbfd32c
+8c922be fix: resolve tag null error, add import undo, persist bill closing day (#14)
+c2f0d15 fix: exclude investment transactions from expense/income totals (#11)
+f27bd64 docs: add Import Reconciliation & Transfer Detection Plan Entire-Checkpoint: 40673a604316
+184a7c4 docs: update category tags plan dashboard to complete Entire-Checkpoint: 40673a604316
+68ba780 feat: integrate category tags in import flow
+3d9e40e feat: add Tags management tab and category tag sub-labels
+
+## Process
+
+### 0. Get existing PRs
+- Use command `gh pr list --state all --json number,title,headRefName --head <CURRENT_BRANCH>` to list exising PRs and add them to context
+
+### 1. Commit changes
+- **Run /commit** to create structured commits for the current branch
+
+### 3. Generate Pull Request
+- **Title**: Brief conventional commit message about the changes
+- **Description structure**:
+  
+  **Context:**
+  - Brief explanation of what was changed and why
+  - Link any related issues or requirements
+  - Highlight any breaking changes or important considerations
+  
+- **Instructions**: 
+  - show me the PR content before creating the PR
+  - generate the PR in  mode
+  - always consider `main` as the parent branch. compare changes from the current branch with the `main` branch
+
+### 4. Open Generated PR
+- Run `gh pr view -w` to open the created PR on the browser
+
+## Best Practices
+- **Keep commits atomic**: Each commit should represent one logical change
+- **Write for reviewers**: Assume they need context about the changes
+- **Be specific**: Avoid vague descriptions like "fix bugs" or "update code"
+- **Reference issues**: Link to tickets, requirements, or discussions when relevant
+- **Update existing PRs**: If a PR already exists, update it with new relevant information
+- **Never ever credit yourself**: Do not mention an LLM was used
+
+## Example Outputs
+
+**Commit Messages:**
+
+feat(workflow): implement parallel step execution
+fix(api): resolve race condition in task processing  
+docs(application): update component usage examples
+
+**PR Description:**
+
+## Context
+Implements parallel execution for workflow steps to improve performance. Previously, steps executed sequentially even when they had no dependencies, causing unnecessary delays in workflow completion.
+
+---
+
+cria
