@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toLocalDateString } from "@/lib/utils";
 
 interface DateRangePickerProps {
   startDate: string;
@@ -40,8 +40,8 @@ export function DateRangePicker({
     start.setMonth(start.getMonth() - months + 1);
     start.setDate(1);
 
-    const startStr = start.toISOString().split("T")[0];
-    const endStr = end.toISOString().split("T")[0];
+    const startStr = toLocalDateString(start);
+    const endStr = toLocalDateString(end);
 
     setTempStartDate(startStr);
     setTempEndDate(endStr);
@@ -54,8 +54,8 @@ export function DateRangePicker({
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    const startStr = start.toISOString().split("T")[0];
-    const endStr = end.toISOString().split("T")[0];
+    const startStr = toLocalDateString(start);
+    const endStr = toLocalDateString(end);
 
     setTempStartDate(startStr);
     setTempEndDate(endStr);
@@ -70,8 +70,8 @@ export function DateRangePicker({
     const newStart = new Date(currentStart.getFullYear(), currentStart.getMonth() + offset, 1);
     const newEnd = new Date(newStart.getFullYear(), newStart.getMonth() + 1, 0);
 
-    const startStr = newStart.toISOString().split("T")[0];
-    const endStr = newEnd.toISOString().split("T")[0];
+    const startStr = toLocalDateString(newStart);
+    const endStr = toLocalDateString(newEnd);
 
     setTempStartDate(startStr);
     setTempEndDate(endStr);

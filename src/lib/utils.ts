@@ -33,6 +33,9 @@ export function parseDate(dateString: string): Date {
  */
 export function parseDateLocal(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) {
+    throw new Error(`Invalid date string: ${dateStr}`);
+  }
   return new Date(year, month - 1, day, 12, 0, 0);
 }
 

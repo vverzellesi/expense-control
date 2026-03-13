@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { toLocalDateString } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename=transacoes_${new Date().toISOString().split("T")[0]}.csv`,
+        "Content-Disposition": `attachment; filename=transacoes_${toLocalDateString(new Date())}.csv`,
       },
     });
   } catch (error) {

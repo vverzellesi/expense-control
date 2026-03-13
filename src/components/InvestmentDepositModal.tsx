@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { toLocalDateString } from "@/lib/utils";
 
 interface InvestmentDepositModalProps {
   investmentId: string;
@@ -32,12 +33,12 @@ export function InvestmentDepositModal({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(toLocalDateString(new Date()));
   const [notes, setNotes] = useState("");
 
   function resetForm() {
     setAmount("");
-    setDate(new Date().toISOString().split("T")[0]);
+    setDate(toLocalDateString(new Date()));
     setNotes("");
   }
 

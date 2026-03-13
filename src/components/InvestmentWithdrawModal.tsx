@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, toLocalDateString } from "@/lib/utils";
 
 interface InvestmentWithdrawModalProps {
   investmentId: string;
@@ -35,7 +35,7 @@ export function InvestmentWithdrawModal({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(toLocalDateString(new Date()));
   const [notes, setNotes] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -53,7 +53,7 @@ export function InvestmentWithdrawModal({
 
   function resetForm() {
     setAmount("");
-    setDate(new Date().toISOString().split("T")[0]);
+    setDate(toLocalDateString(new Date()));
     setNotes("");
     setValidationError(null);
   }

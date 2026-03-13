@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { X, Tag } from "lucide-react";
 import { useScrollLock } from "@/lib/hooks";
+import { toLocalDateString } from "@/lib/utils";
 import type { Category, Origin } from "@/types";
 
 interface FilterValues {
@@ -61,8 +62,8 @@ export function FilterDrawer({
     const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
     setLocalFilters({
-      startDate: currentMonthStart.toISOString().split("T")[0],
-      endDate: currentMonthEnd.toISOString().split("T")[0],
+      startDate: toLocalDateString(currentMonthStart),
+      endDate: toLocalDateString(currentMonthEnd),
       category: "all",
       type: "all",
       origin: "all",

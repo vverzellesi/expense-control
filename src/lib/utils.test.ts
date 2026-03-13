@@ -107,14 +107,15 @@ describe('parseDate', () => {
     expect(result.getDate()).toBe(15)
   })
 
-  it('should parse ISO format (YYYY-MM-DD)', () => {
-    // Note: new Date("YYYY-MM-DD") parses as UTC, so date may shift.
+  it('should parse ISO format (YYYY-MM-DD) as UTC (use parseDateLocal for local dates)', () => {
+    // parseDate delegates ISO strings to new Date(), which parses as UTC.
+    // The day may shift in negative UTC offsets (e.g., BRT = UTC-3).
     // For reliable local dates, use parseDateLocal() instead.
     const result = parseDate('2024-06-20')
     expect(result.getFullYear()).toBe(2024)
     expect(result.getMonth()).toBe(5) // June = 5
-    // getDate() may return 19 due to UTC->local shift; this is expected
-    expect(result.getDate()).toBe(result.getDate()) // just verify it doesn't throw
+    // UTC midnight June 20 → may be June 19 in BRT (UTC-3)
+    expect([19, 20]).toContain(result.getDate())
   })
 
   it('should parse various DD/MM/YYYY dates', () => {
@@ -175,6 +176,12 @@ describe('parseDateLocal', () => {
     const result = parseDateLocal('2024-02-29')
     expect(result.getMonth()).toBe(1)
     expect(result.getDate()).toBe(29)
+  })
+
+  it('should throw on invalid date strings', () => {
+    expect(() => parseDateLocal('not-a-date')).toThrow('Invalid date string')
+    expect(() => parseDateLocal('')).toThrow('Invalid date string')
+    expect(() => parseDateLocal('abc-def-ghi')).toThrow('Invalid date string')
   })
 })
 

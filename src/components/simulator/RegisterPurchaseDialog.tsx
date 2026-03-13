@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, toLocalDateString } from "@/lib/utils";
 import type { Category } from "@/types";
 
 interface RegisterPurchaseDialogProps {
@@ -47,7 +47,7 @@ export function RegisterPurchaseDialog({
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => toLocalDateString(new Date()));
   const [origin, setOrigin] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(initialCategoryId);
 
