@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,18 +53,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(investmentsWithCalculations);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching investments:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json(
-      { error: "Erro ao buscar investimentos", details: errorMessage },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar investimentos");
   }
 }
 
@@ -107,6 +96,7 @@ export async function POST(request: NextRequest) {
           goalAmount: goalAmount || null,
           broker: broker || null,
           userId: ctx.userId,
+          spaceId: ctx.spaceId,
         },
         include: {
           category: true,
@@ -118,7 +108,7 @@ export async function POST(request: NextRequest) {
       let transactionCategory = await tx.category.findFirst({
         where: {
           name: "Investimentos",
-          userId: ctx.userId,
+          ...ctx.ownerFilter,
         },
       });
 
@@ -143,6 +133,8 @@ export async function POST(request: NextRequest) {
           isFixed: false,
           isInstallment: false,
           userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
         },
       });
 
@@ -179,16 +171,6 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error creating investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao criar investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "criar investimento");
   }
 }

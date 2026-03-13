@@ -1,6 +1,6 @@
 // src/app/api/spaces/active/route.ts
 import { NextResponse } from 'next/server'
-import { getAuthenticatedUserId, unauthorizedResponse } from '@/lib/auth-utils'
+import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
 import { setActiveSpaceId, validateSpaceAccess } from '@/lib/space-context'
 
 export async function PUT(request: Request) {
@@ -17,12 +17,6 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ activeSpaceId: spaceId })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Sem acesso ao espaço' }, { status: 403 })
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'trocar contexto')
   }
 }

@@ -44,6 +44,13 @@ export async function validateSpaceAccess(userId: string, spaceId: string) {
   })
 
   if (!membership) {
+    // Clear stale cookie when membership no longer exists
+    try {
+      const cookieStore = await cookies()
+      cookieStore.delete('activeSpaceId')
+    } catch {
+      // Cookie clearing may fail in some contexts, ignore
+    }
     throw new Error('Forbidden')
   }
 

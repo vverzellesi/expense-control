@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
@@ -34,17 +34,7 @@ export async function GET(
 
     return NextResponse.json(transaction);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar transacao" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar transação");
   }
 }
 
@@ -96,11 +86,6 @@ export async function PUT(
       }
     }
 
-    // Personal transactions mirrored in space can only be mutated by the owner
-    if (!existingTransaction.spaceId && existingTransaction.userId !== ctx.userId) {
-      return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
-    }
-
     const transaction = await prisma.transaction.update({
       where: { id },
       data: {
@@ -124,17 +109,7 @@ export async function PUT(
 
     return NextResponse.json(transaction);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error updating transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar transacao" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar transação");
   }
 }
 
@@ -167,11 +142,6 @@ export async function DELETE(
       }
     }
 
-    // Personal transactions mirrored in space can only be mutated by the owner
-    if (!existingTransaction.spaceId && existingTransaction.userId !== ctx.userId) {
-      return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
-    }
-
     if (permanent === "true") {
       // Permanent delete
       await prisma.transaction.delete({
@@ -187,16 +157,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error deleting transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir transacao" },
-      { status: 500 }
-    );
+    return handleApiError(error, "excluir transação");
   }
 }

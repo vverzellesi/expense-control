@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -96,54 +96,6 @@ export async function GET(request: NextRequest) {
       where.createdByUserId = ctx.userId;
     }
 
-    // In space context, also include personal non-private transactions from members
-    if (ctx.spaceId) {
-      const memberIds = await prisma.spaceMember.findMany({
-        where: { spaceId: ctx.spaceId },
-        select: { userId: true },
-      });
-      const memberUserIds = memberIds.map(m => m.userId);
-
-      // Extract non-ownership filters to apply to both branches of OR
-      const { spaceId: _spaceId, createdByUserId, ...otherFilters } = where;
-
-      // Build OR condition for space context
-      const orConditions: Record<string, unknown>[] = [
-        { spaceId: ctx.spaceId }, // direct space transactions
-        {
-          userId: { in: memberUserIds },
-          spaceId: null,
-          isPrivate: false,
-        }, // personal non-private from members
-      ];
-
-      // If LIMITED role, further restrict the OR conditions
-      if (createdByUserId) {
-        orConditions[0] = { ...orConditions[0], createdByUserId };
-        orConditions[1] = { ...orConditions[1], userId: createdByUserId };
-      }
-
-      // Reconstruct where with OR
-      const newWhere: Record<string, unknown> = {
-        OR: orConditions,
-        ...otherFilters,
-      };
-
-      const transactions = await prisma.transaction.findMany({
-        where: newWhere,
-        include: {
-          category: true,
-          categoryTag: true,
-          installment: true,
-        },
-        orderBy: {
-          date: "desc",
-        },
-      });
-
-      return NextResponse.json(transactions);
-    }
-
     const transactions = await prisma.transaction.findMany({
       where,
       include: {
@@ -158,17 +110,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(transactions);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching transactions:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar transacoes" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar transações");
   }
 }
 
@@ -269,16 +211,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(transaction, { status: 201 });
     }
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error creating transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao criar transacao" },
-      { status: 500 }
-    );
+    return handleApiError(error, "criar transação");
   }
 }

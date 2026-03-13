@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function PUT(
   request: NextRequest,
@@ -52,16 +52,6 @@ export async function PUT(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error updating investment value:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar valor do investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar valor do investimento");
   }
 }

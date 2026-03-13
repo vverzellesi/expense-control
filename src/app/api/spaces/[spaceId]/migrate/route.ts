@@ -1,8 +1,8 @@
 // src/app/api/spaces/[spaceId]/migrate/route.ts
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { getAuthenticatedUserId, unauthorizedResponse } from '@/lib/auth-utils'
-import { validateSpaceAccess } from '@/lib/space-context'
+import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
+import { validateSpaceAccess, SpacePermissions } from '@/lib/space-context'
 
 export async function POST(
   request: Request,
@@ -11,7 +11,23 @@ export async function POST(
   try {
     const userId = await getAuthenticatedUserId()
     const { spaceId } = await params
-    await validateSpaceAccess(userId, spaceId)
+    const membership = await validateSpaceAccess(userId, spaceId)
+    const perms = new SpacePermissions(membership.role)
+
+    if (!perms.canManageSpace()) {
+      return NextResponse.json({ error: 'Apenas administradores podem migrar dados' }, { status: 403 })
+    }
+
+    // Check if user already migrated to this space
+    const existingMigrated = await prisma.transaction.findFirst({
+      where: { spaceId, createdByUserId: userId },
+    })
+    if (existingMigrated) {
+      return NextResponse.json(
+        { error: 'Dados já foram migrados para este espaço' },
+        { status: 409 }
+      )
+    }
 
     // Get space categories for mapping
     const spaceCategories = await prisma.category.findMany({
@@ -30,46 +46,36 @@ export async function POST(
       }
     }
 
-    // Copy transactions
+    // Copy transactions inside a database transaction
     const transactions = await prisma.transaction.findMany({
       where: { userId, spaceId: null, deletedAt: null },
     })
 
-    let copiedCount = 0
-    for (const tx of transactions) {
-      const mappedCategoryId = tx.categoryId
+    const transactionData = transactions.map((tx) => ({
+      description: tx.description,
+      amount: tx.amount,
+      type: tx.type,
+      date: tx.date,
+      isFixed: tx.isFixed,
+      origin: tx.origin,
+      tags: tx.tags,
+      userId,
+      spaceId,
+      categoryId: tx.categoryId
         ? categoryMap.get(tx.categoryId) || tx.categoryId
-        : null
+        : null,
+      createdByUserId: userId,
+    }))
 
-      await prisma.transaction.create({
-        data: {
-          description: tx.description,
-          amount: tx.amount,
-          type: tx.type,
-          date: tx.date,
-          isFixed: tx.isFixed,
-          origin: tx.origin,
-          tags: tx.tags,
-          userId,
-          spaceId,
-          categoryId: mappedCategoryId,
-          createdByUserId: userId,
-        },
-      })
-      copiedCount++
-    }
+    const result = await prisma.transaction.createMany({
+      data: transactionData,
+    })
 
     return NextResponse.json({
-      message: `${copiedCount} transacoes copiadas para o espaco`,
-      copiedCount,
+      message: `${result.count} transações copiadas para o espaço`,
+      copiedCount: result.count,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'migrar dados')
   }
 }

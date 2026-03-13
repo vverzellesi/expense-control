@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse, AuthContext } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError, AuthContext } from "@/lib/auth-utils";
 
 interface SnapshotData {
   month: number;
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
     // Fetch historical snapshots within the range
     const snapshots = await prisma.investmentSnapshot.findMany({
       where: {
-        userId: ctx.userId,
+        userId: ctx.userId, // InvestmentSnapshot doesn't have spaceId yet
         OR: [
           // Same year, month >= startMonth
           {
@@ -172,16 +172,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
       current,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching investment snapshots:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar historico de investimentos" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar histórico de investimentos");
   }
 }

@@ -1,7 +1,7 @@
 // src/app/api/spaces/[spaceId]/invites/route.ts
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { getAuthenticatedUserId, unauthorizedResponse } from '@/lib/auth-utils'
+import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
 import { validateSpaceAccess, SpacePermissions } from '@/lib/space-context'
 import { randomBytes } from 'crypto'
 
@@ -26,13 +26,7 @@ export async function GET(
 
     return NextResponse.json(invites)
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Sem acesso ao espaço' }, { status: 403 })
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'buscar convites')
   }
 }
 
@@ -72,12 +66,6 @@ export async function POST(
 
     return NextResponse.json(invite, { status: 201 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Sem acesso ao espaço' }, { status: 403 })
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'criar convite')
   }
 }

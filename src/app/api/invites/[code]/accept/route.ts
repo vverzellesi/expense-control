@@ -1,7 +1,7 @@
 // src/app/api/invites/[code]/accept/route.ts
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { getAuthenticatedUserId, unauthorizedResponse } from '@/lib/auth-utils'
+import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
 import { auth } from '@/auth'
 
 export async function POST(
@@ -79,9 +79,6 @@ export async function POST(
       space: invite.space,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'aceitar convite')
   }
 }

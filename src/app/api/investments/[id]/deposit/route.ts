@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function POST(
   request: NextRequest,
@@ -64,6 +64,8 @@ export async function POST(
           categoryId: investmentCategory?.id || null,
           isFixed: false,
           userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
         },
       });
 
@@ -100,16 +102,6 @@ export async function POST(
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error creating deposit:", error);
-    return NextResponse.json(
-      { error: "Erro ao registrar aporte" },
-      { status: 500 }
-    );
+    return handleApiError(error, "registrar aporte");
   }
 }
