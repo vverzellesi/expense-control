@@ -30,7 +30,10 @@ export function useSpacePermissions(): Permissions & { loading: boolean } {
 
   useEffect(() => {
     fetch('/api/spaces/active/permissions')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch permissions')
+        return res.json()
+      })
       .then(setPermissions)
       .catch(() => {
         // Keep default permissions on error

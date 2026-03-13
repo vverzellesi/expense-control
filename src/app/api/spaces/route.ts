@@ -1,7 +1,7 @@
 // src/app/api/spaces/route.ts
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { getAuthenticatedUserId, unauthorizedResponse } from '@/lib/auth-utils'
+import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
 
 export async function GET() {
   try {
@@ -18,10 +18,7 @@ export async function GET() {
 
     return NextResponse.json(memberships)
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'buscar espaços')
   }
 }
 
@@ -52,79 +49,78 @@ export async function POST(request: Request) {
 
     return NextResponse.json(space, { status: 201 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'criar espaço')
   }
 }
 
 async function copyUserDataToSpace(userId: string, spaceId: string) {
-  // Copy categories
-  const categories = await prisma.category.findMany({
-    where: { userId, spaceId: null },
-  })
-  if (categories.length > 0) {
-    await prisma.category.createMany({
-      data: categories.map((c) => ({
-        name: c.name,
-        color: c.color,
-        icon: c.icon,
+  await prisma.$transaction(async (tx) => {
+    // Copy categories
+    const categories = await tx.category.findMany({
+      where: { userId, spaceId: null },
+    })
+    if (categories.length > 0) {
+      await tx.category.createMany({
+        data: categories.map((c) => ({
+          name: c.name,
+          color: c.color,
+          icon: c.icon,
+          userId,
+          spaceId,
+        })),
+      })
+    }
+
+    // Copy origins
+    const origins = await tx.origin.findMany({
+      where: { userId, spaceId: null },
+    })
+    if (origins.length > 0) {
+      await tx.origin.createMany({
+        data: origins.map((o) => ({
+          name: o.name,
+          userId,
+          spaceId,
+        })),
+      })
+    }
+
+    // Copy investment categories
+    const investmentCategories = await tx.investmentCategory.findMany({
+      where: { userId, spaceId: null },
+    })
+    if (investmentCategories.length > 0) {
+      await tx.investmentCategory.createMany({
+        data: investmentCategories.map((ic) => ({
+          name: ic.name,
+          icon: ic.icon,
+          color: ic.color,
+          userId,
+          spaceId,
+        })),
+      })
+    }
+
+    // Copy category rules (need new category IDs)
+    const spaceCategories = await tx.category.findMany({
+      where: { userId, spaceId },
+    })
+    const categoryNameToId = new Map(spaceCategories.map((c) => [c.name, c.id]))
+
+    const rules = await tx.categoryRule.findMany({
+      where: { userId, spaceId: null },
+      include: { category: true },
+    })
+    const rulesToCreate = rules
+      .filter((r) => categoryNameToId.has(r.category.name))
+      .map((r) => ({
+        keyword: r.keyword,
+        categoryId: categoryNameToId.get(r.category.name)!,
         userId,
         spaceId,
-      })),
-    })
-  }
-
-  // Copy origins
-  const origins = await prisma.origin.findMany({
-    where: { userId, spaceId: null },
+      }))
+    if (rulesToCreate.length > 0) {
+      await tx.categoryRule.createMany({ data: rulesToCreate })
+    }
   })
-  if (origins.length > 0) {
-    await prisma.origin.createMany({
-      data: origins.map((o) => ({
-        name: o.name,
-        userId,
-        spaceId,
-      })),
-    })
-  }
-
-  // Copy investment categories
-  const investmentCategories = await prisma.investmentCategory.findMany({
-    where: { userId, spaceId: null },
-  })
-  if (investmentCategories.length > 0) {
-    await prisma.investmentCategory.createMany({
-      data: investmentCategories.map((ic) => ({
-        name: ic.name,
-        icon: ic.icon,
-        color: ic.color,
-        userId,
-        spaceId,
-      })),
-    })
-  }
-
-  // Copy category rules (need new category IDs)
-  const spaceCategories = await prisma.category.findMany({
-    where: { userId, spaceId },
-  })
-  const categoryNameToId = new Map(spaceCategories.map((c) => [c.name, c.id]))
-
-  const rules = await prisma.categoryRule.findMany({
-    where: { userId, spaceId: null },
-    include: { category: true },
-  })
-  const rulesToCreate = rules
-    .filter((r) => categoryNameToId.has(r.category.name))
-    .map((r) => ({
-      keyword: r.keyword,
-      categoryId: categoryNameToId.get(r.category.name)!,
-      userId,
-      spaceId,
-    }))
-  if (rulesToCreate.length > 0) {
-    await prisma.categoryRule.createMany({ data: rulesToCreate })
-  }
 }

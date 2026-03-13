@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
@@ -36,17 +36,7 @@ export async function GET(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar investimento");
   }
 }
 
@@ -77,7 +67,7 @@ export async function PUT(
       const category = await prisma.investmentCategory.findFirst({
         where: {
           id: categoryId,
-          OR: [{ userId: ctx.userId }, { userId: null, isDefault: true }],
+          OR: [ctx.ownerFilter, { userId: null, isDefault: true }],
         },
       });
 
@@ -108,17 +98,7 @@ export async function PUT(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error updating investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar investimento");
   }
 }
 
@@ -153,16 +133,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error deleting investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "excluir investimento");
   }
 }

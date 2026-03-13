@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAuthContext } from '@/lib/auth-utils'
-import { unauthorizedResponse } from '@/lib/auth-utils'
+import { getAuthContext, handleApiError } from '@/lib/auth-utils'
 
 export async function GET() {
   try {
@@ -16,6 +15,7 @@ export async function GET() {
         canManageSpace: false,
         canViewIncomes: true,
         isSpaceContext: false,
+        spaceId: null,
         role: null,
       })
     }
@@ -29,12 +29,10 @@ export async function GET() {
       canManageSpace: ctx.permissions.canManageSpace(),
       canViewIncomes: ctx.permissions.canViewIncomes(),
       isSpaceContext: true,
-      role: null, // role is internal
+      spaceId: ctx.spaceId,
+      role: null,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return unauthorizedResponse()
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'buscar permissões')
   }
 }

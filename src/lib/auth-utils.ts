@@ -45,6 +45,21 @@ export async function getOptionalSession() {
   return await auth()
 }
 
+/**
+ * Centralized API error handler.
+ * Catches Unauthorized/Forbidden thrown by auth helpers and returns appropriate responses.
+ */
+export function handleApiError(error: unknown, context: string) {
+  if (error instanceof Error && error.message === "Unauthorized") {
+    return unauthorizedResponse()
+  }
+  if (error instanceof Error && error.message === "Forbidden") {
+    return forbiddenResponse()
+  }
+  console.error(`Error ${context}:`, error)
+  return NextResponse.json({ error: `Erro ao ${context}` }, { status: 500 })
+}
+
 export type AuthContext = {
   userId: string
   spaceId: string | null

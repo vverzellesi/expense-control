@@ -34,10 +34,19 @@ export function SpaceSwitcher() {
 
   async function fetchSpaces() {
     try {
-      const res = await fetch('/api/spaces')
-      if (res.ok) {
-        const data = await res.json()
+      const [spacesRes, activeRes] = await Promise.all([
+        fetch('/api/spaces'),
+        fetch('/api/spaces/active/permissions'),
+      ])
+      if (spacesRes.ok) {
+        const data = await spacesRes.json()
         setSpaces(data)
+      }
+      if (activeRes.ok) {
+        const perms = await activeRes.json()
+        if (perms.isSpaceContext && perms.spaceId) {
+          setActiveSpaceId(perms.spaceId)
+        }
       }
     } finally {
       setLoading(false)

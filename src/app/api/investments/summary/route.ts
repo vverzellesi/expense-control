@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 interface CategorySummary {
   id: string;
@@ -36,7 +36,7 @@ export async function GET(): Promise<NextResponse<InvestmentSummaryResponse | { 
     // Fetch all investments for the user
     const investments = await prisma.investment.findMany({
       where: {
-        userId: ctx.userId,
+        ...ctx.ownerFilter,
       },
       include: {
         category: true,
@@ -114,17 +114,6 @@ export async function GET(): Promise<NextResponse<InvestmentSummaryResponse | { 
       investmentCount: investments.length,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching investment summary:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json(
-      { error: "Erro ao buscar resumo de investimentos", details: errorMessage },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar resumo de investimentos");
   }
 }
