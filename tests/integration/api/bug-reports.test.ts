@@ -10,8 +10,9 @@ vi.stubEnv("GITHUB_TOKEN", "test-token");
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Import route after mocks are set up
-const { POST, rateLimitMap } = await import("@/app/api/bug-reports/route");
+// Import route and rate limit utility after mocks are set up
+const { POST } = await import("@/app/api/bug-reports/route");
+const { resetRateLimit } = await import("@/lib/rate-limit");
 
 function createFormData(fields: Record<string, string>, files?: { name: string; content: Buffer; type: string }[]) {
   const formData = new FormData();
@@ -66,7 +67,7 @@ function mockIssueAndProjectSuccess(issueNumber = 42) {
 describe("/api/bug-reports", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    rateLimitMap.clear();
+    resetRateLimit();
     (getAuthenticatedUserId as ReturnType<typeof vi.fn>).mockResolvedValue("user-1");
   });
 
