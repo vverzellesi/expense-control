@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "69f56dcbfc1a",
+  "session_id": "e97b1598-e14f-4410-9f24-de9c67ca5238",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-13T01:12:21.034466Z",
+  "branch": "worktree-telegram-bot",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/app/api/import/route.ts",
+    "src/lib/import-service.ts",
+    "tests/integration/api/import.test.ts"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "e93eac57-3311-4217-8032-57796e1e8353",
+  "checkpoint_transcript_start": 386,
+  "transcript_lines_at_start": 386,
+  "token_usage": {
+    "input_tokens": 31,
+    "cache_creation_tokens": 39077,
+    "cache_read_tokens": 4071125,
+    "output_tokens": 6035,
+    "api_call_count": 29
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-13T01:12:20.919943Z",
+    "agent_lines": 146,
+    "human_added": 129,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 275,
+    "agent_percentage": 53.090909090909086
+  }
+}

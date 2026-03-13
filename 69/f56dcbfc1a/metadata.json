@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "69f56dcbfc1a",
+  "strategy": "manual-commit",
+  "branch": "worktree-telegram-bot",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/app/api/import/route.ts",
+    "src/lib/import-service.ts",
+    "tests/integration/api/import.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/69/f56dcbfc1a/0/metadata.json",
+      "transcript": "/69/f56dcbfc1a/0/full.jsonl",
+      "context": "/69/f56dcbfc1a/0/context.md",
+      "content_hash": "/69/f56dcbfc1a/0/content_hash.txt",
+      "prompt": "/69/f56dcbfc1a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 31,
+    "cache_creation_tokens": 39077,
+    "cache_read_tokens": 4071125,
+    "output_tokens": 6035,
+    "api_call_count": 29
+  }
+}
