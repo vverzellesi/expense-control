@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { toLocalDateString } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       }
 
       days.push({
-        date: dateObj.toISOString().split("T")[0],
+        date: toLocalDateString(dateObj),
         dayOfMonth: d,
         dayOfWeek: dateObj.getDay(),
         totalExpense,

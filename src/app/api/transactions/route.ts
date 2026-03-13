@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,19 +32,19 @@ export async function GET(request: NextRequest) {
     // Custom date range filter takes priority
     if (startDate && endDate) {
       where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: parseDateLocal(startDate),
+        lte: new Date(parseDateLocal(endDate).setHours(23, 59, 59, 999)),
       };
     } else if (month && year) {
       const monthStart = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const monthEnd = new Date(parseInt(year), parseInt(month), 0);
+      const monthEnd = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
       where.date = {
         gte: monthStart,
         lte: monthEnd,
       };
     } else if (year) {
       const yearStart = new Date(parseInt(year), 0, 1);
-      const yearEnd = new Date(parseInt(year), 11, 31);
+      const yearEnd = new Date(parseInt(year), 11, 31, 23, 59, 59, 999);
       where.date = {
         gte: yearStart,
         lte: yearEnd,
@@ -148,14 +149,14 @@ export async function POST(request: NextRequest) {
           totalAmount: Math.abs(amount) * totalInstallments,
           totalInstallments,
           installmentAmount: installmentAmount || Math.abs(amount),
-          startDate: new Date(date + "T12:00:00"),
+          startDate: parseDateLocal(date),
           origin,
           userId,
         },
       });
 
       const transactions = [];
-      const startDate = new Date(date + "T12:00:00");
+      const startDate = parseDateLocal(date);
 
       for (let i = 0; i < totalInstallments; i++) {
         const transactionDate = new Date(startDate);
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
         data: {
           description,
           amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
-          date: new Date(date + "T12:00:00"),
+          date: parseDateLocal(date),
           type,
           origin,
           categoryId: categoryId || null,

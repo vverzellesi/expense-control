@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { Transaction, Category, Origin } from "@/types";
+import { toLocalDateString } from "@/lib/utils";
 
 interface Props {
   categories: Category[];
@@ -39,8 +40,8 @@ export function TransactionForm({
   );
   const [date, setDate] = useState(
     transaction
-      ? new Date(transaction.date).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0]
+      ? toLocalDateString(new Date(transaction.date))
+      : toLocalDateString(new Date())
   );
   const [type, setType] = useState<"INCOME" | "EXPENSE" | "TRANSFER">(
     transaction?.type as "INCOME" | "EXPENSE" | "TRANSFER" || "EXPENSE"

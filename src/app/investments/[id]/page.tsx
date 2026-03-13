@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import {
   ArrowLeft,
   Pencil,
@@ -68,12 +68,12 @@ export default function InvestmentDetailPage() {
   const [newValue, setNewValue] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositDate, setDepositDate] = useState(
-    new Date().toISOString().split("T")[0]
+    toLocalDateString(new Date())
   );
   const [depositNotes, setDepositNotes] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawDate, setWithdrawDate] = useState(
-    new Date().toISOString().split("T")[0]
+    toLocalDateString(new Date())
   );
   const [withdrawNotes, setWithdrawNotes] = useState("");
   const [formLoading, setFormLoading] = useState(false);
@@ -208,7 +208,7 @@ export default function InvestmentDetailPage() {
 
       setDepositDialogOpen(false);
       setDepositAmount("");
-      setDepositDate(new Date().toISOString().split("T")[0]);
+      setDepositDate(toLocalDateString(new Date()));
       setDepositNotes("");
       fetchInvestment();
     } catch (error) {
@@ -247,7 +247,7 @@ export default function InvestmentDetailPage() {
 
       setWithdrawDialogOpen(false);
       setWithdrawAmount("");
-      setWithdrawDate(new Date().toISOString().split("T")[0]);
+      setWithdrawDate(toLocalDateString(new Date()));
       setWithdrawNotes("");
       fetchInvestment();
     } catch (error) {
