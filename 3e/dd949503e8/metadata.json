@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "3edd949503e8",
+  "strategy": "manual-commit",
+  "branch": "vverzellesi/gh-project-integration",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "ai_docs/brainstorm/2026-03-12-bug-report-github-design.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/README.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/phase-1-api-textarea.md",
+    "ai_docs/plans/2026-03-12-bug-report-github/phase-2-modal-sidebar.md",
+    "src/app/api/bug-reports/route.ts",
+    "src/components/ui/textarea.tsx",
+    "tests/integration/api/bug-reports.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3e/dd949503e8/0/metadata.json",
+      "transcript": "/3e/dd949503e8/0/full.jsonl",
+      "context": "/3e/dd949503e8/0/context.md",
+      "content_hash": "/3e/dd949503e8/0/content_hash.txt",
+      "prompt": "/3e/dd949503e8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 81,
+    "cache_creation_tokens": 108628,
+    "cache_read_tokens": 2288028,
+    "output_tokens": 32694,
+    "api_call_count": 41
+  }
+}
