@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "d0d2bab36019",
+  "session_id": "5b230ec8-4b8f-482c-93d5-8a4b84e83c11",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-13T02:09:21.066443Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "ai_docs/comunicacao-features.md"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "9bf3576f-c5fa-46ff-8b3f-f2b378e49f65",
+  "token_usage": {
+    "input_tokens": 19,
+    "cache_creation_tokens": 34677,
+    "cache_read_tokens": 355541,
+    "output_tokens": 3366,
+    "api_call_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-13T02:09:21.044636Z",
+    "agent_lines": 109,
+    "human_added": 5385,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 5494,
+    "agent_percentage": 1.983982526392428
+  }
+}

@@ -1,0 +1,16 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+cria uma mensagem que eu possa mandar no WhatsApp para os clientes dessa aplicação, contando sobre a novidade da feature de integração com o Telegram. Deve ser uma mensagem como se fosse um change log ou aqueles e-mails de novas features que as empresas enviam, mas ela deve ser formatada e otimizada para o WhatsApp.
+
+### Prompt 2
+
+Salva essa mensagem num arquivo.md na pasta ai/docs e também salva ela junto no mesmo arquivo, com diretrizes de como escrever esse tipo de mensagem pra futuras features que a gente vai lançar e fazer a comunicação pros usuários. Essa mensagem ficou boa, mas eu quero que ela seja um pouco mais friendly e talvez convidando os usuários a testarem.
+
+### Prompt 3
+
+commita - junto com todos os outros arquivos de documentaçao que estao sem commitar. E atualiza a main
+
