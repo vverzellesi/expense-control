@@ -129,6 +129,18 @@ npm run test:all      # Run all tests
 
 TypeScript path alias: `@/*` maps to `./src/*`
 
+## Security: No Credentials in Code or Docs
+
+**NEVER commit real credentials, connection strings, API keys, endpoint identifiers, or secrets to the repository** — not in code, not in configuration, not in documentation, not in examples, not in comments. This includes:
+
+- Database URIs or connection strings with real hostnames/endpoints (e.g., Neon endpoint IDs like `ep-xxx-pooler`)
+- API keys, tokens, or passwords
+- Service-specific identifiers that could be used to target infrastructure
+
+Always use generic placeholders (e.g., `<your-endpoint>`, `<password>`) in documentation and examples. Real values belong exclusively in environment variables (`.env`, Vercel settings, etc.) which are gitignored.
+
+**Context:** This rule exists because a PostgreSQL URI was leaked via documentation committed to git, triggering a GitGuardian alert. This must never happen again.
+
 ## Architecture Diagrams
 
 Diagramas Mermaid da arquitetura estão em `ai_docs/diagrams/`. Consulte-os para entender a estrutura do projeto, relações entre entidades, fluxos de API e hierarquia de componentes.
