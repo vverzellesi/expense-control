@@ -25,3 +25,24 @@ export function parseDate(dateString: string): Date {
   }
   return new Date(dateString);
 }
+
+/**
+ * Parses a YYYY-MM-DD string into a Date at noon local time.
+ * Avoids timezone issues where new Date("YYYY-MM-DDT12:00:00") is ambiguous.
+ * Using the Date constructor with numeric args always creates local time.
+ */
+export function parseDateLocal(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+/**
+ * Formats a Date as YYYY-MM-DD using local timezone.
+ * Replaces toISOString().split("T")[0] which uses UTC and can shift dates.
+ */
+export function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}

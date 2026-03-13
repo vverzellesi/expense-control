@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const investmentDate = date ? new Date(date + "T12:00:00") : new Date();
+    const investmentDate = date ? parseDateLocal(date) : new Date();
     const amount = Math.abs(initialValue);
 
     // Use a transaction for atomicity

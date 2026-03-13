@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -148,14 +149,14 @@ export async function POST(request: NextRequest) {
           totalAmount: Math.abs(amount) * totalInstallments,
           totalInstallments,
           installmentAmount: installmentAmount || Math.abs(amount),
-          startDate: new Date(date + "T12:00:00"),
+          startDate: parseDateLocal(date),
           origin,
           userId,
         },
       });
 
       const transactions = [];
-      const startDate = new Date(date + "T12:00:00");
+      const startDate = parseDateLocal(date);
 
       for (let i = 0; i < totalInstallments; i++) {
         const transactionDate = new Date(startDate);
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
         data: {
           description,
           amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
-          date: new Date(date + "T12:00:00"),
+          date: parseDateLocal(date),
           type,
           origin,
           categoryId: categoryId || null,

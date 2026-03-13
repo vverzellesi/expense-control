@@ -5,6 +5,7 @@ import {
   calculateInterest,
 } from "@/lib/carryover-detector";
 import { findDuplicate } from "@/lib/dedup";
+import { parseDateLocal } from "@/lib/utils";
 
 // Normalize text for matching (lowercase, remove accents)
 function normalizeText(text: string): string {
@@ -109,11 +110,10 @@ export async function importTransactions(
       amount = Math.abs(amount);
     }
 
-    // Parse date safely to avoid timezone issues with YYYY-MM-DD format
-    const dateValue = typeof t.date === "string" && !t.date.includes("T")
-      ? t.date + "T12:00:00"
-      : t.date;
-    const transactionDate = new Date(dateValue);
+    // Parse date safely using local timezone
+    const transactionDate = typeof t.date === "string" && !t.date.includes("T")
+      ? parseDateLocal(t.date)
+      : new Date(t.date);
     const transactionMonth = transactionDate.getMonth();
     const transactionYear = transactionDate.getFullYear();
     const transactionOrigin = t.origin || defaultOrigin;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 interface TransactionToCheck {
   description: string;
@@ -72,9 +73,8 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < transactions.length; i++) {
       const t = transactions[i];
-      // Parse date safely to avoid timezone issues with YYYY-MM-DD format
-      const dateStr = !t.date.includes('T') ? t.date + 'T12:00:00' : t.date;
-      const transactionDate = new Date(dateStr);
+      // Parse date safely using local timezone
+      const transactionDate = !t.date.includes('T') ? parseDateLocal(t.date) : new Date(t.date);
 
       // Check for exact duplicates (same date, description, amount, and optionally origin)
       const duplicateWhere: Prisma.TransactionWhereInput = {
