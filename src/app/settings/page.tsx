@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers } from "lucide-react";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers, MessageCircle } from "lucide-react";
 import type { Category, Budget, CategoryRule, SavingsHistory, Origin, CategoryTag } from "@/types";
 
 interface BudgetWithCategory extends Budget {
@@ -91,6 +91,15 @@ export default function SettingsPage() {
   // Savings history
   const [savingsHistory, setSavingsHistory] = useState<SavingsHistory[]>([]);
 
+  // Telegram
+  const [telegramStatus, setTelegramStatus] = useState<{
+    linked: boolean;
+    chatId?: string;
+    linkedAt?: string;
+  } | null>(null);
+  const [telegramLink, setTelegramLink] = useState<string | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -125,6 +134,15 @@ export default function SettingsPage() {
       setSavingsHistory(savingsHistoryData || []);
       setOrigins(originsData || []);
       setCategoryTags(tagsData || []);
+
+      // Fetch Telegram link status
+      try {
+        const telegramRes = await fetch("/api/telegram/link");
+        const telegramData = await telegramRes.json();
+        setTelegramStatus(telegramData);
+      } catch {
+        setTelegramStatus({ linked: false });
+      }
 
       // Fetch current month spending
       const now = new Date();
@@ -505,6 +523,38 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleLinkTelegram() {
+    setTelegramLoading(true);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      setTelegramLink(data.deepLink);
+      toast({ title: "Link gerado", description: "Clique no link para abrir o Telegram" });
+    } catch {
+      toast({ title: "Erro", description: "Erro ao gerar link", variant: "destructive" });
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
+  async function handleUnlinkTelegram() {
+    setTelegramLoading(true);
+    try {
+      await fetch("/api/telegram/link", { method: "DELETE" });
+      setTelegramStatus({ linked: false });
+      setTelegramLink(null);
+      toast({ title: "Sucesso", description: "Telegram desvinculado" });
+    } catch {
+      toast({ title: "Erro", description: "Erro ao desvincular", variant: "destructive" });
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -550,6 +600,11 @@ export default function SettingsPage() {
             <Layers className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Tags</span>
             <span className="sm:hidden">Tags</span>
+          </TabsTrigger>
+          <TabsTrigger value="telegram" className="min-h-[44px] flex-1 sm:flex-initial">
+            <MessageCircle className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Telegram</span>
+            <span className="sm:hidden">Telegram</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1169,6 +1224,76 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="telegram" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5" />
+                Integração Telegram
+              </CardTitle>
+              <CardDescription>
+                Vincule sua conta para registrar despesas e consultar gastos pelo Telegram.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {telegramStatus?.linked ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="font-medium">Conta vinculada</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Chat ID: {telegramStatus.chatId}
+                  </p>
+                  {telegramStatus.linkedAt && (
+                    <p className="text-sm text-muted-foreground">
+                      Vinculado em: {new Date(telegramStatus.linkedAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
+                  <Button
+                    variant="destructive"
+                    onClick={handleUnlinkTelegram}
+                    disabled={telegramLoading}
+                  >
+                    {telegramLoading ? "Desvinculando..." : "Desvincular Telegram"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <XCircle className="h-5 w-5" />
+                    <span>Conta não vinculada</span>
+                  </div>
+                  {telegramLink ? (
+                    <div className="space-y-2">
+                      <p className="text-sm">Clique no link abaixo para abrir o Telegram:</p>
+                      <a
+                        href={telegramLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-600 hover:text-emerald-700 underline break-all"
+                      >
+                        {telegramLink}
+                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        O link expira em 10 minutos.
+                      </p>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleLinkTelegram}
+                      disabled={telegramLoading}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {telegramLoading ? "Gerando link..." : "Vincular Telegram"}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

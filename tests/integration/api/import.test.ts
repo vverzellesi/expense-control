@@ -13,8 +13,12 @@ vi.mock('@/lib/db', () => ({
     },
     transaction: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn()
+    },
+    categoryTag: {
+      findMany: vi.fn()
     },
     billPayment: {
       findMany: vi.fn(),
@@ -37,8 +41,12 @@ const mockPrisma = prisma as unknown as {
   }
   transaction: {
     create: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
+  }
+  categoryTag: {
+    findMany: ReturnType<typeof vi.fn>
   }
   billPayment: {
     findMany: ReturnType<typeof vi.fn>
@@ -83,6 +91,8 @@ describe('POST /api/import - Carryover Linking', () => {
     mockPrisma.recurringExpense.findMany.mockResolvedValue([])
     // Default - no category tags
     mockPrisma.categoryTag.findMany.mockResolvedValue([])
+    // Default - no duplicates found
+    mockPrisma.transaction.findFirst.mockResolvedValue(null)
     // Default - no bill payments
     mockPrisma.billPayment.findMany.mockResolvedValue([])
   })
@@ -1192,6 +1202,82 @@ describe('POST /api/import - Carryover Linking', () => {
       expect(response.status).toBe(201)
       expect(data.message).toContain('1 transacoes importadas')
       expect(data.message).toContain('1 vinculadas a saldo rolado')
+    })
+  })
+
+  describe('Deduplication', () => {
+    it('should skip duplicate transactions and report skippedCount', async () => {
+      // First transaction is a duplicate (findFirst returns match)
+      mockPrisma.transaction.findFirst
+        .mockResolvedValueOnce({ id: 'existing-txn', description: 'PIX REST FULANO', amount: -45.9 })
+        .mockResolvedValueOnce(null) // second is unique
+
+      const mockTransaction = createMockTransaction('txn-new', 'UBER TRIP', -23.5, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'PIX REST FULANO', amount: 45.9, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'UBER TRIP', amount: 23.5, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(1)
+      expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(1)
+    })
+
+    it('should include duplicatas ignoradas in response message when duplicates found', async () => {
+      mockPrisma.transaction.findFirst
+        .mockResolvedValueOnce({ id: 'dup-1' })
+        .mockResolvedValueOnce({ id: 'dup-2' })
+        .mockResolvedValueOnce(null)
+
+      const mockTransaction = createMockTransaction('txn-new', 'NEW TXN', -10, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'DUP1', amount: 10, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'DUP2', amount: 20, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'NEW TXN', amount: 10, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(2)
+      expect(data.message).toContain('2 duplicatas ignoradas')
+    })
+
+    it('should import all transactions when no duplicates exist', async () => {
+      mockPrisma.transaction.findFirst.mockResolvedValue(null) // no duplicates
+
+      const mockTransaction = createMockTransaction('txn-1', 'NETFLIX', -39.9, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'NETFLIX', amount: 39.9, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(0)
     })
   })
 })
