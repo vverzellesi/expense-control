@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "0a25e3ba2400",
+  "session_id": "e97b1598-e14f-4410-9f24-de9c67ca5238",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-13T01:08:09.327254Z",
+  "branch": "worktree-telegram-bot",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/app/api/import/route.ts",
+    "src/app/api/telegram/webhook/route.ts",
+    "src/auth.config.ts",
+    "src/lib/dedup.test.ts",
+    "src/lib/dedup.ts",
+    "src/lib/import-service.ts",
+    "src/lib/telegram/client.ts",
+    "src/lib/telegram/commands.ts",
+    "src/lib/telegram/queries.ts"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "db2c7e3d-6bf3-4866-b521-41d2ef18e58d",
+  "token_usage": {
+    "input_tokens": 87,
+    "cache_creation_tokens": 114527,
+    "cache_read_tokens": 5504483,
+    "output_tokens": 27379,
+    "api_call_count": 78
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-13T01:08:09.237912Z",
+    "agent_lines": 528,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 528,
+    "agent_percentage": 100
+  }
+}
