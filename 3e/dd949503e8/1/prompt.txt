@@ -1,0 +1,101 @@
+<system_instruction>
+You are working inside Conductor, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/victor/conductor/workspaces/expense-control/conakry directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with Conductor, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately, before using any skills or any other tools:
+
+Rename the branch using `git branch -m`. Do not check the current branch name.
+
+Only do this once per session. If the branch has already been renamed, leave it.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "vverzellesi/" before the name.
+
+</system-instruction>
+
+Criei um projeto dentro do repositório do GitHub para essa aplicação. De que forma você consegue conectar com esse projeto, entender os issues, resolver e ainda mover os cards para o respectivo status correto?
+
+---
+
+rodei, ve aí
+
+---
+
+cria um slash command dentro desse projeto chamado "fix-issues", onde você vá ler o projeto, avaliar o que está em to-do e ver o que é uma issue vs feature, pegar um issue (talvez o mais recente) e começar a trabalhar nele (seja direto ou começando com um plano)
+
+---
+
+Base directory for this skill: /Users/victor/.claude/skills/brainstorming
+
+# Brainstorming Ideas Into Designs
+
+## Overview
+
+Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+
+Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design in small sections (200-300 words), checking after each section whether it looks right so far.
+
+## The Process
+
+**Understanding the idea:**
+- Check out the current project state first (files, docs, recent commits)
+- Ask questions one at a time to refine the idea
+- Prefer multiple choice questions when possible, but open-ended is fine too
+- Only one question per message - if a topic needs more exploration, break it into multiple questions
+- Focus on understanding: purpose, constraints, success criteria
+
+**Exploring approaches:**
+- Propose 2-3 different approaches with trade-offs
+- Present options conversationally with your recommendation and reasoning
+- Lead with your recommended option and explain why
+
+**Presenting the design:**
+- Once you believe you understand what you're building, present the design
+- Break it into sections of 200-300 words
+- Ask after each section whether it looks right so far
+- Cover: architecture, components, data flow, error handling, testing
+- Be ready to go back and clarify if something doesn't make sense
+
+## After the Design
+
+**Documentation:**
+- Write the validated design to `ai_docs/brainstorm/YYYY-MM-DD-<topic>-design.md`
+- Commit the design document to git
+
+**Implementation (if continuing):**
+- Ask: "Ready to set up for implementation?"
+- Use writing-plans to create detailed implementation plan, you must send the absolute path to the brainstorming document
+
+## Qualidade Linguística
+
+Quando o usuário se comunica em Português Brasileiro, TODOS os artefatos gerados (documento de design, perguntas, opções, descrições) DEVEM usar acentuação correta: á, à, â, ã, é, ê, í, ó, ô, õ, ú, ü, ç. Texto sem acentos em PT-BR é defeito. Verificar antes de salvar o documento de design.
+
+**Exceção:** Código, nomes de variáveis, e termos técnicos em inglês mantêm sua grafia original.
+
+## Key Principles
+
+- **One question at a time** - Don't overwhelm with multiple questions
+- **Multiple choice preferred** - Easier to answer than open-ended when possible
+- **YAGNI ruthlessly** - Remove unnecessary features from all designs
+- **Explore alternatives** - Always propose 2-3 approaches before settling
+- **Incremental validation** - Present design in sections, validate each
+- **Be flexible** - Go back and clarify when something doesn't make sense
+
+
+ARGUMENTS: Criar um slash command /fix-issues que: 1) Lê o projeto GitHub MyPocket, 2) Avalia items no backlog/ready, 3) Distingue issue vs feature, 4) Pega o issue mais recente, 5) Move para In Progress, 6) Começa a trabalhar (direto para bugs simples, plano para features complexas)
+
+---
+
+específico
+
+---
+
+A

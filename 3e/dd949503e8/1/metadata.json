@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "3edd949503e8",
+  "session_id": "c6db48d3-a14c-47ee-8095-99962d003723",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-13T02:23:38.119161Z",
+  "branch": "vverzellesi/gh-project-integration",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".claude/commands/fix-issues.md"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "b234433b-90eb-4de6-857a-f90c904957dc",
+  "token_usage": {
+    "input_tokens": 29,
+    "cache_creation_tokens": 26512,
+    "cache_read_tokens": 463871,
+    "output_tokens": 4496,
+    "api_call_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-13T02:23:38.10219Z",
+    "agent_lines": 0,
+    "human_added": 455,
+    "human_modified": 96,
+    "human_removed": 0,
+    "total_committed": 551,
+    "agent_percentage": 0
+  }
+}
