@@ -13,6 +13,7 @@ export async function GET(
       where: { id, userId },
       include: {
         category: true,
+        categoryTag: true,
         installment: true,
       },
     });
@@ -52,6 +53,7 @@ export async function PUT(
       type,
       origin,
       categoryId,
+      categoryTagId,
       isFixed,
       tags,
       isInstallment,
@@ -78,6 +80,23 @@ export async function PUT(
       );
     }
 
+    // Validate categoryTagId belongs to user and matches category
+    let validatedTagId: string | null | undefined = undefined;
+    if (categoryTagId !== undefined) {
+      if (categoryTagId === null || categoryTagId === "") {
+        validatedTagId = null;
+      } else {
+        const tag = await prisma.categoryTag.findFirst({
+          where: {
+            id: categoryTagId,
+            userId,
+            categoryId: categoryId || undefined,
+          },
+        });
+        validatedTagId = tag ? categoryTagId : null;
+      }
+    }
+
     const transaction = await prisma.transaction.update({
       where: { id },
       data: {
@@ -87,6 +106,7 @@ export async function PUT(
         type,
         origin,
         categoryId: categoryId || null,
+        categoryTagId: validatedTagId !== undefined ? validatedTagId : undefined,
         isFixed: isFixed || false,
         tags: processedTags,
         isInstallment: isInstallment || false,
@@ -95,6 +115,7 @@ export async function PUT(
       },
       include: {
         category: true,
+        categoryTag: true,
         installment: true,
       },
     });
