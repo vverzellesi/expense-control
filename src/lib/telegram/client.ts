@@ -1,4 +1,6 @@
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`
+function getTelegramApi() {
+  return `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`
+}
 
 export interface TelegramUpdate {
   update_id: number
@@ -44,7 +46,7 @@ export async function sendMessage(
     parse_mode?: "HTML" | "Markdown" | "MarkdownV2"
   }
 ) {
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+  const res = await fetch(`${getTelegramApi()}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -60,7 +62,7 @@ export async function answerCallbackQuery(
   callbackQueryId: string,
   text?: string
 ) {
-  const res = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+  const res = await fetch(`${getTelegramApi()}/answerCallbackQuery`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -82,7 +84,7 @@ export async function editMessageText(
     parse_mode?: "HTML" | "Markdown" | "MarkdownV2"
   }
 ) {
-  const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
+  const res = await fetch(`${getTelegramApi()}/editMessageText`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -96,7 +98,7 @@ export async function editMessageText(
 }
 
 export async function getFile(fileId: string) {
-  const res = await fetch(`${TELEGRAM_API}/getFile`, {
+  const res = await fetch(`${getTelegramApi()}/getFile`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ file_id: fileId }),
@@ -108,11 +110,14 @@ export async function getFile(fileId: string) {
 export async function downloadFile(filePath: string): Promise<string> {
   const url = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`
   const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to download file: ${res.status} ${res.statusText}`)
+  }
   return res.text()
 }
 
 export async function setWebhook(url: string, secretToken: string) {
-  const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
+  const res = await fetch(`${getTelegramApi()}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

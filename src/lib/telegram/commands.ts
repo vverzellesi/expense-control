@@ -10,9 +10,10 @@ import {
   type InlineKeyboardButton,
 } from "./client"
 import { parseExpenseMessage } from "./parser"
-import { parseCSV } from "@/lib/csv-parser"
+import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
 import { suggestCategory } from "@/lib/categorizer"
-import { findDuplicate } from "@/lib/dedup"
+import { findDuplicate, filterDuplicates } from "@/lib/dedup"
+import { importTransactions } from "@/lib/import-service"
 import { formatCurrency } from "@/lib/utils"
 import {
   handleSummaryQuery,
@@ -137,17 +138,20 @@ export async function handleCallbackQuery(
   }
 
   if (data.startsWith("confirm:")) {
-    const categoryIdFromData = data.replace("confirm:", "")
-    return handleConfirmExpense(chatId, messageId, userId, query.message!, categoryIdFromData !== "none" ? categoryIdFromData : null)
+    const pendingId = data.replace("confirm:", "")
+    return handleConfirmExpense(chatId, messageId, userId, pendingId)
   }
 
   if (data.startsWith("change_cat:")) {
-    return handleShowCategories(chatId, messageId, userId, query.message)
+    const pendingId = data.replace("change_cat:", "")
+    return handleShowCategories(chatId, messageId, userId, pendingId)
   }
 
   if (data.startsWith("set_cat:")) {
-    const categoryId = data.replace("set_cat:", "")
-    return handleSetCategory(chatId, messageId, categoryId, query.message)
+    const parts = data.replace("set_cat:", "").split(":")
+    const pendingId = parts[0]
+    const categoryId = parts[1]
+    return handleSetCategory(chatId, messageId, pendingId, categoryId, userId)
   }
 
   if (data.startsWith("csv_confirm:")) {
@@ -199,11 +203,28 @@ export async function handleExpenseMessage(
   const categoryName = suggested?.name || "Sem categoria"
   const categoryId = suggested?.id || null
 
+  // Store parsed expense data in DB to avoid fragile message text parsing on confirm
+  const pendingExpense = await prisma.telegramPendingImport.create({
+    data: {
+      userId,
+      chatId: String(chatId),
+      payload: JSON.stringify({
+        description,
+        amount,
+        date: date.toISOString(),
+        categoryId,
+        categoryName,
+      }),
+      origin: "Telegram",
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    },
+  })
+
   // Format date for display
   const dateStr = date.toLocaleDateString("pt-BR")
 
-  const confirmData = `confirm:${categoryId || "none"}`
-  const changeCatData = `change_cat:0`
+  const confirmData = `confirm:${pendingExpense.id}`
+  const changeCatData = `change_cat:${pendingExpense.id}`
   const cancelData = `cancel:0`
 
   return sendMessage(chatId, [
@@ -229,41 +250,41 @@ async function handleConfirmExpense(
   chatId: number,
   messageId: number,
   userId: string,
-  message: TelegramMessage,
-  overrideCategoryId: string | null = null
+  pendingId: string
 ) {
-  // Parse expense data from the confirmation message text
-  const text = message.text || ""
-  const lines = text.split("\n")
+  // Load expense data from DB instead of parsing fragile message text
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: pendingId },
+  })
 
-  const descLine = lines.find(l => l.startsWith("📝"))
-  const amountLine = lines.find(l => l.startsWith("💰"))
-  const dateLine = lines.find(l => l.startsWith("📅"))
-  const catLine = lines.find(l => l.startsWith("🏷️"))
-
-  if (!descLine || !amountLine || !dateLine) {
-    return editMessageText(chatId, messageId, "Erro: dados da transação não encontrados.")
+  if (!pending || pending.expiresAt < new Date()) {
+    if (pending) await prisma.telegramPendingImport.delete({ where: { id: pendingId } })
+    return editMessageText(chatId, messageId, "Despesa expirada. Envie novamente.")
   }
 
-  const description = descLine.replace("📝 ", "")
-  const amountStr = amountLine.replace("💰 ", "").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()
-  const amount = parseFloat(amountStr)
-  const dateParts = dateLine.replace("📅 ", "").split("/")
-  const date = new Date(
-    parseInt(dateParts[2]),
-    parseInt(dateParts[1]) - 1,
-    parseInt(dateParts[0]),
-    12, 0, 0
-  )
+  if (pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Erro: despesa não encontrada.")
+  }
 
-  // Resolve category
-  const categoryName = catLine?.replace("🏷️ ", "") || "Sem categoria"
+  const data = JSON.parse(pending.payload) as {
+    description: string
+    amount: number
+    date: string
+    categoryId: string | null
+    categoryName: string
+  }
+
+  await prisma.telegramPendingImport.delete({ where: { id: pendingId } })
+
+  const { description, amount, categoryName } = data
+  const date = new Date(data.date)
+  const categoryId = data.categoryId
+
+  // Resolve category (may have been changed via set_cat)
   let category = null
-  if (overrideCategoryId) {
-    category = await prisma.category.findUnique({ where: { id: overrideCategoryId } })
-  } else if (categoryName !== "Sem categoria") {
+  if (categoryId) {
     category = await prisma.category.findFirst({
-      where: { name: categoryName, userId },
+      where: { id: categoryId, userId },
     })
   }
 
@@ -275,11 +296,13 @@ async function handleConfirmExpense(
     date,
   })
 
+  const dateStr = date.toLocaleDateString("pt-BR")
+
   if (duplicate) {
     return editMessageText(
       chatId,
       messageId,
-      `⚠️ Transação duplicata detectada!\n\n📝 ${description}\n💰 ${formatCurrency(amount)}\n📅 ${dateLine.replace("📅 ", "")}\n\nEsta transação já existe no sistema.`
+      `⚠️ Transação duplicata detectada!\n\n📝 ${description}\n💰 ${formatCurrency(amount)}\n📅 ${dateStr}\n\nEsta transação já existe no sistema.`
     )
   }
 
@@ -303,7 +326,7 @@ async function handleConfirmExpense(
   return editMessageText(
     chatId,
     messageId,
-    `✅ Despesa registrada!\n\n📝 ${description}\n💰 ${formatCurrency(amount)}\n📅 ${dateLine.replace("📅 ", "")}\n🏷️ ${finalCategoryName}`
+    `✅ Despesa registrada!\n\n📝 ${description}\n💰 ${formatCurrency(amount)}\n📅 ${dateStr}\n🏷️ ${finalCategoryName}`
   )
 }
 
@@ -311,7 +334,7 @@ async function handleShowCategories(
   chatId: number,
   messageId: number,
   userId: string,
-  currentMessage?: TelegramMessage
+  pendingId: string
 ) {
   const categories = await prisma.category.findMany({
     where: { userId },
@@ -322,27 +345,32 @@ async function handleShowCategories(
     return editMessageText(chatId, messageId, "Nenhuma categoria cadastrada.")
   }
 
-  // Preserve expense data lines for when a category is selected
+  // Load expense data from pending import for display
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: pendingId },
+  })
   let expenseLines = ""
-  const msgText = currentMessage?.text || ""
-  const descLine = msgText.split("\n").find(l => l.startsWith("📝"))
-  const amountLine = msgText.split("\n").find(l => l.startsWith("💰"))
-  const dateLine = msgText.split("\n").find(l => l.startsWith("📅"))
-
-  if (descLine && amountLine && dateLine) {
-    expenseLines = `\n${descLine}\n${amountLine}\n${dateLine}`
+  if (pending) {
+    const data = JSON.parse(pending.payload) as {
+      description: string
+      amount: number
+      date: string
+    }
+    const dateStr = new Date(data.date).toLocaleDateString("pt-BR")
+    expenseLines = `\n📝 ${data.description}\n💰 ${formatCurrency(data.amount)}\n📅 ${dateStr}`
   }
 
   // Build keyboard with categories (max 2 per row)
+  // Encode pendingId in callback_data so set_cat can update the pending record
   const keyboard: InlineKeyboardButton[][] = []
   for (let i = 0; i < categories.length; i += 2) {
     const row: InlineKeyboardButton[] = [
-      { text: categories[i].name, callback_data: `set_cat:${categories[i].id}` },
+      { text: categories[i].name, callback_data: `set_cat:${pendingId}:${categories[i].id}` },
     ]
     if (i + 1 < categories.length) {
       row.push({
         text: categories[i + 1].name,
-        callback_data: `set_cat:${categories[i + 1].id}`,
+        callback_data: `set_cat:${pendingId}:${categories[i + 1].id}`,
       })
     }
     keyboard.push(row)
@@ -358,36 +386,53 @@ async function handleShowCategories(
 async function handleSetCategory(
   chatId: number,
   messageId: number,
+  pendingId: string,
   categoryId: string,
-  currentMessage?: TelegramMessage
+  userId: string,
 ) {
-  const category = await prisma.category.findUnique({
-    where: { id: categoryId },
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, userId },
   })
 
   if (!category) {
     return editMessageText(chatId, messageId, "Categoria não encontrada.")
   }
 
-  // Preserve original expense data lines from the message history
-  let expenseLines = ""
-  const msgText = currentMessage?.text || ""
-  const descLine = msgText.split("\n").find(l => l.startsWith("📝"))
-  const amountLine = msgText.split("\n").find(l => l.startsWith("💰"))
-  const dateLine = msgText.split("\n").find(l => l.startsWith("📅"))
+  // Update pending import with new category
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: pendingId },
+  })
 
-  if (descLine && amountLine && dateLine) {
-    expenseLines = `${descLine}\n${amountLine}\n${dateLine}\n`
+  if (!pending || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Erro: despesa não encontrada.")
   }
 
-  const confirmData = `confirm:${categoryId}`
-  const changeCatData = `change_cat:0`
+  const data = JSON.parse(pending.payload) as {
+    description: string
+    amount: number
+    date: string
+    categoryId: string | null
+    categoryName: string
+  }
+
+  // Update category in pending record
+  data.categoryId = categoryId
+  data.categoryName = category.name
+  await prisma.telegramPendingImport.update({
+    where: { id: pendingId },
+    data: { payload: JSON.stringify(data) },
+  })
+
+  const dateStr = new Date(data.date).toLocaleDateString("pt-BR")
+
+  const confirmData = `confirm:${pendingId}`
+  const changeCatData = `change_cat:${pendingId}`
   const cancelData = `cancel:0`
 
   return editMessageText(
     chatId,
     messageId,
-    `Nova despesa:\n${expenseLines}🏷️ ${category.name}`,
+    `Nova despesa:\n📝 ${data.description}\n💰 ${formatCurrency(data.amount)}\n📅 ${dateStr}\n🏷️ ${category.name}`,
     {
       reply_markup: {
         inline_keyboard: [
@@ -431,32 +476,33 @@ export async function handleDocumentMessage(
 
     const content = await downloadFile(filePath)
 
+    // Detect real bank origin from CSV content (not hardcoded "Telegram")
+    const origin = detectBankFromContent(content)
+
     // Parse CSV
-    const origin = "Telegram"
     const parsed = await parseCSV(content, origin)
 
     if (parsed.length === 0) {
       return sendMessage(chatId, "Nenhuma transação encontrada no arquivo.")
     }
 
-    // Check for duplicates
-    let duplicateCount = 0
-    const uniqueTransactions: typeof parsed = []
-
+    // Re-categorize with userId (parseCSV calls suggestCategory without userId)
     for (const t of parsed) {
-      const amount = t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount)
-      const dup = await findDuplicate({
-        userId,
-        description: t.description,
-        amount,
-        date: t.date,
-      })
-      if (dup) {
-        duplicateCount++
-      } else {
-        uniqueTransactions.push(t)
+      const suggested = await suggestCategory(t.description, userId)
+      if (suggested) {
+        t.suggestedCategoryId = suggested.id
       }
     }
+
+    // Check for duplicates (batch query instead of N+1)
+    const transactionsWithSignedAmount = parsed.map(t => ({
+      ...t,
+      amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
+    }))
+    const { unique: uniqueTransactions, duplicateCount } = await filterDuplicates(
+      userId,
+      transactionsWithSignedAmount
+    )
 
     if (uniqueTransactions.length === 0) {
       return sendMessage(
@@ -532,6 +578,11 @@ export async function handleCsvConfirm(
     return editMessageText(chatId, messageId, "Importação expirada. Envie o arquivo novamente.")
   }
 
+  // Validate that the pending import belongs to the requesting user
+  if (pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Erro: importação não encontrada.")
+  }
+
   await prisma.telegramPendingImport.delete({ where: { id: importId } })
 
   const transactions = JSON.parse(pending.payload) as Array<{
@@ -545,39 +596,28 @@ export async function handleCsvConfirm(
     type: string
   }>
 
-  let importedCount = 0
-  for (const t of transactions) {
-    const type = t.type || "EXPENSE"
-    let amount = t.amount
-    if (type === "EXPENSE" && amount > 0) amount = -amount
-    else if (type === "INCOME" && amount < 0) amount = Math.abs(amount)
+  // Use shared import service for full pipeline (recurring matching, carryover, dedup)
+  const result = await importTransactions(
+    userId,
+    transactions.map(t => ({
+      ...t,
+      categoryId: t.categoryId,
+      origin: pending.origin,
+    })),
+    pending.origin
+  )
 
-    const dateStr = typeof t.date === "string" && !(t.date as string).includes("T")
-      ? t.date + "T12:00:00"
-      : t.date
-    const transactionDate = new Date(dateStr)
-
-    await prisma.transaction.create({
-      data: {
-        userId,
-        description: t.description,
-        amount,
-        date: transactionDate,
-        type,
-        origin: pending!.origin,
-        categoryId: t.categoryId,
-        isFixed: false,
-        isInstallment: t.isInstallment,
-        currentInstallment: t.currentInstallment,
-        totalInstallments: t.totalInstallments,
-      },
-    })
-    importedCount++
+  const parts = [`✅ ${result.created.length} transações importadas`]
+  if (result.skippedCount > 0) {
+    parts.push(`${result.skippedCount} duplicatas ignoradas`)
+  }
+  if (result.linkedCount > 0) {
+    parts.push(`${result.linkedCount} vinculadas a recorrentes`)
   }
 
   return editMessageText(
     chatId,
     messageId,
-    `✅ ${importedCount} transações importadas com sucesso!`
+    parts.join("\n")
   )
 }
