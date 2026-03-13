@@ -8,6 +8,38 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_IMAGES = 3;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif"];
 
+// Rate limiting: max 5 bug reports per user per 15-minute window
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+interface RateLimitEntry {
+  timestamps: number[];
+}
+
+export const rateLimitMap = new Map<string, RateLimitEntry>();
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+
+  if (!entry) {
+    rateLimitMap.set(userId, { timestamps: [now] });
+    return false;
+  }
+
+  // Remove expired timestamps
+  entry.timestamps = entry.timestamps.filter(
+    (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+  );
+
+  if (entry.timestamps.length >= RATE_LIMIT_MAX) {
+    return true;
+  }
+
+  entry.timestamps.push(now);
+  return false;
+}
+
 function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN;
 }
@@ -127,6 +159,12 @@ async function addIssueToProject(token: string, issueNodeId: string): Promise<bo
   }
 
   const projectData = await projectResponse.json();
+
+  if (projectData.errors) {
+    console.error("GraphQL errors fetching project:", projectData.errors);
+    return false;
+  }
+
   const projectId = projectData.data?.user?.projectV2?.id;
 
   if (!projectId) {
@@ -164,7 +202,37 @@ async function addIssueToProject(token: string, issueNodeId: string): Promise<bo
     return false;
   }
 
+  const responseData = await response.json();
+
+  if (responseData.errors) {
+    console.error("GraphQL errors adding issue to project:", responseData.errors);
+    return false;
+  }
+
   return true;
+}
+
+async function updateGitHubIssueBody(
+  token: string,
+  issueNumber: number,
+  body: string
+): Promise<void> {
+  const response = await fetch(
+    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/vnd.github.v3+json",
+      },
+      body: JSON.stringify({ body }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error("Failed to update issue body with image URLs");
+  }
 }
 
 function buildIssueBody(
@@ -192,7 +260,15 @@ function buildIssueBody(
 
 export async function POST(request: NextRequest) {
   try {
-    await getAuthenticatedUserId(); // auth gate only
+    const userId = await getAuthenticatedUserId();
+
+    // Rate limiting
+    if (isRateLimited(userId)) {
+      return NextResponse.json(
+        { error: "Muitos bug reports enviados. Tente novamente em alguns minutos." },
+        { status: 429 }
+      );
+    }
 
     const token = getGitHubToken();
     if (!token) {
@@ -229,8 +305,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process images
-    const imageUrls: string[] = [];
+    // Validate images before any external calls
     const imageEntries = formData.getAll("images");
 
     if (imageEntries.length > MAX_IMAGES) {
@@ -240,6 +315,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validatedImages: { base64: string; name: string }[] = [];
     for (const entry of imageEntries) {
       if (!isFileLike(entry) || entry.size === 0) continue;
 
@@ -258,17 +334,34 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = Buffer.from(await entry.arrayBuffer());
-      const base64 = buffer.toString("base64");
       const ext = entry.name.split(".").pop() || "png";
-      const sanitizedName = `${imageUrls.length}.${ext}`;
-
-      const downloadUrl = await uploadImageToGitHub(token, base64, sanitizedName);
-      imageUrls.push(downloadUrl);
+      validatedImages.push({
+        base64: buffer.toString("base64"),
+        name: `${validatedImages.length}.${ext}`,
+      });
     }
 
-    // Create issue
-    const body = buildIssueBody(description.trim(), userAgent, pageUrl, imageUrls);
+    // Create issue first (without images), so we never upload orphan attachments
+    const body = buildIssueBody(description.trim(), userAgent, pageUrl, []);
     const issue = await createGitHubIssue(token, title.trim(), body);
+
+    // Upload images and update issue body (best-effort for images)
+    if (validatedImages.length > 0) {
+      const imageUrls: string[] = [];
+      for (const img of validatedImages) {
+        try {
+          const downloadUrl = await uploadImageToGitHub(token, img.base64, img.name);
+          imageUrls.push(downloadUrl);
+        } catch (uploadError) {
+          console.error("Failed to upload image:", uploadError);
+        }
+      }
+
+      if (imageUrls.length > 0) {
+        const updatedBody = buildIssueBody(description.trim(), userAgent, pageUrl, imageUrls);
+        await updateGitHubIssueBody(token, issue.number, updatedBody);
+      }
+    }
 
     // Add to project board (best-effort — don't fail the request if this fails)
     let projectLinked = false;
