@@ -3,8 +3,8 @@
 ## The Problem
 
 We have two separate databases:
-- **DEV**: `ep-jolly-breeze-ahyfy0l4-pooler` (local development)
-- **PROD**: `ep-crimson-pond-ah4ykmjb-pooler` (Vercel production)
+- **DEV**: `ep-<dev-endpoint>-pooler` (local development)
+- **PROD**: `ep-<prod-endpoint>-pooler` (Vercel production)
 
 When schema changes are made and migrations are created locally, they only apply to the DEV database. The PROD database doesn't receive these changes automatically, causing 500 errors when the code tries to access tables that don't exist.
 
@@ -31,7 +31,7 @@ This ensures:
 
 In Vercel project settings → Environment Variables:
 - `DATABASE_URL` should point to the PROD database
-- This is already configured, but verify it matches: `ep-crimson-pond-ah4ykmjb-pooler`
+- This is already configured, but verify it matches your production Neon endpoint
 
 ## Migration Workflow
 
@@ -61,7 +61,7 @@ In Vercel project settings → Environment Variables:
 
 To manually apply migrations to PROD:
 ```bash
-DATABASE_URL="postgresql://...@ep-crimson-pond-ah4ykmjb-pooler.../neondb?sslmode=require" npx prisma migrate deploy
+DATABASE_URL="postgresql://<user>:<password>@<your-neon-endpoint>.neon.tech/neondb?sslmode=require" npx prisma migrate deploy
 ```
 
 ## Checklist Before Deploying Schema Changes
