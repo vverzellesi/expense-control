@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 interface TransactionToCheck {
   description: string;
@@ -70,8 +71,7 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < transactions.length; i++) {
       const t = transactions[i];
-      const dateStr = !t.date.includes("T") ? t.date + "T12:00:00" : t.date;
-      const transactionDate = new Date(dateStr);
+      const transactionDate = !t.date.includes("T") ? parseDateLocal(t.date) : new Date(t.date);
       const transactionMonth = transactionDate.getMonth();
       const transactionYear = transactionDate.getFullYear();
       const transactionOrigin = origin || t.origin || "";

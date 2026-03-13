@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FixedVariableChart } from "@/components/Charts/FixedVariableChart";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, parseDateLocal } from "@/lib/utils";
 import { Lock, Shuffle, Percent, DollarSign } from "lucide-react";
 
 interface FixedVariableData {
@@ -187,7 +187,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
                     <div>
                       <div className="font-medium text-sm">{expense.description}</div>
                       <div className="text-xs text-gray-500">
-                        {expense.categoryName} - {formatDate(expense.date + "T12:00:00")}
+                        {expense.categoryName} - {formatDate(parseDateLocal(expense.date))}
                       </div>
                     </div>
                     <span className="font-semibold text-sm">
