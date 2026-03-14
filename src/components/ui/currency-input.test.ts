@@ -35,10 +35,10 @@ describe("digitsToRaw", () => {
     expect(digitsToRaw("")).toBe("");
   });
 
-  it("returns empty string for zero", () => {
-    expect(digitsToRaw("0")).toBe("");
-    expect(digitsToRaw("00")).toBe("");
-    expect(digitsToRaw("000")).toBe("");
+  it("returns zero for zero digits", () => {
+    expect(digitsToRaw("0")).toBe("0.00");
+    expect(digitsToRaw("00")).toBe("0.00");
+    expect(digitsToRaw("000")).toBe("0.00");
   });
 
   it("converts single digit to cents", () => {

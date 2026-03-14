@@ -27,7 +27,7 @@ function formatDisplay(raw: string): string {
 function digitsToRaw(digits: string): string {
   if (!digits) return "";
   const cents = parseInt(digits, 10);
-  if (isNaN(cents) || cents === 0) return "";
+  if (isNaN(cents)) return "";
   return (cents / 100).toFixed(2);
 }
 
@@ -45,14 +45,14 @@ const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
       onChange(digitsToRaw(digits));
     }
 
-    // Keep cursor at end after each render
+    // Keep cursor at end when display value changes
     React.useEffect(() => {
       const el = innerRef.current;
       if (el && el === document.activeElement && display) {
         const len = display.length;
         el.setSelectionRange(len, len);
       }
-    });
+    }, [display]);
 
     return (
       <input
