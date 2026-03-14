@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -53,14 +54,10 @@ export function SimulationForm({
 
           <div className="space-y-2">
             <Label htmlFor="totalAmount">Valor total (R$)</Label>
-            <Input
+            <CurrencyInput
               id="totalAmount"
-              type="number"
-              min={0}
-              step={0.01}
-              placeholder="0,00"
-              value={totalAmount || ""}
-              onChange={(e) => onTotalAmountChange(parseFloat(e.target.value) || 0)}
+              value={totalAmount ? totalAmount.toFixed(2) : ""}
+              onChange={(v) => onTotalAmountChange(v ? parseFloat(v) : 0)}
             />
           </div>
 

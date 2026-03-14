@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -183,28 +184,20 @@ export function InvestmentForm({
           {!isEditMode && (
             <div>
               <Label htmlFor="initialValue">Valor Inicial *</Label>
-              <Input
+              <CurrencyInput
                 id="initialValue"
-                type="number"
-                step="0.01"
-                min="0"
                 value={initialValue}
-                onChange={(e) => setInitialValue(e.target.value)}
-                placeholder="0,00"
+                onChange={setInitialValue}
               />
             </div>
           )}
 
           <div>
             <Label htmlFor="goalAmount">Meta (opcional)</Label>
-            <Input
+            <CurrencyInput
               id="goalAmount"
-              type="number"
-              step="0.01"
-              min="0"
               value={goalAmount}
-              onChange={(e) => setGoalAmount(e.target.value)}
-              placeholder="0,00"
+              onChange={setGoalAmount}
             />
           </div>
 

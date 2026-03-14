@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -582,14 +583,10 @@ export default function InvestmentsPage() {
             </div>
             <div>
               <Label htmlFor="deposit-amount">Valor do Aporte *</Label>
-              <Input
+              <CurrencyInput
                 id="deposit-amount"
-                type="number"
-                step="0.01"
-                min="0"
                 value={operationAmount}
-                onChange={(e) => setOperationAmount(e.target.value)}
-                placeholder="0,00"
+                onChange={setOperationAmount}
               />
             </div>
             <div className="flex gap-2 pt-2">
@@ -638,15 +635,10 @@ export default function InvestmentsPage() {
             </div>
             <div>
               <Label htmlFor="withdraw-amount">Valor do Resgate *</Label>
-              <Input
+              <CurrencyInput
                 id="withdraw-amount"
-                type="number"
-                step="0.01"
-                min="0"
-                max={withdrawInvestment?.currentValue}
                 value={operationAmount}
-                onChange={(e) => setOperationAmount(e.target.value)}
-                placeholder="0,00"
+                onChange={setOperationAmount}
               />
             </div>
             <div className="flex gap-2 pt-2">
@@ -695,14 +687,10 @@ export default function InvestmentsPage() {
             </div>
             <div>
               <Label htmlFor="new-value">Novo Valor *</Label>
-              <Input
+              <CurrencyInput
                 id="new-value"
-                type="number"
-                step="0.01"
-                min="0"
                 value={operationAmount}
-                onChange={(e) => setOperationAmount(e.target.value)}
-                placeholder="0,00"
+                onChange={setOperationAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
                 Use esta opcao para atualizar o valor de mercado do investimento
