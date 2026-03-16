@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -321,15 +322,10 @@ export function BillPaymentModal({
                   <div className="space-y-3 pl-7">
                     <div className="space-y-2">
                       <Label htmlFor="rollover-amount">Valor a pagar agora</Label>
-                      <Input
+                      <CurrencyInput
                         id="rollover-amount"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        max={bill.total - 0.01}
                         value={amountToPay}
-                        onChange={(e) => setAmountToPay(e.target.value)}
-                        placeholder="0,00"
+                        onChange={setAmountToPay}
                       />
                     </div>
 
@@ -382,15 +378,10 @@ export function BillPaymentModal({
                   <div className="space-y-3 pl-7">
                     <div className="space-y-2">
                       <Label htmlFor="finance-entry">Entrada</Label>
-                      <Input
+                      <CurrencyInput
                         id="finance-entry"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max={bill.total - 0.01}
                         value={amountToPay}
-                        onChange={(e) => setAmountToPay(e.target.value)}
-                        placeholder="0,00"
+                        onChange={setAmountToPay}
                       />
                     </div>
 

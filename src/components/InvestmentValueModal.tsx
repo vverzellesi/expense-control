@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -128,14 +128,10 @@ export function InvestmentValueModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="current-value">Valor Atual *</Label>
-            <Input
+            <CurrencyInput
               id="current-value"
-              type="number"
-              step="0.01"
-              min="0"
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="0,00"
+              onChange={setValue}
               autoFocus
             />
             {hasValueChange && (
