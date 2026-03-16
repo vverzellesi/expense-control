@@ -1,16 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 export interface CurrencyInputProps
   extends Omit<
     React.InputHTMLAttributes<HTMLInputElement>,
     "value" | "onChange" | "type"
   > {
-  /** Raw numeric string, e.g. "1234.56" */
+  /** Raw numeric string, e.g. "1234.56", or "" for empty */
   value: string;
-  /** Called with raw numeric string, e.g. "1234.56" */
+  /** Called with raw numeric string, e.g. "1234.56", or "" when cleared */
   onChange: (value: string) => void;
 }
 
@@ -32,7 +32,7 @@ function digitsToRaw(digits: string): string {
 }
 
 const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
-  ({ value, onChange, className, placeholder = "R$ 0,00", ...props }, ref) => {
+  ({ value, onChange, placeholder = "R$ 0,00", ...props }, ref) => {
     const innerRef = React.useRef<HTMLInputElement>(null);
 
     // Merge forwarded ref with inner ref
@@ -55,17 +55,13 @@ const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
     }, [display]);
 
     return (
-      <input
+      <Input
         ref={innerRef}
         type="text"
         inputMode="numeric"
         value={display}
         onChange={handleChange}
         placeholder={placeholder}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-          className
-        )}
         {...props}
       />
     );

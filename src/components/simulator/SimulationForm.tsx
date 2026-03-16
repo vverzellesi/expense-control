@@ -56,7 +56,7 @@ export function SimulationForm({
             <Label htmlFor="totalAmount">Valor total (R$)</Label>
             <CurrencyInput
               id="totalAmount"
-              value={totalAmount ? totalAmount.toFixed(2) : ""}
+              value={totalAmount != null ? totalAmount.toFixed(2) : ""}
               onChange={(v) => onTotalAmountChange(v ? parseFloat(v) : 0)}
             />
           </div>
