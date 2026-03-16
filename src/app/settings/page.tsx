@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -645,13 +646,9 @@ export default function SettingsPage() {
                 </div>
                 <div className="w-full sm:w-40">
                   <Label>Limite Mensal</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <CurrencyInput
                     value={budgetAmount}
-                    onChange={(e) => setBudgetAmount(e.target.value)}
-                    placeholder="0,00"
+                    onChange={setBudgetAmount}
                     className="min-h-[44px]"
                   />
                 </div>
@@ -877,13 +874,9 @@ export default function SettingsPage() {
               <form onSubmit={handleSaveSavingsGoal} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label>Meta Mensal (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <CurrencyInput
                     value={savingsGoal}
-                    onChange={(e) => setSavingsGoal(e.target.value)}
-                    placeholder="Ex: 1000.00"
+                    onChange={setSavingsGoal}
                     className="min-h-[44px]"
                   />
                   <p className="mt-1 text-xs text-gray-500">
