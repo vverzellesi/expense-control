@@ -8,6 +8,7 @@ import { MobileHeader } from "@/components/MobileHeader"
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthPage = pathname.startsWith("/auth")
+  const isInvitePage = pathname.startsWith("/invite")
   const isLandingPage = pathname === "/"
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -17,7 +18,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname])
 
   // Landing page and auth pages render without sidebar
-  if (isLandingPage || isAuthPage) {
+  if (isLandingPage || isAuthPage || isInvitePage) {
     return <>{children}</>
   }
 
