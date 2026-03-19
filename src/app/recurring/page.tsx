@@ -670,7 +670,27 @@ export default function RecurringPage() {
       {/* All recurring expenses */}
       <Card>
         <CardHeader>
-          <CardTitle>Todas as Despesas Recorrentes ({recurringExpenses.length})</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <CardTitle>Todas as Despesas Recorrentes ({recurringExpenses.length})</CardTitle>
+            {recurringExpenses.length > 0 && (
+              <div className="text-sm font-medium text-gray-600">
+                Total: <span className="text-red-600">{formatCurrency(
+                  recurringExpenses
+                    .filter((e) => e.isActive && e.type === "EXPENSE")
+                    .reduce((sum, e) => sum + e.defaultAmount, 0)
+                )}</span>
+                {recurringExpenses.some((e) => e.isActive && e.type === "INCOME") && (
+                  <span className="ml-3">
+                    Receita: <span className="text-green-600">{formatCurrency(
+                      recurringExpenses
+                        .filter((e) => e.isActive && e.type === "INCOME")
+                        .reduce((sum, e) => sum + e.defaultAmount, 0)
+                    )}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {recurringExpenses.length === 0 ? (
