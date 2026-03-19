@@ -7,9 +7,10 @@ Diretrizes e templates para mensagens de lançamento de features enviadas via Wh
 ## Diretrizes
 
 ### Tom e Estilo
-- **Friendly e acessível** — como se fosse um amigo contando uma novidade, não um comunicado corporativo
+- **Friendly e acessível** — tom de empresa próxima, não comunicado corporativo
 - **Convidar a testar** — sempre incluir um CTA claro pedindo feedback ou convidando a experimentar
 - Usar "você" (nunca "prezado cliente" ou linguagem formal)
+- **Sem primeira pessoa** — não usar "me conta", "me atualiza". Usar "conte", "compartilhe". A voz é da empresa, não de uma pessoa
 - Manter entusiasmo sem exagero — 1 a 2 emojis por bloco, não mais
 - Frases curtas e diretas. Evitar parágrafos longos
 
@@ -104,6 +105,36 @@ Use /menu no bot pra ver:
 
 Tudo fica sincronizado. O que você lançar pelo Telegram aparece no dashboard, e se importar o mesmo extrato duas vezes, o bot já ignora as duplicatas.
 
-Testa lá e me conta o que achou! Se tiver qualquer dúvida ou sugestão, é só responder aqui 👇
+Teste e conte o que achou! Dúvidas ou sugestões, é só responder aqui 👇
+```
+
+### Espaço Família (março/2026)
+
+```
+*🏠 MyPocket — Novidade: Espaço Família*
+
+Agora você pode gerenciar finanças junto com quem divide as contas! Criamos o *Espaço Família* — um espaço compartilhado onde vocês veem tudo junto: transações, orçamentos, categorias e investimentos.
+
+━━━━━━━━━━━━━━━
+
+*👥 Espaço compartilhado*
+Crie um espaço e convide seu parceiro(a) ou família. Cada pessoa mantém sua conta pessoal e pode alternar pro espaço compartilhado com um clique na barra lateral.
+
+*🔒 Privacidade por transação*
+Tem um gasto que é só seu? Marque como privado e ele fica visível só pra você, mesmo dentro do espaço compartilhado.
+
+*🎯 Papéis e permissões*
+Três níveis de acesso: _Admin_ (controle total), _Membro_ (registra e consulta) e _Limitado_ (só visualiza). Você decide o que cada pessoa pode fazer.
+
+*📲 Como ativar*
+1. Acesse _Configurações → Espaços_
+2. Clique em _Criar Espaço Família_
+3. Convide por e-mail ou compartilhe o link de convite
+
+━━━━━━━━━━━━━━━
+
+Tudo fica sincronizado — o que um registra no espaço, o outro vê na hora. E se quiser, dá pra migrar transações que já existem na sua conta pessoal pro espaço compartilhado.
+
+Teste com quem divide as contas e conte o que acharam! Sugestões são super bem-vindas 👇
 ```
 
