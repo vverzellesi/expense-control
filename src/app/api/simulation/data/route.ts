@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 const MONTH_LABELS = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -9,7 +9,7 @@ const MONTH_LABELS = [
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const now = new Date();
 
     // 1. Average income from last 3 months (only months with income)
@@ -18,7 +18,7 @@ export async function GET() {
 
     const incomeTransactions = await prisma.transaction.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         type: "INCOME",
         date: { gte: threeMonthsAgo, lte: currentMonthEnd },
         deletedAt: null,
@@ -40,13 +40,13 @@ export async function GET() {
 
     // 2. Active recurring expenses with effective amounts
     const activeRecurring = await prisma.recurringExpense.findMany({
-      where: { userId, isActive: true },
+      where: { ...ctx.ownerFilter, isActive: true },
     });
 
     const recurringWithLatestAmount = await Promise.all(
       activeRecurring.map(async (recurring) => {
         const latestTransaction = await prisma.transaction.findFirst({
-          where: { userId, recurringExpenseId: recurring.id },
+          where: { ...ctx.ownerFilter, recurringExpenseId: recurring.id },
           orderBy: { date: "desc" },
           select: { amount: true },
         });
@@ -63,7 +63,7 @@ export async function GET() {
 
     const futureInstallments = await prisma.transaction.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         isInstallment: true,
         installmentId: { not: null },
         date: { gte: startOfCurrentMonth, lte: endDate },
@@ -74,7 +74,7 @@ export async function GET() {
     // 3b. Standalone installments (manually tagged, no group) - project remaining
     const standaloneInstallments = await prisma.transaction.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         isInstallment: true,
         installmentId: null,
         totalInstallments: { not: null },
@@ -134,6 +134,9 @@ export async function GET() {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching simulation data:", error);
     return NextResponse.json(

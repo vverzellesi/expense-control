@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
 
 export async function POST(
@@ -8,7 +8,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const { amount, date, notes } = body;
@@ -23,7 +23,7 @@ export async function POST(
 
     // Verify investment belongs to user
     const existingInvestment = await prisma.investment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingInvestment) {
@@ -36,7 +36,7 @@ export async function POST(
     // Find "Investimentos" category - first try user's own, then global default
     let investmentCategory = await prisma.category.findFirst({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         name: { contains: "Investimento", mode: "insensitive" },
       },
     });
@@ -64,7 +64,9 @@ export async function POST(
           origin: existingInvestment.broker || "Investimento",
           categoryId: investmentCategory?.id || null,
           isFixed: false,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
         },
       });
 
@@ -101,13 +103,6 @@ export async function POST(
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error creating deposit:", error);
-    return NextResponse.json(
-      { error: "Erro ao registrar aporte" },
-      { status: 500 }
-    );
+    return handleApiError(error, "registrar aporte");
   }
 }

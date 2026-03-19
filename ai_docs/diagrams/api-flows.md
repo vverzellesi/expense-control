@@ -152,4 +152,125 @@ sequenceDiagram
     API-->>C: 201 transaction
 ```
 
-Cinco fluxos principais da aplicacao. Transacoes com parcelas usam fan-out loop para criar N registros. Importacao CSV faz deteccao de banco, auto-categorizacao e linking com recorrentes. Investimentos usam transacoes atomicas (prisma.$transaction) para manter consistencia entre cash-flow e portfolio.
+## 6. Criação de Espaço Compartilhado
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as POST /api/spaces
+    participant DB as Prisma/DB
+
+    C->>API: { name }
+    API->>API: getAuthenticatedUserId()
+    API->>DB: spaceMember.findFirst({ userId }) - verifica limite de 1 espaço
+    DB-->>API: null (sem espaço existente)
+
+    rect rgb(240, 248, 255)
+        Note over API,DB: prisma.$transaction() - atômico
+        API->>DB: space.create({ name, createdBy: userId })
+        DB-->>API: space record
+        API->>DB: spaceMember.create({ spaceId, userId, role: ADMIN })
+        DB-->>API: member record
+    end
+
+    API-->>C: 201 { space com members }
+```
+
+## 7. Convite para Espaço
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as POST /api/spaces/[spaceId]/invites
+    participant DB as Prisma/DB
+
+    C->>API: { email, role }
+    API->>API: getAuthenticatedUserId()
+    API->>DB: spaceMember.findFirst({ spaceId, userId, role: ADMIN })
+    DB-->>API: admin member (autorizado)
+
+    API->>API: Gerar código único (nanoid 8 chars)
+    API->>API: Calcular expiresAt (7 dias)
+    API->>DB: spaceInvite.create({ spaceId, email, code, role, status: PENDING, expiresAt })
+    DB-->>API: invite record
+    API-->>C: 201 { invite com code }
+```
+
+## 8. Aceitar Convite
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as POST /api/spaces/[spaceId]/invites (accept)
+    participant DB as Prisma/DB
+
+    C->>API: { code }
+    API->>API: getAuthenticatedUserId()
+    API->>DB: spaceInvite.findFirst({ code, status: PENDING })
+    DB-->>API: invite record
+
+    API->>API: Verificar não expirado (expiresAt > now)
+    API->>DB: spaceMember.findFirst({ userId }) - verifica limite de 1 espaço
+    DB-->>API: null (sem espaço existente)
+
+    rect rgb(240, 248, 255)
+        Note over API,DB: prisma.$transaction() - atômico
+        API->>DB: spaceMember.create({ spaceId, userId, role: invite.role })
+        DB-->>API: member record
+        API->>DB: spaceInvite.update({ status: ACCEPTED })
+        DB-->>API: updated invite
+    end
+
+    API-->>C: 200 { space com members }
+```
+
+## 9. Alternância de Contexto (Pessoal / Espaço)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as PUT /api/spaces/active
+    participant Cookie as Cookie Store
+    participant DB as Prisma/DB
+
+    C->>API: { spaceId | null }
+    API->>API: getAuthenticatedUserId()
+
+    alt spaceId fornecido
+        API->>DB: spaceMember.findFirst({ spaceId, userId })
+        DB-->>API: member record (autorizado)
+        API->>Cookie: Set active-space-id = spaceId
+    else null (contexto pessoal)
+        API->>Cookie: Delete active-space-id
+    end
+
+    API-->>C: 200 { activeSpaceId }
+
+    Note over C,Cookie: Todas as APIs subsequentes leem<br/>active-space-id do cookie para filtrar dados
+```
+
+## 10. Verificação de Permissões por Role
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as GET /api/spaces/active/permissions
+    participant Cookie as Cookie Store
+    participant DB as Prisma/DB
+
+    C->>API: request
+    API->>API: getAuthenticatedUserId()
+    API->>Cookie: Ler active-space-id
+
+    alt contexto pessoal (sem cookie)
+        API-->>C: 200 { isPersonal: true, role: null, permissions: full }
+    else contexto de espaço
+        API->>DB: spaceMember.findFirst({ spaceId, userId })
+        DB-->>API: member com role
+        API->>API: Mapear role -> permissões
+        Note over API: ADMIN: tudo<br/>MEMBER: CRUD transações, ver membros<br/>LIMITED: apenas ver dados
+        API-->>C: 200 { isPersonal: false, role, permissions }
+    end
+```
+
+Dez fluxos principais da aplicação. Transações com parcelas usam fan-out loop para criar N registros. Importação CSV faz detecção de banco, auto-categorização e linking com recorrentes. Investimentos usam transações atômicas (prisma.$transaction) para manter consistência entre cash-flow e portfolio. Os fluxos de espaços compartilhados (6-10) cobrem criação, convites, aceitação, alternância de contexto e verificação de permissões por role.

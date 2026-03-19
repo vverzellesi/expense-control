@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     const investment = await prisma.investment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         category: true,
         transactions: {
@@ -36,14 +36,7 @@ export async function GET(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error fetching investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar investimento");
   }
 }
 
@@ -52,14 +45,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const { name, description, categoryId, goalAmount, broker } = body;
 
     // Verify investment belongs to user before updating
     const existingInvestment = await prisma.investment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingInvestment) {
@@ -74,7 +67,7 @@ export async function PUT(
       const category = await prisma.investmentCategory.findFirst({
         where: {
           id: categoryId,
-          OR: [{ userId }, { userId: null, isDefault: true }],
+          OR: [ctx.ownerFilter, { userId: null, isDefault: true }],
         },
       });
 
@@ -105,14 +98,7 @@ export async function PUT(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error updating investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar investimento");
   }
 }
 
@@ -121,12 +107,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     // Verify investment belongs to user before deleting
     const existingInvestment = await prisma.investment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         transactions: true,
       },
@@ -147,13 +133,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error deleting investment:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "excluir investimento");
   }
 }

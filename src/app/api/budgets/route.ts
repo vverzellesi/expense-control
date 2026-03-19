@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
+
+    // In space context, check budget viewing permission
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewBudgets()) {
+      return forbiddenResponse();
+    }
 
     const budgets = await prisma.budget.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
       },
       include: {
         category: true,
@@ -25,6 +30,9 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching budgets:", error);
     return NextResponse.json(
       { error: "Erro ao buscar orçamentos" },
@@ -35,7 +43,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
+
+    // In space context, check budget viewing permission
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewBudgets()) {
+      return forbiddenResponse();
+    }
 
     const body = await request.json();
     const { categoryId, amount, isActive } = body;
@@ -47,25 +60,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if budget already exists for this category and user
-    const existing = await prisma.budget.findUnique({
+    // For personal context, use userId-based unique key; for space, use spaceId
+    const ownerKey = ctx.spaceId
+      ? { categoryId, spaceId: ctx.spaceId }
+      : { categoryId, userId: ctx.userId };
+
+    // Check if budget already exists for this category and owner
+    const existing = await prisma.budget.findFirst({
       where: {
-        categoryId_userId: {
-          categoryId,
-          userId,
-        },
+        categoryId,
+        ...ctx.ownerFilter,
       },
     });
 
     let budget;
     if (existing) {
       budget = await prisma.budget.update({
-        where: {
-          categoryId_userId: {
-            categoryId,
-            userId,
-          },
-        },
+        where: { id: existing.id },
         data: { amount, isActive: isActive ?? true },
         include: { category: true },
       });
@@ -75,7 +86,8 @@ export async function POST(request: NextRequest) {
           categoryId,
           amount,
           isActive: isActive ?? true,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
         },
         include: { category: true },
       });
@@ -85,6 +97,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating/updating budget:", error);
     return NextResponse.json(
@@ -96,7 +111,12 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
+
+    // In space context, check budget viewing permission
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewBudgets()) {
+      return forbiddenResponse();
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
@@ -111,7 +131,7 @@ export async function DELETE(request: NextRequest) {
     await prisma.budget.deleteMany({
       where: {
         id,
-        userId,
+        ...ctx.ownerFilter,
       },
     });
 
@@ -119,6 +139,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting budget:", error);
     return NextResponse.json(

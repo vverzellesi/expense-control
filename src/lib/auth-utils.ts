@@ -1,5 +1,6 @@
 import { auth } from "@/auth"
 import { NextResponse } from "next/server"
+import { getActiveSpaceId, validateSpaceAccess, SpacePermissions } from "./space-context"
 
 /**
  * Gets the authenticated user's ID from the session.
@@ -29,9 +30,66 @@ export function unauthorizedResponse() {
 }
 
 /**
+ * Helper to create a forbidden response.
+ * Use this when catching authorization errors in API routes.
+ */
+export function forbiddenResponse() {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+}
+
+/**
  * Gets the session if available, returns null otherwise.
  * Use this for optional authentication checks.
  */
 export async function getOptionalSession() {
   return await auth()
+}
+
+/**
+ * Centralized API error handler.
+ * Catches Unauthorized/Forbidden thrown by auth helpers and returns appropriate responses.
+ */
+export function handleApiError(error: unknown, context: string) {
+  if (error instanceof Error && error.message === "Unauthorized") {
+    return unauthorizedResponse()
+  }
+  if (error instanceof Error && error.message === "Forbidden") {
+    return forbiddenResponse()
+  }
+  console.error(`Error ${context}:`, error)
+  return NextResponse.json({ error: `Erro ao ${context}` }, { status: 500 })
+}
+
+export type AuthContext = {
+  userId: string
+  spaceId: string | null
+  permissions: SpacePermissions | null
+  /** Para queries: userId se contexto pessoal, spaceId se contexto espaço */
+  ownerFilter: { userId: string } | { spaceId: string }
+}
+
+/**
+ * Gets the full auth context including space awareness.
+ * Returns userId, active spaceId (if any), permissions, and ownerFilter for queries.
+ */
+export async function getAuthContext(): Promise<AuthContext> {
+  const userId = await getAuthenticatedUserId()
+  const spaceId = await getActiveSpaceId()
+
+  if (!spaceId) {
+    return {
+      userId,
+      spaceId: null,
+      permissions: null,
+      ownerFilter: { userId },
+    }
+  }
+
+  const membership = await validateSpaceAccess(userId, spaceId)
+  return {
+    userId,
+    spaceId,
+    permissions: new SpacePermissions(membership.role),
+    ownerFilter: { spaceId },
+  }
 }

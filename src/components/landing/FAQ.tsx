@@ -31,6 +31,11 @@ const faqs = [
     answer:
       "Sim! O MyPocket tem um módulo completo de investimentos. Cadastre seus ativos, registre aportes e resgates, acompanhe a rentabilidade e defina metas para cada aplicação.",
   },
+  {
+    question: "Como funciona o Espaço Família?",
+    answer:
+      "Você cria um espaço compartilhado e convida seu parceiro(a) ou família por email ou link. Cada pessoa mantém sua conta pessoal privada e pode ver as finanças do espaço em conjunto. Transações pessoais são sincronizadas automaticamente, mas você pode marcar qualquer uma como privada.",
+  },
 ]
 
 export function FAQ() {

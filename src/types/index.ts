@@ -34,6 +34,10 @@ export interface Transaction {
   deletedAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
+  // Space/shared account fields
+  isPrivate: boolean;
+  spaceId: string | null;
+  createdByUserId: string | null;
 }
 
 export interface RecurringExpense {

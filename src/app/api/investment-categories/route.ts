@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { ensureDefaultInvestmentCategories } from "@/lib/categorizer";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     // Ensure default investment categories exist (self-healing)
     await ensureDefaultInvestmentCategories();
@@ -15,7 +15,7 @@ export async function GET() {
       where: {
         OR: [
           { userId: null, isDefault: true },
-          { userId },
+          { ...ctx.ownerFilter },
         ],
       },
       include: {
@@ -34,6 +34,9 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching investment categories:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
@@ -45,7 +48,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { name, color, icon } = body;
@@ -57,13 +60,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if category with same name already exists for this user
+    // Check if category with same name already exists for this user/space
     const existingCategory = await prisma.investmentCategory.findFirst({
       where: {
         name,
         OR: [
           { userId: null, isDefault: true },
-          { userId },
+          { ...ctx.ownerFilter },
         ],
       },
     });
@@ -81,7 +84,8 @@ export async function POST(request: NextRequest) {
         color,
         icon,
         isDefault: false,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
     });
 
@@ -89,6 +93,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating investment category:", error);
     return NextResponse.json(

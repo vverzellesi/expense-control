@@ -1,4 +1,4 @@
-import { Clock, Eye, Shield, Building2, Gift, Smartphone, TrendingUp } from "lucide-react"
+import { Clock, Eye, Shield, Building2, Gift, Smartphone, TrendingUp, Users } from "lucide-react"
 
 const benefits = [
   {
@@ -36,6 +36,12 @@ const benefits = [
     title: "Acompanhe Investimentos",
     description:
       "Monitore seu portfólio, rentabilidade e metas de cada aplicação.",
+  },
+  {
+    icon: Users,
+    title: "Finanças em Família",
+    description:
+      "Crie um espaço compartilhado com seu parceiro(a) ou família e acompanhem tudo juntos.",
   },
   {
     icon: Gift,

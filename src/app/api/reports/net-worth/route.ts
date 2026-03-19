@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import {
-  getAuthenticatedUserId,
-  unauthorizedResponse,
-} from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const year = parseInt(
       searchParams.get("year") || String(new Date().getFullYear()),
@@ -22,7 +19,7 @@ export async function GET(request: NextRequest) {
     const [transactions, snapshots, investmentAggregate] = await Promise.all([
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           deletedAt: null,
           investmentTransaction: null,
           date: { gte: yearStart, lte: yearEnd },
@@ -31,13 +28,13 @@ export async function GET(request: NextRequest) {
       }),
       prisma.investmentSnapshot.findMany({
         where: {
-          userId,
+          userId: ctx.userId,
           year,
         },
         select: { month: true, totalValue: true },
       }),
       prisma.investment.aggregate({
-        where: { userId },
+        where: { ...ctx.ownerFilter },
         _sum: { currentValue: true, totalInvested: true },
       }),
     ]);
@@ -115,6 +112,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching net worth data:", error);
     return NextResponse.json(

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
 
 interface TransactionToCheck {
@@ -56,7 +56,7 @@ function detectInstallmentFromDescription(description: string): { current: numbe
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { transactions, origin } = body as { transactions: TransactionToCheck[]; origin?: string };
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
       // Check for exact duplicates (same date, description, amount, and optionally origin)
       const duplicateWhere: Prisma.TransactionWhereInput = {
-        userId,
+        ...ctx.ownerFilter,
         description: {
           contains: t.description.slice(0, 50),
         },
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       if (!existing && origin) {
         const recurringDuplicates = await prisma.transaction.findMany({
           where: {
-            userId,
+            ...ctx.ownerFilter,
             recurringExpenseId: { not: null },
             origin,
             date: {
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         // Search for transactions with similar base description that are installments
         const relatedTransaction = await prisma.transaction.findFirst({
           where: {
-            userId,
+            ...ctx.ownerFilter,
             isInstallment: true,
             currentInstallment: previousInstallment,
             totalInstallments: installmentInfo.total,
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
         if (!relatedTransaction) {
           const similarTransactions = await prisma.transaction.findMany({
             where: {
-              userId,
+              ...ctx.ownerFilter,
               isInstallment: true,
               totalInstallments: installmentInfo.total,
               amount: {
@@ -220,6 +220,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error checking duplicates:", error);
     return NextResponse.json(

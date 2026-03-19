@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get("year");
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const [currentYearTx, prevYearTx] = await Promise.all([
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           deletedAt: null,
           date: {
             gte: new Date(year, 0, 1),
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       }),
       prisma.transaction.findMany({
         where: {
-          userId,
+          ...ctx.ownerFilter,
           deletedAt: null,
           date: {
             gte: new Date(year - 1, 0, 1),
@@ -110,6 +110,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching annual data:", error);
     return NextResponse.json(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -64,6 +64,21 @@ export function TransactionForm({
   const [tagsInput, setTagsInput] = useState(
     transaction?.tags ? JSON.parse(transaction.tags).join(", ") : ""
   );
+  const [isPrivate, setIsPrivate] = useState(
+    transaction?.isPrivate || false
+  );
+  const [hasSpaces, setHasSpaces] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/spaces")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setHasSpaces(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +114,7 @@ export function TransactionForm({
         totalInstallments: isInstallment ? parseInt(totalInstallments) : null,
         installmentAmount: isInstallment && !transaction ? parseFloat(amount) : undefined,
         tags: tagsArray.length > 0 ? tagsArray : null,
+        isPrivate,
       };
 
       const url = transaction
@@ -329,6 +345,24 @@ export function TransactionForm({
           </div>
         )}
       </div>
+
+      {hasSpaces && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="isPrivate"
+              checked={isPrivate}
+              onCheckedChange={setIsPrivate}
+            />
+            <Label
+              htmlFor="isPrivate"
+              title="Transações privadas não aparecem nos espaços compartilhados."
+            >
+              Transação privada
+            </Label>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 pt-4">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
