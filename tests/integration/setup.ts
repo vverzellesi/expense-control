@@ -18,8 +18,17 @@ vi.mock('@/auth', () => ({
 // Mock auth-utils
 vi.mock('@/lib/auth-utils', () => ({
   getAuthenticatedUserId: vi.fn().mockResolvedValue('test-user-id'),
+  getAuthContext: vi.fn().mockResolvedValue({
+    userId: 'test-user-id',
+    spaceId: null,
+    permissions: null,
+    ownerFilter: { userId: 'test-user-id' }
+  }),
   unauthorizedResponse: vi.fn().mockReturnValue(
     new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  ),
+  forbiddenResponse: vi.fn().mockReturnValue(
+    new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
   ),
   getOptionalSession: vi.fn().mockResolvedValue({
     user: { id: 'test-user-id', email: 'test@example.com' }
