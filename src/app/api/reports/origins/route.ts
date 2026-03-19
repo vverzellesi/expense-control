@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1), 10);
     const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()), 10);
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const transactions = await prisma.transaction.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         deletedAt: null,
         type: "EXPENSE",
         investmentTransaction: null,
@@ -59,6 +59,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching origins data:", error);
     return NextResponse.json(

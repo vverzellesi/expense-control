@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
 
     const existing = await prisma.simulation.findFirst({
-      where: { id, userId },
+      where: { id, userId: ctx.userId },
     });
 
     if (!existing) {
@@ -49,6 +49,9 @@ export async function PATCH(
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error updating simulation:", error);
     return NextResponse.json({ error: "Erro ao atualizar simulação" }, { status: 500 });
   }
@@ -59,11 +62,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     const existing = await prisma.simulation.findFirst({
-      where: { id, userId },
+      where: { id, userId: ctx.userId },
     });
 
     if (!existing) {
@@ -76,6 +79,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting simulation:", error);
     return NextResponse.json({ error: "Erro ao deletar simulação" }, { status: 500 });

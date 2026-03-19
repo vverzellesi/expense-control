@@ -1,59 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { importTransactions } from "@/lib/import-service";
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const userId = await getAuthenticatedUserId();
-    const searchParams = request.nextUrl.searchParams;
-    const batchId = searchParams.get("batchId");
-
-    if (!batchId) {
-      return NextResponse.json(
-        { error: "ID do lote é obrigatório" },
-        { status: 400 }
-      );
-    }
-
-    // Soft delete all transactions from this import batch
-    const result = await prisma.transaction.updateMany({
-      where: {
-        userId,
-        importBatchId: batchId,
-        deletedAt: null,
-      },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
-
-    if (result.count === 0) {
-      return NextResponse.json(
-        { error: "Nenhuma transação encontrada para este lote" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      message: `${result.count} transações removidas`,
-      count: result.count,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error deleting import batch:", error);
-    return NextResponse.json(
-      { error: "Erro ao remover importação" },
-      { status: 500 }
-    );
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const { transactions, origin } = body;
 
@@ -64,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await importTransactions(userId, transactions, origin || "Importação CSV");
+    const result = await importTransactions(ctx.userId, transactions, origin || "Importação CSV");
 
     // Build response message
     const messageParts = [`${result.created.length} transações importadas`];
@@ -90,13 +41,15 @@ export async function POST(request: NextRequest) {
         linkedCount: result.linkedCount,
         carryoverLinkedCount: result.carryoverLinkedCount,
         linkedCarryovers: result.linkedCarryovers,
-        importBatchId: result.importBatchId,
       },
       { status: 201 }
     );
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error importing transactions:", error);
     return NextResponse.json(

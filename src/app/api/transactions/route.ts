@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -20,8 +20,9 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get("tag");
     const includeDeleted = searchParams.get("includeDeleted");
 
-    const where: Record<string, unknown> = {
-      userId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      ...ctx.ownerFilter,
     };
 
     // By default, exclude soft-deleted transactions
@@ -91,6 +92,11 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    // In space context with LIMITED role, only show own transactions
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
+      where.createdByUserId = ctx.userId;
+    }
+
     const transactions = await prisma.transaction.findMany({
       where,
       include: {
@@ -105,20 +111,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(transactions);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error fetching transactions:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar transações" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar transações");
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const {
       description,
@@ -133,6 +132,7 @@ export async function POST(request: NextRequest) {
       totalInstallments,
       installmentAmount,
       tags,
+      isPrivate,
     } = body;
 
     // Process tags - accept array or string, store as JSON string
@@ -152,7 +152,8 @@ export async function POST(request: NextRequest) {
           installmentAmount: installmentAmount || Math.abs(amount),
           startDate: parseDateLocal(date),
           origin,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
         },
       });
 
@@ -176,10 +177,13 @@ export async function POST(request: NextRequest) {
             categoryId: categoryId || null,
             isFixed: false,
             isInstallment: true,
+            isPrivate: isPrivate || false,
             installmentId: installment.id,
             currentInstallment: installmentNumber,
             tags: processedTags,
-            userId,
+            userId: ctx.userId,
+            spaceId: ctx.spaceId,
+            createdByUserId: ctx.userId,
           },
           include: {
             category: true,
@@ -200,9 +204,12 @@ export async function POST(request: NextRequest) {
           origin,
           categoryId: categoryId || null,
           isFixed: isFixed || false,
+          isPrivate: isPrivate || false,
           isInstallment: false,
           tags: processedTags,
-          userId,
+          userId: ctx.userId,
+          spaceId: ctx.spaceId,
+          createdByUserId: ctx.userId,
         },
         include: {
           category: true,
@@ -212,13 +219,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(transaction, { status: 201 });
     }
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error creating transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao criar transação" },
-      { status: 500 }
-    );
+    return handleApiError(error, "criar transação");
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError, AuthContext } from "@/lib/auth-utils";
 
 interface SnapshotData {
   month: number;
@@ -18,13 +18,13 @@ interface SnapshotsResponse {
 /**
  * Calculate current investment totals from all investments
  */
-async function calculateCurrentTotals(userId: string): Promise<{
+async function calculateCurrentTotals(ctx: AuthContext): Promise<{
   totalValue: number;
   totalInvested: number;
   totalWithdrawn: number;
 }> {
   const investments = await prisma.investment.findMany({
-    where: { userId },
+    where: { ...ctx.ownerFilter },
     select: {
       currentValue: true,
       totalInvested: true,
@@ -49,7 +49,7 @@ async function calculateCurrentTotals(userId: string): Promise<{
  * Ensure snapshot exists for the previous month (lazy generation)
  * This creates a snapshot for the last month if one doesn't exist
  */
-async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
+async function ensurePreviousMonthSnapshot(ctx: AuthContext): Promise<void> {
   const now = new Date();
   const currentMonth = now.getMonth() + 1; // 1-12
   const currentYear = now.getFullYear();
@@ -68,7 +68,7 @@ async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
       month_year_userId: {
         month: prevMonth,
         year: prevYear,
-        userId,
+        userId: ctx.userId,
       },
     },
   });
@@ -79,12 +79,7 @@ async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
   }
 
   // Calculate current totals and save as previous month's snapshot
-  // NOTE: This is an approximation - it uses current values for the previous month.
-  // If user made changes in the current month before this snapshot was generated,
-  // those changes will be reflected in the previous month's snapshot.
-  // This trade-off was chosen for simplicity over precise historical tracking.
-  // For accurate historical data, users should update values at month-end.
-  const totals = await calculateCurrentTotals(userId);
+  const totals = await calculateCurrentTotals(ctx);
 
   // Only create snapshot if user has investments
   if (totals.totalInvested > 0 || totals.totalValue > 0) {
@@ -95,7 +90,7 @@ async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
         totalValue: totals.totalValue,
         totalInvested: totals.totalInvested,
         totalWithdrawn: totals.totalWithdrawn,
-        userId,
+        userId: ctx.userId,
       },
     });
   }
@@ -103,13 +98,13 @@ async function ensurePreviousMonthSnapshot(userId: string): Promise<void> {
 
 export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsResponse | { error: string }>> {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const monthsParam = searchParams.get("months");
     const months = monthsParam ? parseInt(monthsParam, 10) : 12;
 
     // Ensure previous month snapshot exists (lazy generation)
-    await ensurePreviousMonthSnapshot(userId);
+    await ensurePreviousMonthSnapshot(ctx);
 
     // Calculate date range for fetching snapshots
     const now = new Date();
@@ -127,7 +122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
     // Fetch historical snapshots within the range
     const snapshots = await prisma.investmentSnapshot.findMany({
       where: {
-        userId,
+        userId: ctx.userId, // InvestmentSnapshot doesn't have spaceId yet
         OR: [
           // Same year, month >= startMonth
           {
@@ -162,7 +157,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
     }));
 
     // Calculate current totals for the "current" field
-    const currentTotals = await calculateCurrentTotals(userId);
+    const currentTotals = await calculateCurrentTotals(ctx);
 
     const current: SnapshotData = {
       month: currentMonth,
@@ -177,13 +172,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
       current,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error fetching investment snapshots:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar histórico de investimentos" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar histórico de investimentos");
   }
 }

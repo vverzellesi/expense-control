@@ -63,7 +63,6 @@ export interface ImportResult {
     interestRate: number | null;
     interestAmount: number | null;
   }>;
-  importBatchId: string;
 }
 
 export async function importTransactions(
@@ -71,7 +70,6 @@ export async function importTransactions(
   transactions: ImportTransaction[],
   defaultOrigin: string
 ): Promise<ImportResult> {
-  const importBatchId = crypto.randomUUID();
   // Fetch ALL active recurring expenses for matching
   const recurringToMatch = await prisma.recurringExpense.findMany({
     where: {
@@ -204,7 +202,6 @@ export async function importTransactions(
         currentInstallment: t.currentInstallment || null,
         totalInstallments: t.totalInstallments || null,
         recurringExpenseId: matchedRecurringId,
-        importBatchId,
       },
     });
     created.push({
@@ -271,6 +268,5 @@ export async function importTransactions(
     linkedCount,
     carryoverLinkedCount,
     linkedCarryovers,
-    importBatchId,
   };
 }

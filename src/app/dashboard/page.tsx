@@ -12,6 +12,7 @@ import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { InvestmentDashboardCard } from "@/components/InvestmentDashboardCard";
+import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 import type { Transaction, Category, WeeklySummary, UnusualTransaction, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
@@ -72,6 +73,7 @@ interface SummaryData {
 }
 
 export default function Dashboard() {
+  const permissions = useSpacePermissions();
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -334,7 +336,7 @@ export default function Dashboard() {
       )}
 
       {/* 3.5. Investments Card */}
-      <InvestmentDashboardCard />
+      {permissions.canViewInvestments && <InvestmentDashboardCard />}
 
       {/* 4. Alerts Section - High priority items need immediate attention */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (

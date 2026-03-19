@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { invalidateTagsCache } from "@/lib/categorizer";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const categoryId = request.nextUrl.searchParams.get("categoryId");
 
     const tags = await prisma.categoryTag.findMany({
       where: {
-        userId,
+        ...ctx.ownerFilter,
         ...(categoryId ? { categoryId } : {}),
       },
       include: { category: true },
@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching category tags:", error);
     return NextResponse.json(
       { error: "Erro ao buscar tags de categoria" },
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const body = await request.json();
     const { name, keywords, categoryId } = body;
 
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Verify category belongs to user
     const category = await prisma.category.findFirst({
-      where: { id: categoryId, userId },
+      where: { id: categoryId, ...ctx.ownerFilter },
     });
 
     if (!category) {
@@ -60,7 +63,8 @@ export async function POST(request: NextRequest) {
         name,
         keywords: keywords.toLowerCase(),
         categoryId,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
       include: { category: true },
     });
@@ -71,6 +75,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating category tag:", error);
     return NextResponse.json(

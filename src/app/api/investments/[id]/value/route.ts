@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const { currentValue } = body;
@@ -29,7 +29,7 @@ export async function PUT(
 
     // Verify investment belongs to user before updating
     const existingInvestment = await prisma.investment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingInvestment) {
@@ -52,13 +52,6 @@ export async function PUT(
 
     return NextResponse.json(investment);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error updating investment value:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar valor do investimento" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar valor do investimento");
   }
 }

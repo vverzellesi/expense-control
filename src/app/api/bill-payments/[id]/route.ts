@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { BillPaymentType } from "@/types";
 
 export async function GET(
@@ -8,11 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     const billPayment = await prisma.billPayment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         installment: true,
       },
@@ -30,6 +30,9 @@ export async function GET(
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error fetching bill payment:", error);
     return NextResponse.json(
       { error: "Erro ao buscar pagamento de fatura" },
@@ -43,7 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const {
@@ -55,7 +58,7 @@ export async function PUT(
 
     // Verify bill payment belongs to user before updating
     const existingBillPayment = await prisma.billPayment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingBillPayment) {
@@ -141,6 +144,9 @@ export async function PUT(
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     console.error("Error updating bill payment:", error);
     return NextResponse.json(
       { error: "Erro ao atualizar pagamento de fatura" },
@@ -154,12 +160,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
 
     // Verify bill payment belongs to user before deleting
     const existingBillPayment = await prisma.billPayment.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         installment: {
           include: {
@@ -220,6 +226,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error deleting bill payment:", error);
     return NextResponse.json(

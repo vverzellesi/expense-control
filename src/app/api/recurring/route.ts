@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const recurringExpenses = await prisma.recurringExpense.findMany({
-      where: { userId },
+      where: { ...ctx.ownerFilter },
       include: {
         category: true,
         transactions: {
@@ -19,14 +19,20 @@ export async function GET() {
     });
 
     return NextResponse.json(recurringExpenses);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { description, defaultAmount, dayOfMonth, type, origin, categoryId, autoGenerate } = body;
@@ -48,7 +54,8 @@ export async function POST(request: NextRequest) {
         categoryId: categoryId || null,
         isActive: true,
         autoGenerate: autoGenerate ?? true,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
       include: {
         category: true,
@@ -56,7 +63,13 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(recurringExpense, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
+    }
     return unauthorizedResponse();
   }
 }

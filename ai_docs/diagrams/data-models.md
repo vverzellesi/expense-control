@@ -18,6 +18,20 @@ erDiagram
     User ||--o{ InvestmentSnapshot : owns
     User ||--o{ BillPayment : owns
     User ||--o{ Simulation : owns
+    User ||--o{ Space : creates
+    User ||--o{ SpaceMember : "member of"
+
+    Space ||--o{ SpaceMember : has
+    Space ||--o{ SpaceInvite : has
+    Space ||--o{ Transaction : contains
+    Space ||--o{ Category : contains
+    Space ||--o{ Origin : contains
+    Space ||--o{ Budget : contains
+    Space ||--o{ CategoryRule : contains
+    Space ||--o{ RecurringExpense : contains
+    Space ||--o{ Installment : contains
+    Space ||--o{ Investment : contains
+    Space ||--o{ InvestmentCategory : contains
 
     Category ||--o{ Transaction : categorizes
     Category ||--o{ Budget : limits
@@ -60,6 +74,7 @@ erDiagram
         string tags "JSON array"
         datetime deletedAt "soft delete"
         string userId FK
+        string spaceId FK "opcional"
     }
 
     Category {
@@ -214,6 +229,33 @@ erDiagram
         string userId FK
         datetime expires
     }
+
+    Space {
+        string id PK
+        string name
+        string createdBy FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SpaceMember {
+        string id PK
+        string spaceId FK
+        string userId FK
+        SpaceRole role "ADMIN | MEMBER | LIMITED"
+        datetime joinedAt
+    }
+
+    SpaceInvite {
+        string id PK
+        string spaceId FK
+        string email
+        string code UK
+        SpaceRole role "ADMIN | MEMBER | LIMITED"
+        InviteStatus status "PENDING | ACCEPTED | EXPIRED"
+        datetime expiresAt
+        datetime createdAt
+    }
 ```
 
-Diagrama ER completo das 20 entidades Prisma. User e o hub central com relacionamentos 1:N para quase todas as entidades de dominio. Transaction e a entidade mais conectada, podendo pertencer a Category, Installment e RecurringExpense. O dominio de investimentos tem sua propria hierarquia (InvestmentCategory > Investment > InvestmentTransaction) com link para Transaction via linkedTransactionId.
+Diagrama ER completo das 23 entidades Prisma. User é o hub central com relacionamentos 1:N para quase todas as entidades de domínio. Transaction é a entidade mais conectada, podendo pertencer a Category, Installment e RecurringExpense. O domínio de investimentos tem sua própria hierarquia (InvestmentCategory > Investment > InvestmentTransaction) com link para Transaction via linkedTransactionId. O domínio de espaços compartilhados introduz Space, SpaceMember e SpaceInvite. Space tem relacionamentos 1:N com a maioria das entidades de domínio (Transaction, Category, Origin, Budget, etc.) via spaceId opcional, permitindo que recursos existam tanto no contexto pessoal (spaceId null) quanto em um espaço compartilhado.

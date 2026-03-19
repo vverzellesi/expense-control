@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { toLocalDateString } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const categoryId = searchParams.get("categoryId");
 
-    const where: Record<string, unknown> = { userId };
+    const where: Record<string, unknown> = { ...ctx.ownerFilter };
 
     if (month && year) {
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
@@ -67,6 +67,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error exporting transactions:", error);
     return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 interface BillPeriod {
   label: string;
@@ -58,7 +58,7 @@ function getBillPeriods(closingDay: number, count: number = 6): BillPeriod[] {
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const searchParams = request.nextUrl.searchParams;
     const closingDay = parseInt(searchParams.get("closingDay") || "13");
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     const bills = await Promise.all(
       periods.map(async (period) => {
         const where: Record<string, unknown> = {
-          userId,
+          ...ctx.ownerFilter,
           date: {
             gte: period.startDate,
             lte: period.endDate,
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
 
         // Query for partial bill payments from the previous month
         const carryoverQuery: Record<string, unknown> = {
-          userId,
+          userId: ctx.userId,
           billMonth: prevMonth,
           billYear: prevYear,
           paymentType: "PARTIAL",
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
 
     // Get available origins for filtering
     const origins = await prisma.origin.findMany({
-      where: { userId },
+      where: { ...ctx.ownerFilter },
       orderBy: { name: "asc" },
     });
 
@@ -235,6 +235,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching bills:", error);
     return NextResponse.json(

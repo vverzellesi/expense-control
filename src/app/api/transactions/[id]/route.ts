@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError, forbiddenResponse } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(
@@ -8,10 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
+
     const { id } = await params;
     const transaction = await prisma.transaction.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
       include: {
         category: true,
         categoryTag: true,
@@ -26,16 +27,16 @@ export async function GET(
       );
     }
 
+    // In space context with LIMITED role, only allow viewing own transactions
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
+      if (transaction.createdByUserId !== ctx.userId) {
+        return forbiddenResponse();
+      }
+    }
+
     return NextResponse.json(transaction);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error fetching transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar transação" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar transação");
   }
 }
 
@@ -44,7 +45,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const body = await request.json();
     const {
@@ -60,6 +61,7 @@ export async function PUT(
       isInstallment,
       currentInstallment,
       totalInstallments,
+      isPrivate,
     } = body;
 
     // Process tags - accept array or string, store as JSON string
@@ -69,9 +71,9 @@ export async function PUT(
         : tags
       : null;
 
-    // Verify transaction belongs to user before updating
+    // Verify transaction belongs to user/space before updating
     const existingTransaction = await prisma.transaction.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingTransaction) {
@@ -79,6 +81,13 @@ export async function PUT(
         { error: "Transação não encontrada" },
         { status: 404 }
       );
+    }
+
+    // In space context with LIMITED role, only allow editing own transactions
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
+      if (existingTransaction.createdByUserId !== ctx.userId) {
+        return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
+      }
     }
 
     // Validate categoryTagId belongs to user and matches category
@@ -90,7 +99,7 @@ export async function PUT(
         const tag = await prisma.categoryTag.findFirst({
           where: {
             id: categoryTagId,
-            userId,
+            ...ctx.ownerFilter,
             categoryId: categoryId || undefined,
           },
         });
@@ -111,6 +120,7 @@ export async function PUT(
         isFixed: isFixed || false,
         tags: processedTags,
         isInstallment: isInstallment || false,
+        ...(isPrivate !== undefined && { isPrivate }),
         currentInstallment: isInstallment ? currentInstallment : null,
         totalInstallments: isInstallment ? totalInstallments : null,
       },
@@ -123,14 +133,7 @@ export async function PUT(
 
     return NextResponse.json(transaction);
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error updating transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar transação" },
-      { status: 500 }
-    );
+    return handleApiError(error, "atualizar transação");
   }
 }
 
@@ -139,14 +142,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
     const { id } = await params;
     const searchParams = request.nextUrl.searchParams;
     const permanent = searchParams.get("permanent");
 
-    // Verify transaction belongs to user before deleting
+    // Verify transaction belongs to user/space before deleting
     const existingTransaction = await prisma.transaction.findFirst({
-      where: { id, userId },
+      where: { id, ...ctx.ownerFilter },
     });
 
     if (!existingTransaction) {
@@ -154,6 +157,13 @@ export async function DELETE(
         { error: "Transação não encontrada" },
         { status: 404 }
       );
+    }
+
+    // In space context with LIMITED role, only allow deleting own transactions
+    if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
+      if (existingTransaction.createdByUserId !== ctx.userId) {
+        return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
+      }
     }
 
     if (permanent === "true") {
@@ -171,13 +181,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    console.error("Error deleting transaction:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir transação" },
-      { status: 500 }
-    );
+    return handleApiError(error, "excluir transação");
   }
 }

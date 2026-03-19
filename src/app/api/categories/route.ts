@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
+import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 
 export async function GET() {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const categories = await prisma.category.findMany({
-      where: { userId },
+      where: { ...ctx.ownerFilter },
       orderBy: {
         name: "asc",
       },
@@ -17,6 +17,9 @@ export async function GET() {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error fetching categories:", error);
     return NextResponse.json(
@@ -28,7 +31,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const ctx = await getAuthContext();
 
     const body = await request.json();
     const { name, color, icon } = body;
@@ -38,7 +41,8 @@ export async function POST(request: NextRequest) {
         name,
         color,
         icon,
-        userId,
+        userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
     });
 
@@ -46,6 +50,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof Error && error.message === "Forbidden") {
+      return forbiddenResponse();
     }
     console.error("Error creating category:", error);
     return NextResponse.json(
