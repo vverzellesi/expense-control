@@ -258,6 +258,8 @@ function TransactionsContent() {
   }
 
   function clearAllFilters() {
+    setFilterStartDate(toLocalDateString(currentMonthStart));
+    setFilterEndDate(toLocalDateString(currentMonthEnd));
     setFilterCategory("all");
     setFilterType("all");
     setFilterOrigin("all");
