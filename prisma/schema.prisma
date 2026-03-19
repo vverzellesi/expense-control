@@ -51,6 +51,11 @@ model User {
   createdSpaces       Space[]       @relation("CreatedSpaces")
   spaceMemberships    SpaceMember[]
   createdTransactions Transaction[] @relation("CreatedTransactions")
+
+  // Telegram integration
+  telegramLink           TelegramLink?
+  telegramLinkTokens     TelegramLinkToken[]
+  telegramPendingImports TelegramPendingImport[]
 }
 
 model Account {
@@ -551,4 +556,46 @@ model SpaceInvite {
 
   @@index([code])
   @@index([email])
+}
+
+// ==========================================
+// TELEGRAM INTEGRATION
+// ==========================================
+
+model TelegramLink {
+  id       String   @id @default(cuid())
+  userId   String   @unique
+  chatId   String   @unique
+  linkedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model TelegramLinkToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model TelegramPendingImport {
+  id        String   @id @default(cuid())
+  userId    String
+  chatId    String
+  payload   String   // JSON array of transactions
+  origin    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
