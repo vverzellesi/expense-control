@@ -938,7 +938,9 @@ export default function ImportPage() {
   const totalExpenseAmount = transactions
     .filter((t) => t.selected && t.type === "EXPENSE" && !t.specialType)
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-  const totalSelectedAmount = totalIncomeAmount + totalExpenseAmount;
+  const totalSelectedAmount = transactions
+    .filter((t) => t.selected)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   return (
     <div className="space-y-6">
