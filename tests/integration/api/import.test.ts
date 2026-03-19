@@ -1280,4 +1280,166 @@ describe('POST /api/import - Carryover Linking', () => {
       expect(data.skippedCount).toBe(0)
     })
   })
+
+  describe('Category tag selection during import', () => {
+    it('should save categoryTagId when tag belongs to user and matches category', async () => {
+      mockPrisma.categoryTag.findMany.mockResolvedValue([
+        { id: 'tag-shell', categoryId: 'cat-transport' },
+        { id: 'tag-netflix', categoryId: 'cat-streaming' }
+      ])
+
+      const mockTransaction = createMockTransaction('txn-1', 'SHELL POSTO', -150, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          {
+            description: 'SHELL POSTO',
+            amount: 150,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-transport',
+            categoryTagId: 'tag-shell'
+          }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(201)
+
+      const createCall = mockPrisma.transaction.create.mock.calls[0][0]
+      expect(createCall.data.categoryTagId).toBe('tag-shell')
+    })
+
+    it('should reject categoryTagId when tag does not belong to user', async () => {
+      // User has no tags
+      mockPrisma.categoryTag.findMany.mockResolvedValue([])
+
+      const mockTransaction = createMockTransaction('txn-1', 'SHELL POSTO', -150, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          {
+            description: 'SHELL POSTO',
+            amount: 150,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-transport',
+            categoryTagId: 'tag-shell-fake'
+          }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(201)
+
+      const createCall = mockPrisma.transaction.create.mock.calls[0][0]
+      expect(createCall.data.categoryTagId).toBeNull()
+    })
+
+    it('should reject categoryTagId when tag belongs to a different category', async () => {
+      mockPrisma.categoryTag.findMany.mockResolvedValue([
+        { id: 'tag-netflix', categoryId: 'cat-streaming' }
+      ])
+
+      const mockTransaction = createMockTransaction('txn-1', 'SHELL POSTO', -150, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          {
+            description: 'SHELL POSTO',
+            amount: 150,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-transport',
+            categoryTagId: 'tag-netflix'  // tag is for cat-streaming, not cat-transport
+          }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(201)
+
+      const createCall = mockPrisma.transaction.create.mock.calls[0][0]
+      expect(createCall.data.categoryTagId).toBeNull()
+    })
+
+    it('should save null categoryTagId when cleared with "Sem tag"', async () => {
+      mockPrisma.categoryTag.findMany.mockResolvedValue([
+        { id: 'tag-shell', categoryId: 'cat-transport' }
+      ])
+
+      const mockTransaction = createMockTransaction('txn-1', 'SHELL POSTO', -150, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          {
+            description: 'SHELL POSTO',
+            amount: 150,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-transport',
+            categoryTagId: null  // user chose "Sem tag"
+          }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(201)
+
+      const createCall = mockPrisma.transaction.create.mock.calls[0][0]
+      expect(createCall.data.categoryTagId).toBeNull()
+    })
+
+    it('should handle multiple transactions with different tags', async () => {
+      mockPrisma.categoryTag.findMany.mockResolvedValue([
+        { id: 'tag-shell', categoryId: 'cat-transport' },
+        { id: 'tag-netflix', categoryId: 'cat-streaming' }
+      ])
+
+      const mockTxn1 = createMockTransaction('txn-1', 'SHELL POSTO', -150, '2024-02-15')
+      const mockTxn2 = createMockTransaction('txn-2', 'NETFLIX', -39.9, '2024-02-15')
+      mockPrisma.transaction.create
+        .mockResolvedValueOnce(mockTxn1)
+        .mockResolvedValueOnce(mockTxn2)
+
+      const request = createRequest({
+        transactions: [
+          {
+            description: 'SHELL POSTO',
+            amount: 150,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-transport',
+            categoryTagId: 'tag-shell'
+          },
+          {
+            description: 'NETFLIX',
+            amount: 39.9,
+            date: '2024-02-15',
+            type: 'EXPENSE',
+            categoryId: 'cat-streaming',
+            categoryTagId: 'tag-netflix'
+          }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(201)
+
+      const firstCall = mockPrisma.transaction.create.mock.calls[0][0]
+      expect(firstCall.data.categoryTagId).toBe('tag-shell')
+
+      const secondCall = mockPrisma.transaction.create.mock.calls[1][0]
+      expect(secondCall.data.categoryTagId).toBe('tag-netflix')
+    })
+  })
 })
