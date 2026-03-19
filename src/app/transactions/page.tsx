@@ -59,12 +59,12 @@ function TransactionsContent() {
   const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
   const [filterStartDate, setFilterStartDate] = useState(toLocalDateString(currentMonthStart));
   const [filterEndDate, setFilterEndDate] = useState(toLocalDateString(currentMonthEnd));
-  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>(searchParams.get("categoryId") || "all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterFixed, setFilterFixed] = useState(false);
   const [filterInstallment, setFilterInstallment] = useState(false);
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(!!searchParams.get("categoryId"));
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -74,6 +74,16 @@ function TransactionsContent() {
   useEffect(() => {
     fetchData();
   }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag]);
+
+  // Sync category filter with URL searchParams (handles back/forward, client-side navigation)
+  useEffect(() => {
+    const categoryId = searchParams.get("categoryId");
+    setFilterCategory(categoryId || "all");
+    if (categoryId) {
+      setShowFilters(true);
+      setShowFilterDrawer(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchCategories();

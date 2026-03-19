@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target, Calendar, Zap } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
 import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
@@ -73,6 +74,7 @@ interface SummaryData {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const permissions = useSpacePermissions();
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
@@ -252,7 +254,10 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {data?.categoryBreakdown && data.categoryBreakdown.length > 0 ? (
-              <CategoryPieChart data={data.categoryBreakdown} />
+              <CategoryPieChart
+                data={data.categoryBreakdown}
+                onCategoryClick={(categoryId) => router.push(`/transactions?categoryId=${categoryId}`)}
+              />
             ) : (
               <div className="flex h-64 items-center justify-center text-gray-500">
                 Nenhuma despesa neste mês
