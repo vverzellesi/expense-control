@@ -66,7 +66,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: "ID do parcelamento nao informado" },
+        { error: "ID do parcelamento não informado" },
         { status: 400 }
       );
     }

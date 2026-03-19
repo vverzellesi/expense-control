@@ -400,7 +400,7 @@ describe('bill-payment-transactions', () => {
           paymentType: 'FINANCED',
           userId: 'user-123',
         })
-      ).rejects.toThrow('Numero de parcelas e obrigatorio para financiamento')
+      ).rejects.toThrow('Número de parcelas é obrigatório para financiamento')
     })
 
     it('should throw error for invalid payment type', async () => {
@@ -414,7 +414,7 @@ describe('bill-payment-transactions', () => {
           paymentType: 'INVALID' as 'PARTIAL',
           userId: 'user-123',
         })
-      ).rejects.toThrow('Tipo de pagamento invalido')
+      ).rejects.toThrow('Tipo de pagamento inválido')
     })
   })
 
@@ -424,7 +424,7 @@ describe('bill-payment-transactions', () => {
 
       await expect(
         deleteBillPaymentTransactions('bp-123', 'user-123')
-      ).rejects.toThrow('Pagamento de fatura nao encontrado')
+      ).rejects.toThrow('Pagamento de fatura não encontrado')
     })
 
     it('should delete entry transaction if exists', async () => {
@@ -524,7 +524,7 @@ describe('bill-payment-transactions', () => {
 
     it('should format all month names correctly', async () => {
       const monthNames = [
-        'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
       ]
 
@@ -961,7 +961,7 @@ describe('bill-payment-transactions', () => {
           installments: 0,
           userId: 'user-123',
         })
-      ).rejects.toThrow('Numero de parcelas e obrigatorio para financiamento')
+      ).rejects.toThrow('Número de parcelas é obrigatório para financiamento')
     })
 
     it('should throw error for FINANCED with negative installments', async () => {
@@ -976,7 +976,7 @@ describe('bill-payment-transactions', () => {
           installments: -1,
           userId: 'user-123',
         })
-      ).rejects.toThrow('Numero de parcelas e obrigatorio para financiamento')
+      ).rejects.toThrow('Número de parcelas é obrigatório para financiamento')
     })
 
     it('should pass interest rate to PARTIAL handler', async () => {

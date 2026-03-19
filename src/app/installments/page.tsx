@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { Trash2, Calendar, CreditCard, Receipt, Pencil } from "lucide-react";
 import {
   Dialog,
@@ -118,7 +118,7 @@ export default function InstallmentsPage() {
         body: JSON.stringify({
           description: editingStandalone.description,
           amount: Math.abs(editingStandalone.amount),
-          date: new Date(editingStandalone.date).toISOString().split("T")[0],
+          date: toLocalDateString(new Date(editingStandalone.date)),
           type: editingStandalone.type,
           origin: editingStandalone.origin,
           categoryId: editingStandalone.categoryId,
@@ -449,7 +449,7 @@ export default function InstallmentsPage() {
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir este parcelamento? Todas as parcelas
               serão excluídas. Esta ação não pode ser desfeita.

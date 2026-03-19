@@ -12,28 +12,28 @@ import { suggestCategory, detectInstallment } from './categorizer'
 
 describe('detectBankFromContent', () => {
   it('should detect C6 Bank', () => {
-    expect(detectBankFromContent('C6 Bank Statement')).toBe('Cartao C6')
-    expect(detectBankFromContent('c6bank monthly')).toBe('Cartao C6')
+    expect(detectBankFromContent('C6 Bank Statement')).toBe('Cartão C6')
+    expect(detectBankFromContent('c6bank monthly')).toBe('Cartão C6')
   })
 
   it('should detect Itau', () => {
-    expect(detectBankFromContent('Itau Unibanco')).toBe('Cartao Itau')
-    expect(detectBankFromContent('ITAÚ BANKLINE')).toBe('Cartao Itau')
+    expect(detectBankFromContent('Itau Unibanco')).toBe('Cartão Itaú')
+    expect(detectBankFromContent('ITAÚ BANKLINE')).toBe('Cartão Itaú')
   })
 
   it('should detect BTG', () => {
-    expect(detectBankFromContent('BTG Pactual')).toBe('Cartao BTG')
+    expect(detectBankFromContent('BTG Pactual')).toBe('Cartão BTG')
   })
 
   it('should return default for unknown banks', () => {
-    expect(detectBankFromContent('Unknown Bank Statement')).toBe('Importacao CSV')
-    expect(detectBankFromContent('')).toBe('Importacao CSV')
+    expect(detectBankFromContent('Unknown Bank Statement')).toBe('Importação CSV')
+    expect(detectBankFromContent('')).toBe('Importação CSV')
   })
 
   it('should be case insensitive', () => {
-    expect(detectBankFromContent('c6 BANK')).toBe('Cartao C6')
-    expect(detectBankFromContent('ITAU')).toBe('Cartao Itau')
-    expect(detectBankFromContent('btg')).toBe('Cartao BTG')
+    expect(detectBankFromContent('c6 BANK')).toBe('Cartão C6')
+    expect(detectBankFromContent('ITAU')).toBe('Cartão Itaú')
+    expect(detectBankFromContent('btg')).toBe('Cartão BTG')
   })
 })
 
@@ -52,7 +52,7 @@ describe('parseCSV', () => {
 15/01/2024,NETFLIX.COM,"-39,90",Servicos
 16/01/2024,SUPERMERCADO XYZ,"-150,00",Mercado`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(2)
       expect(result[0].description).toBe('NETFLIX.COM')
@@ -65,7 +65,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,COMPRA GRANDE,"1.234,56"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].amount).toBe(-1234.56) // Converted to negative for expenses
@@ -75,7 +75,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,SALARIO,"10.500,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].amount).toBe(-10500.00)
@@ -85,7 +85,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 31/12/2024,COMPRA,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       const date = result[0].date
@@ -101,7 +101,7 @@ describe('parseCSV', () => {
 15/01/2024,PIX RECEBIDO,"-200,00"
 16/01/2024,COMPRA DEBITO,"-50,00"`
 
-      const result = await parseCSV(csv, 'Cartao Itau')
+      const result = await parseCSV(csv, 'Cartão Itaú')
 
       expect(result).toHaveLength(2)
       expect(result[0].description).toBe('PIX RECEBIDO')
@@ -115,7 +115,7 @@ describe('parseCSV', () => {
 15/01/2024,TED ENVIADA,"-1.000,00"
 16/01/2024,RENDIMENTO CDB,"50,00"`
 
-      const result = await parseCSV(csv, 'Cartao BTG')
+      const result = await parseCSV(csv, 'Cartão BTG')
 
       expect(result).toHaveLength(2)
       expect(result[0].description).toBe('TED ENVIADA')
@@ -134,7 +134,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,LOJA XYZ 3/10,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].isInstallment).toBe(true)
@@ -148,7 +148,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,COMPRA AVISTA,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].isInstallment).toBe(false)
@@ -161,7 +161,7 @@ describe('parseCSV', () => {
     it('should include suggested category when found', async () => {
       vi.mocked(suggestCategory).mockResolvedValue({
         id: 'cat-services',
-        name: 'Servicos',
+        name: 'Serviços',
         color: '#FF0000',
         userId: 'user-1'
       })
@@ -169,7 +169,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,NETFLIX,"-39,90"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].suggestedCategoryId).toBe('cat-services')
@@ -181,7 +181,7 @@ describe('parseCSV', () => {
       const csv = `Data,Descricao,Valor
 15/01/2024,RANDOM VENDOR,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].suggestedCategoryId).toBeUndefined()
@@ -192,7 +192,7 @@ describe('parseCSV', () => {
     it('should handle empty CSV', async () => {
       const csv = `Data,Descricao,Valor`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(0)
     })
@@ -203,7 +203,7 @@ describe('parseCSV', () => {
 ,MISSING DATE,"-50,00"
 16/01/2024,,"-25,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].description).toBe('VALID')
@@ -214,7 +214,7 @@ describe('parseCSV', () => {
 15/01/2024,VALID,"-100,00"
 16/01/2024,INVALID,abc`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].description).toBe('VALID')
@@ -225,7 +225,7 @@ describe('parseCSV', () => {
 value1,value2,value3`
 
       await expect(parseCSV(csv, 'Unknown')).rejects.toThrow(
-        'Formato de arquivo nao reconhecido'
+        'Formato de arquivo não reconhecido'
       )
     })
 
@@ -233,7 +233,7 @@ value1,value2,value3`
       const csv = `Data,Descricao,Valor
 15/01/2024,  TRIMMED DESCRIPTION  ,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].description).toBe('TRIMMED DESCRIPTION')
@@ -244,7 +244,7 @@ value1,value2,value3`
 15/01/2024,COMPRA,"100,00"
 16/01/2024,OUTRA COMPRA,"-50,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(2)
       expect(result[0].amount).toBe(-100.00) // Positive converted to negative
@@ -257,7 +257,7 @@ value1,value2,value3`
       const csv = `Data,Estabelecimento,Valor
 15/01/2024,LOJA XYZ,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].description).toBe('LOJA XYZ')
@@ -267,7 +267,7 @@ value1,value2,value3`
       const csv = `DATA,DESCRICAO,VALOR
 15/01/2024,COMPRA,"-100,00"`
 
-      const result = await parseCSV(csv, 'Cartao C6')
+      const result = await parseCSV(csv, 'Cartão C6')
 
       expect(result).toHaveLength(1)
       expect(result[0].description).toBe('COMPRA')

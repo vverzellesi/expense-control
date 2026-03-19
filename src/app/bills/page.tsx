@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,15 +91,49 @@ export default function BillsPage() {
   const [origins, setOrigins] = useState<Origin[]>([]);
   const [loading, setLoading] = useState(true);
   const [closingDay, setClosingDay] = useState(13);
+  const [closingDayLoaded, setClosingDayLoaded] = useState(false);
   const [selectedOrigin, setSelectedOrigin] = useState<string>("");
   const [expandedBill, setExpandedBill] = useState<number | null>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
 
+  // Load saved closing day from settings
   useEffect(() => {
-    fetchBills();
-  }, [closingDay, selectedOrigin]);
+    async function loadClosingDay() {
+      try {
+        const res = await fetch("/api/settings?key=billClosingDay");
+        const data = await res.json();
+        if (data?.value) {
+          setClosingDay(parseInt(data.value) || 13);
+        }
+      } catch (error) {
+        console.error("Error loading closing day:", error);
+      } finally {
+        setClosingDayLoaded(true);
+      }
+    }
+    loadClosingDay();
+  }, []);
+
+  // Debounced save for closing day
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const saveClosingDay = useCallback((day: number) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "billClosingDay", value: String(day) }),
+      }).catch((err) => console.error("Error saving closing day:", err));
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    if (closingDayLoaded) {
+      fetchBills();
+    }
+  }, [closingDay, selectedOrigin, closingDayLoaded]);
 
   async function fetchBills() {
     setLoading(true);
@@ -152,7 +186,7 @@ export default function BillsPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Faturas</h1>
           <p className="text-gray-500 text-sm sm:text-base">
-            Visualize seus gastos por ciclo de fatura do cartao
+            Visualize seus gastos por ciclo de fatura do cartão
           </p>
         </div>
         <Button
@@ -178,21 +212,26 @@ export default function BillsPage() {
                   min={1}
                   max={28}
                   value={closingDay}
-                  onChange={(e) => setClosingDay(parseInt(e.target.value) || 13)}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    const newDay = isNaN(parsed) ? 13 : Math.min(28, Math.max(1, parsed));
+                    setClosingDay(newDay);
+                    saveClosingDay(newDay);
+                  }}
                   className="w-24"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="origin">Filtrar por cartao</Label>
+                <Label htmlFor="origin">Filtrar por cartão</Label>
                 <Select
                   value={selectedOrigin || "all"}
                   onValueChange={(v) => setSelectedOrigin(v === "all" ? "" : v)}
                 >
                   <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Todos os cartoes" />
+                    <SelectValue placeholder="Todos os cartões" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos os cartoes</SelectItem>
+                    <SelectItem value="all">Todos os cartões</SelectItem>
                     {origins.map((o) => (
                       <SelectItem key={o.id} value={o.name}>
                         {o.name}
@@ -202,7 +241,7 @@ export default function BillsPage() {
                 </Select>
               </div>
               <p className="text-sm text-gray-500 pb-2">
-                Periodo: dia {closingDay + 1} do mes anterior ate dia {closingDay} do mes atual
+                Período: dia {closingDay + 1} do mês anterior até dia {closingDay} do mês atual
               </p>
             </div>
           </CardContent>
@@ -245,7 +284,7 @@ export default function BillsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Media 6 meses</CardTitle>
+            <CardTitle className="text-sm font-medium">Média 6 meses</CardTitle>
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -258,7 +297,7 @@ export default function BillsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transacoes</CardTitle>
+            <CardTitle className="text-sm font-medium">Transações</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -406,7 +445,7 @@ export default function BillsPage() {
                   {/* Transactions Table - Desktop */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-3">
-                      Transacoes ({bill.transactionCount})
+                      Transações ({bill.transactionCount})
                     </h4>
 
                     {/* Mobile Card View */}
@@ -471,7 +510,7 @@ export default function BillsPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Data</TableHead>
-                            <TableHead>Descricao</TableHead>
+                            <TableHead>Descrição</TableHead>
                             <TableHead>Categoria</TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                           </TableRow>
@@ -532,7 +571,7 @@ export default function BillsPage() {
           bill={{
             month: selectedBillForPayment.month,
             year: selectedBillForPayment.year,
-            origin: selectedOrigin || selectedBillForPayment.transactions[0]?.origin || "Cartao",
+            origin: selectedOrigin || selectedBillForPayment.transactions[0]?.origin || "Cartão",
             total: selectedBillForPayment.total,
           }}
         />

@@ -69,7 +69,7 @@ export function NetWorthChart({ data }: Props) {
             const labels: Record<string, string> = {
               cumulativeCash: "Saldo Acumulado",
               investmentValue: "Investimentos",
-              netWorth: "Patrimonio Liquido",
+              netWorth: "Patrimônio Líquido",
             };
             return [formatCurrency(value), labels[name] || name];
           }}
@@ -87,7 +87,7 @@ export function NetWorthChart({ data }: Props) {
             const labels: Record<string, string> = {
               cumulativeCash: "Saldo Acumulado",
               investmentValue: "Investimentos",
-              netWorth: "Patrimonio Liquido",
+              netWorth: "Patrimônio Líquido",
             };
             return labels[value] || value;
           }}

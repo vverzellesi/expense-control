@@ -83,7 +83,7 @@ export function NetWorthTab({ filterYear }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Patrimonio Liquido
+              Patrimônio Líquido
             </CardTitle>
             <Wallet className="h-4 w-4 text-purple-500" />
           </CardHeader>
@@ -129,7 +129,7 @@ export function NetWorthTab({ filterYear }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Variacao Mensal
+              Variação Mensal
             </CardTitle>
             {changeIsPositive ? (
               <TrendingUp className="h-4 w-4 text-green-500" />
@@ -153,12 +153,12 @@ export function NetWorthTab({ filterYear }: Props) {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Evolucao do Patrimonio</CardTitle>
+          <CardTitle>Evolução do Patrimônio</CardTitle>
         </CardHeader>
         <CardContent>
           <NetWorthChart data={data.months} />
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            Saldo acumulado relativo ao inicio do ano
+            Saldo acumulado relativo ao início do ano
           </p>
         </CardContent>
       </Card>

@@ -40,7 +40,7 @@ export function RecurringGrowthChart({ data }: Props) {
   if (chartData.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-gray-500">
-        Sem variacao de preco no periodo
+        Sem variação de preço no período
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function RecurringGrowthChart({ data }: Props) {
           width={isMobile ? 80 : 140}
         />
         <Tooltip
-          formatter={(value: number) => [`${value.toFixed(1)}%`, "Variacao"]}
+          formatter={(value: number) => [`${value.toFixed(1)}%`, "Variação"]}
           contentStyle={{
             backgroundColor: "white",
             border: "1px solid #e5e7eb",

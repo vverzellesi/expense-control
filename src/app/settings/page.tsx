@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers } from "lucide-react";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers, MessageCircle } from "lucide-react";
 import type { Category, Budget, CategoryRule, SavingsHistory, Origin, CategoryTag } from "@/types";
 
 interface BudgetWithCategory extends Budget {
@@ -91,6 +92,15 @@ export default function SettingsPage() {
   // Savings history
   const [savingsHistory, setSavingsHistory] = useState<SavingsHistory[]>([]);
 
+  // Telegram
+  const [telegramStatus, setTelegramStatus] = useState<{
+    linked: boolean;
+    chatId?: string;
+    linkedAt?: string;
+  } | null>(null);
+  const [telegramLink, setTelegramLink] = useState<string | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -125,6 +135,15 @@ export default function SettingsPage() {
       setSavingsHistory(savingsHistoryData || []);
       setOrigins(originsData || []);
       setCategoryTags(tagsData || []);
+
+      // Fetch Telegram link status
+      try {
+        const telegramRes = await fetch("/api/telegram/link");
+        const telegramData = await telegramRes.json();
+        setTelegramStatus(telegramData);
+      } catch {
+        setTelegramStatus({ linked: false });
+      }
 
       // Fetch current month spending
       const now = new Date();
@@ -505,6 +524,38 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleLinkTelegram() {
+    setTelegramLoading(true);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      setTelegramLink(data.deepLink);
+      toast({ title: "Link gerado", description: "Clique no link para abrir o Telegram" });
+    } catch {
+      toast({ title: "Erro", description: "Erro ao gerar link", variant: "destructive" });
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
+  async function handleUnlinkTelegram() {
+    setTelegramLoading(true);
+    try {
+      await fetch("/api/telegram/link", { method: "DELETE" });
+      setTelegramStatus({ linked: false });
+      setTelegramLink(null);
+      toast({ title: "Sucesso", description: "Telegram desvinculado" });
+    } catch {
+      toast({ title: "Erro", description: "Erro ao desvincular", variant: "destructive" });
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -533,7 +584,7 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="rules" className="min-h-[44px] flex-1 sm:flex-initial">
             <Tag className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Regras de Categorizacao</span>
+            <span className="hidden sm:inline">Regras de Categorização</span>
             <span className="sm:hidden">Regras</span>
           </TabsTrigger>
           <TabsTrigger value="goals" className="min-h-[44px] flex-1 sm:flex-initial">
@@ -550,6 +601,11 @@ export default function SettingsPage() {
             <Layers className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Tags</span>
             <span className="sm:hidden">Tags</span>
+          </TabsTrigger>
+          <TabsTrigger value="telegram" className="min-h-[44px] flex-1 sm:flex-initial">
+            <MessageCircle className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Telegram</span>
+            <span className="sm:hidden">Telegram</span>
           </TabsTrigger>
         </TabsList>
 
@@ -590,13 +646,9 @@ export default function SettingsPage() {
                 </div>
                 <div className="w-full sm:w-40">
                   <Label>Limite Mensal</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <CurrencyInput
                     value={budgetAmount}
-                    onChange={(e) => setBudgetAmount(e.target.value)}
-                    placeholder="0,00"
+                    onChange={setBudgetAmount}
                     className="min-h-[44px]"
                   />
                 </div>
@@ -710,8 +762,8 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Nova Regra</CardTitle>
               <CardDescription>
-                Crie regras para categorizar transacoes automaticamente durante a
-                importacao
+                Crie regras para categorizar transações automaticamente durante a
+                importação
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -762,7 +814,7 @@ export default function SettingsPage() {
           {/* Rules List */}
           <Card>
             <CardHeader>
-              <CardTitle>Regras de Categorizacao ({rules.length})</CardTitle>
+              <CardTitle>Regras de Categorização ({rules.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {rules.length === 0 ? (
@@ -815,24 +867,20 @@ export default function SettingsPage() {
                 Meta de Economia Mensal
               </CardTitle>
               <CardDescription>
-                Defina quanto voce deseja economizar por mes. O progresso sera exibido no dashboard.
+                Defina quanto você deseja economizar por mês. O progresso será exibido no dashboard.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSaveSavingsGoal} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label>Meta Mensal (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <CurrencyInput
                     value={savingsGoal}
-                    onChange={(e) => setSavingsGoal(e.target.value)}
-                    placeholder="Ex: 1000.00"
+                    onChange={setSavingsGoal}
                     className="min-h-[44px]"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    A economia e calculada como: Receitas - Despesas
+                    A economia é calculada como: Receitas - Despesas
                   </p>
                 </div>
                 <div className="flex items-end">
@@ -853,7 +901,7 @@ export default function SettingsPage() {
                 <div className="text-3xl font-bold text-green-600">
                   {formatCurrency(parseFloat(savingsGoal))}
                 </div>
-                <p className="mt-1 text-sm text-gray-500">por mes</p>
+                <p className="mt-1 text-sm text-gray-500">por mês</p>
               </CardContent>
             </Card>
           )}
@@ -863,19 +911,19 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <History className="h-5 w-5" />
-                Historico de Metas
+                Histórico de Metas
               </CardTitle>
               <CardDescription>
-                Acompanhe seu progresso em relacao a meta de economia ao longo dos meses
+                Acompanhe seu progresso em relação à meta de economia ao longo dos meses
               </CardDescription>
             </CardHeader>
             <CardContent>
               {savingsHistory.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
                   <History className="mx-auto h-12 w-12 text-gray-300 mb-2" />
-                  <p>Nenhum historico disponivel</p>
+                  <p>Nenhum histórico disponível</p>
                   <p className="text-sm mt-1">
-                    Navegue para meses anteriores no dashboard para registrar o historico
+                    Navegue para meses anteriores no dashboard para registrar o histórico
                   </p>
                 </div>
               ) : (
@@ -938,7 +986,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Adicionar Origem</CardTitle>
               <CardDescription>
-                Adicione cartoes, bancos ou metodos de pagamento
+                Adicione cartões, bancos ou métodos de pagamento
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1169,6 +1217,76 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="telegram" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5" />
+                Integração Telegram
+              </CardTitle>
+              <CardDescription>
+                Vincule sua conta para registrar despesas e consultar gastos pelo Telegram.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {telegramStatus?.linked ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="font-medium">Conta vinculada</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Chat ID: {telegramStatus.chatId}
+                  </p>
+                  {telegramStatus.linkedAt && (
+                    <p className="text-sm text-muted-foreground">
+                      Vinculado em: {new Date(telegramStatus.linkedAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
+                  <Button
+                    variant="destructive"
+                    onClick={handleUnlinkTelegram}
+                    disabled={telegramLoading}
+                  >
+                    {telegramLoading ? "Desvinculando..." : "Desvincular Telegram"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <XCircle className="h-5 w-5" />
+                    <span>Conta não vinculada</span>
+                  </div>
+                  {telegramLink ? (
+                    <div className="space-y-2">
+                      <p className="text-sm">Clique no link abaixo para abrir o Telegram:</p>
+                      <a
+                        href={telegramLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-600 hover:text-emerald-700 underline break-all"
+                      >
+                        {telegramLink}
+                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        O link expira em 10 minutos.
+                      </p>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleLinkTelegram}
+                      disabled={telegramLoading}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {telegramLoading ? "Gerando link..." : "Vincular Telegram"}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

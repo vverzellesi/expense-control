@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { toLocalDateString } from "@/lib/utils";
 import { MONTH_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
         description: t.description,
         amount: Math.abs(t.amount),
         categoryName: t.category?.name || "Sem categoria",
-        date: new Date(t.date).toISOString().split("T")[0],
+        date: toLocalDateString(new Date(t.date)),
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching fixed/variable data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados fixos/variaveis" },
+      { error: "Erro ao buscar dados fixos/variáveis" },
       { status: 500 }
     );
   }

@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Campos obrigatorios: billMonth, billYear, origin, totalBillAmount, paymentType, amountPaid",
+            "Campos obrigatórios: billMonth, billYear, origin, totalBillAmount, paymentType, amountPaid",
         },
         { status: 400 }
       );
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Validate installments for FINANCED type
     if (paymentType === "FINANCED" && (!installments || installments < 2)) {
       return NextResponse.json(
-        { error: "Para parcelamento, o numero de parcelas deve ser pelo menos 2" },
+        { error: "Para parcelamento, o número de parcelas deve ser pelo menos 2" },
         { status: 400 }
       );
     }
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (existingPayment) {
       return NextResponse.json(
         {
-          error: `Ja existe um pagamento registrado para a fatura de ${billMonth}/${billYear} - ${origin}`,
+          error: `Já existe um pagamento registrado para a fatura de ${billMonth}/${billYear} - ${origin}`,
         },
         { status: 409 }
       );

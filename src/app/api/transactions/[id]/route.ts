@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, handleApiError, forbiddenResponse } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(
   request: NextRequest,
@@ -14,13 +15,14 @@ export async function GET(
       where: { id, ...ctx.ownerFilter },
       include: {
         category: true,
+        categoryTag: true,
         installment: true,
       },
     });
 
     if (!transaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -53,6 +55,7 @@ export async function PUT(
       type,
       origin,
       categoryId,
+      categoryTagId,
       isFixed,
       tags,
       isInstallment,
@@ -75,7 +78,7 @@ export async function PUT(
 
     if (!existingTransaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -83,7 +86,24 @@ export async function PUT(
     // In space context with LIMITED role, only allow editing own transactions
     if (ctx.spaceId && ctx.permissions && !ctx.permissions.canViewAllTransactions()) {
       if (existingTransaction.createdByUserId !== ctx.userId) {
-        return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
+        return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
+      }
+    }
+
+    // Validate categoryTagId belongs to user and matches category
+    let validatedTagId: string | null | undefined = undefined;
+    if (categoryTagId !== undefined) {
+      if (categoryTagId === null || categoryTagId === "") {
+        validatedTagId = null;
+      } else {
+        const tag = await prisma.categoryTag.findFirst({
+          where: {
+            id: categoryTagId,
+            ...ctx.ownerFilter,
+            categoryId: categoryId || undefined,
+          },
+        });
+        validatedTagId = tag ? categoryTagId : null;
       }
     }
 
@@ -92,10 +112,11 @@ export async function PUT(
       data: {
         description,
         amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
-        date: new Date(date + "T12:00:00"),
+        date: parseDateLocal(date),
         type,
         origin,
         categoryId: categoryId || null,
+        categoryTagId: validatedTagId !== undefined ? validatedTagId : undefined,
         isFixed: isFixed || false,
         tags: processedTags,
         isInstallment: isInstallment || false,
@@ -105,6 +126,7 @@ export async function PUT(
       },
       include: {
         category: true,
+        categoryTag: true,
         installment: true,
       },
     });
@@ -132,7 +154,7 @@ export async function DELETE(
 
     if (!existingTransaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }

@@ -35,7 +35,7 @@ export async function GET() {
     }
     console.error("Error fetching budgets:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar orcamentos" },
+      { error: "Erro ao buscar orçamentos" },
       { status: 500 }
     );
   }
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (!categoryId || amount === undefined) {
       return NextResponse.json(
-        { error: "categoryId e amount sao obrigatorios" },
+        { error: "categoryId e amount são obrigatórios" },
         { status: 400 }
       );
     }
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error creating/updating budget:", error);
     return NextResponse.json(
-      { error: "Erro ao salvar orcamento" },
+      { error: "Erro ao salvar orçamento" },
       { status: 500 }
     );
   }
@@ -123,7 +123,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: "ID do orcamento nao informado" },
+        { error: "ID do orçamento não informado" },
         { status: 400 }
       );
     }
@@ -145,7 +145,7 @@ export async function DELETE(request: NextRequest) {
     }
     console.error("Error deleting budget:", error);
     return NextResponse.json(
-      { error: "Erro ao excluir orcamento" },
+      { error: "Erro ao excluir orçamento" },
       { status: 500 }
     );
   }

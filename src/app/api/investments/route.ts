@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, handleApiError } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,12 +75,12 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!name || !categoryId || initialValue === undefined) {
       return NextResponse.json(
-        { error: "Campos obrigatorios: name, categoryId, initialValue" },
+        { error: "Campos obrigatórios: name, categoryId, initialValue" },
         { status: 400 }
       );
     }
 
-    const investmentDate = date ? new Date(date + "T12:00:00") : new Date();
+    const investmentDate = date ? parseDateLocal(date) : new Date();
     const amount = Math.abs(initialValue);
 
     // Use a transaction for atomicity

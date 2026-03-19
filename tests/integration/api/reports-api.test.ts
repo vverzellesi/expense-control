@@ -255,14 +255,14 @@ describe('GET /api/reports/category-trends', () => {
         type: 'EXPENSE',
         date: new Date(2024, 0, 15),
         categoryId: 'cat-food',
-        category: { id: 'cat-food', name: 'Alimentacao', color: '#22C55E' }
+        category: { id: 'cat-food', name: 'Alimentação', color: '#22C55E' }
       },
       {
         amount: -300,
         type: 'EXPENSE',
         date: new Date(2024, 1, 15),
         categoryId: 'cat-food',
-        category: { id: 'cat-food', name: 'Alimentacao', color: '#22C55E' }
+        category: { id: 'cat-food', name: 'Alimentação', color: '#22C55E' }
       },
       {
         amount: -100,
@@ -288,8 +288,8 @@ describe('GET /api/reports/category-trends', () => {
     // Should have 2 categories
     expect(data.categories).toHaveLength(2)
 
-    // Alimentacao should be first (highest total: 800)
-    expect(data.categories[0].categoryName).toBe('Alimentacao')
+    // Alimentação should be first (highest total: 800)
+    expect(data.categories[0].categoryName).toBe('Alimentação')
     expect(data.categories[0].total).toBe(800)
     expect(data.categories[0].monthlyTotals).toHaveLength(12)
     expect(data.categories[0].monthlyTotals[0]).toBe(500)
@@ -346,7 +346,7 @@ describe('GET /api/reports/fixed-variable', () => {
         date: new Date(2024, 0, 10),
         isFixed: true,
         categoryId: 'cat-services',
-        category: { name: 'Servicos' }
+        category: { name: 'Serviços' }
       },
       {
         description: 'Groceries',

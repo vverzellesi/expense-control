@@ -183,7 +183,7 @@ export default function Dashboard() {
                 ) : (
                   <TrendingDown className="mr-1 h-3 w-3" />
                 )}
-                {data.comparison.incomeChange >= 0 ? "+" : ""}{data.comparison.incomeChange.toFixed(1)}% vs mes anterior
+                {data.comparison.incomeChange >= 0 ? "+" : ""}{data.comparison.incomeChange.toFixed(1)}% vs mês anterior
               </div>
             )}
           </CardContent>
@@ -207,7 +207,7 @@ export default function Dashboard() {
                 ) : (
                   <TrendingUp className="mr-1 h-3 w-3" />
                 )}
-                {data.comparison.expenseChange >= 0 ? "+" : ""}{data.comparison.expenseChange.toFixed(1)}% vs mes anterior
+                {data.comparison.expenseChange >= 0 ? "+" : ""}{data.comparison.expenseChange.toFixed(1)}% vs mês anterior
               </div>
             )}
           </CardContent>
@@ -237,7 +237,7 @@ export default function Dashboard() {
                 ) : (
                   <TrendingDown className="mr-1 h-3 w-3" />
                 )}
-                {data.comparison.balanceChange >= 0 ? "+" : ""}{data.comparison.balanceChange.toFixed(1)}% vs mes anterior
+                {data.comparison.balanceChange >= 0 ? "+" : ""}{data.comparison.balanceChange.toFixed(1)}% vs mês anterior
               </div>
             )}
           </CardContent>
@@ -255,7 +255,7 @@ export default function Dashboard() {
               <CategoryPieChart data={data.categoryBreakdown} />
             ) : (
               <div className="flex h-64 items-center justify-center text-gray-500">
-                Nenhuma despesa neste mes
+                Nenhuma despesa neste mês
               </div>
             )}
           </CardContent>
@@ -344,7 +344,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg text-orange-800">
               <AlertTriangle className="h-5 w-5" />
-              Alertas de Orcamento
+              Alertas de Orçamento
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -402,7 +402,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-amber-700">
-              Transacoes que excedem 2x a media historica da categoria
+              Transações que excedem 2x a média histórica da categoria
             </p>
             <div className="space-y-2">
               {unusualTransactions.slice(0, 3).map((t) => (
@@ -420,7 +420,7 @@ export default function Dashboard() {
                     <div>
                       <span className="font-medium">{t.description}</span>
                       <div className="text-xs text-gray-500">
-                        Media: {formatCurrency(t.categoryAverage)}
+                        Média: {formatCurrency(t.categoryAverage)}
                       </div>
                     </div>
                   </div>
@@ -455,7 +455,7 @@ export default function Dashboard() {
                   {formatCurrency(data.weeklySummary.currentWeek.total)}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {data.weeklySummary.currentWeek.count} transaco{data.weeklySummary.currentWeek.count !== 1 ? "es" : ""} esta semana
+                  {data.weeklySummary.currentWeek.count} {data.weeklySummary.currentWeek.count !== 1 ? "transações" : "transação"} esta semana
                 </div>
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -488,7 +488,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-blue-500" />
-              Variacao por Categoria
+              Variação por Categoria
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -743,7 +743,7 @@ export default function Dashboard() {
                             {formatCurrency(week.total)}
                           </span>
                           <span className="text-gray-500 text-xs ml-2">
-                            ({week.count} transacoes)
+                            ({week.count} transações)
                           </span>
                         </div>
                       </div>
@@ -788,7 +788,7 @@ export default function Dashboard() {
               {/* Summary */}
               <div className="pt-3 border-t flex justify-between items-center text-sm">
                 <span className="text-gray-500">
-                  Media por semana
+                  Média por semana
                 </span>
                 <span className="font-semibold">
                   {formatCurrency(data.weeklyBreakdown.averagePerWeek)}

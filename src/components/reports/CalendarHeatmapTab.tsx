@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CalendarHeatmap } from "@/components/Charts/CalendarHeatmap";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, parseDateLocal } from "@/lib/utils";
 import { Calendar, TrendingUp, TrendingDown, Hash } from "lucide-react";
 
 interface DayData {
@@ -85,7 +85,7 @@ export function CalendarHeatmapTab({ filterMonth, filterYear }: Props) {
             </div>
             {data.summary.highestDay.date && (
               <p className="text-xs text-muted-foreground">
-                {formatDate(data.summary.highestDay.date + "T12:00:00")}
+                {formatDate(parseDateLocal(data.summary.highestDay.date))}
               </p>
             )}
           </CardContent>
@@ -102,7 +102,7 @@ export function CalendarHeatmapTab({ filterMonth, filterYear }: Props) {
             </div>
             {data.summary.lowestDay.date && (
               <p className="text-xs text-muted-foreground">
-                {formatDate(data.summary.lowestDay.date + "T12:00:00")}
+                {formatDate(parseDateLocal(data.summary.lowestDay.date))}
               </p>
             )}
           </CardContent>
@@ -110,7 +110,7 @@ export function CalendarHeatmapTab({ filterMonth, filterYear }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Media Diaria</CardTitle>
+            <CardTitle className="text-sm font-medium">Média Diária</CardTitle>
             <Calendar className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
@@ -139,7 +139,7 @@ export function CalendarHeatmapTab({ filterMonth, filterYear }: Props) {
       {/* Calendar Heatmap */}
       <Card>
         <CardHeader>
-          <CardTitle>Mapa de Gastos Diarios</CardTitle>
+          <CardTitle>Mapa de Gastos Diários</CardTitle>
         </CardHeader>
         <CardContent>
           <CalendarHeatmap days={data.days} maxExpense={data.maxExpense} />

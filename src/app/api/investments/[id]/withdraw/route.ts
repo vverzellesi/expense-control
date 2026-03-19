@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, handleApiError } from "@/lib/auth-utils";
+import { parseDateLocal } from "@/lib/utils";
 
 export async function POST(
   request: NextRequest,
@@ -27,7 +28,7 @@ export async function POST(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }
@@ -35,7 +36,7 @@ export async function POST(
     // Validate: amount <= currentValue
     if (amount > existingInvestment.currentValue) {
       return NextResponse.json(
-        { error: "Valor do resgate nao pode ser maior que o valor atual do investimento" },
+        { error: "Valor do resgate não pode ser maior que o valor atual do investimento" },
         { status: 400 }
       );
     }
@@ -57,7 +58,7 @@ export async function POST(
       });
     }
 
-    const transactionDate = date ? new Date(date + "T12:00:00") : new Date();
+    const transactionDate = date ? parseDateLocal(date) : new Date();
 
     // Use transaction for atomicity
     const result = await prisma.$transaction(async (tx) => {

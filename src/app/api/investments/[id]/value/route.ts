@@ -15,14 +15,14 @@ export async function PUT(
     // Validate required fields
     if (currentValue === undefined || currentValue === null) {
       return NextResponse.json(
-        { error: "Valor atual e obrigatorio" },
+        { error: "Valor atual é obrigatório" },
         { status: 400 }
       );
     }
 
     if (currentValue < 0) {
       return NextResponse.json(
-        { error: "Valor atual nao pode ser negativo" },
+        { error: "Valor atual não pode ser negativo" },
         { status: 400 }
       );
     }
@@ -34,7 +34,7 @@ export async function PUT(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }

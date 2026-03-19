@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching unusual transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar transacoes incomuns" },
+      { error: "Erro ao buscar transações incomuns" },
       { status: 500 }
     );
   }

@@ -29,7 +29,7 @@ export async function GET(
 
     if (!investment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }
@@ -57,7 +57,7 @@ export async function PUT(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }
@@ -73,7 +73,7 @@ export async function PUT(
 
       if (!category) {
         return NextResponse.json(
-          { error: "Categoria de investimento nao encontrada" },
+          { error: "Categoria de investimento não encontrada" },
           { status: 404 }
         );
       }
@@ -120,7 +120,7 @@ export async function DELETE(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }

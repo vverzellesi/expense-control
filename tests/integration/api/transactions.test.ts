@@ -61,7 +61,7 @@ describe('GET /api/transactions', () => {
         date: new Date('2024-01-15'),
         type: 'EXPENSE',
         userId: testUser.id,
-        category: { id: 'cat-1', name: 'Servicos', color: '#FF0000' }
+        category: { id: 'cat-1', name: 'Serviços', color: '#FF0000' }
       },
       {
         id: 'txn-2',
@@ -372,6 +372,106 @@ describe('POST /api/transactions', () => {
     expect(mockPrisma.installment.create).toHaveBeenCalled()
     // Should create 10 transactions
     expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(10)
+  })
+
+  it('should create only remaining installments when currentInstallment > 1', async () => {
+    const mockInstallment = {
+      id: 'inst-2',
+      description: 'Smartphone',
+      totalAmount: 6000,
+      totalInstallments: 12,
+      installmentAmount: 500
+    }
+
+    const mockTransaction = {
+      id: 'txn-inst-11',
+      description: 'Smartphone (11/12)',
+      amount: -500,
+      installmentId: 'inst-2',
+      currentInstallment: 11,
+      installment: mockInstallment
+    }
+
+    mockPrisma.installment.create.mockResolvedValue(mockInstallment)
+    mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+    const request = createRequest('http://localhost:3000/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: 'Smartphone',
+        amount: 500,
+        date: '2024-01-15',
+        type: 'EXPENSE',
+        origin: 'Nubank',
+        isInstallment: true,
+        currentInstallment: 11,
+        totalInstallments: 12
+      })
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(201)
+    expect(mockPrisma.installment.create).toHaveBeenCalled()
+    // Should create only 2 transactions (installments 11 and 12)
+    expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(2)
+
+    // Verify first transaction is installment 11
+    const firstCall = mockPrisma.transaction.create.mock.calls[0][0]
+    expect(firstCall.data.currentInstallment).toBe(11)
+    expect(firstCall.data.description).toBe('Smartphone (11/12)')
+
+    // Verify second transaction is installment 12
+    const secondCall = mockPrisma.transaction.create.mock.calls[1][0]
+    expect(secondCall.data.currentInstallment).toBe(12)
+    expect(secondCall.data.description).toBe('Smartphone (12/12)')
+  })
+
+  it('should create all installments when currentInstallment is 1 (default)', async () => {
+    const mockInstallment = {
+      id: 'inst-3',
+      description: 'Notebook',
+      totalAmount: 3000,
+      totalInstallments: 3,
+      installmentAmount: 1000
+    }
+
+    const mockTransaction = {
+      id: 'txn-inst-1',
+      description: 'Notebook (1/3)',
+      amount: -1000,
+      installmentId: 'inst-3',
+      currentInstallment: 1,
+      installment: mockInstallment
+    }
+
+    mockPrisma.installment.create.mockResolvedValue(mockInstallment)
+    mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+    const request = createRequest('http://localhost:3000/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: 'Notebook',
+        amount: 1000,
+        date: '2024-01-15',
+        type: 'EXPENSE',
+        origin: 'Nubank',
+        isInstallment: true,
+        currentInstallment: 1,
+        totalInstallments: 3
+      })
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(201)
+    // Should create all 3 transactions
+    expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(3)
+
+    // Verify installment numbers 1, 2, 3
+    expect(mockPrisma.transaction.create.mock.calls[0][0].data.currentInstallment).toBe(1)
+    expect(mockPrisma.transaction.create.mock.calls[1][0].data.currentInstallment).toBe(2)
+    expect(mockPrisma.transaction.create.mock.calls[2][0].data.currentInstallment).toBe(3)
   })
 
   it('should handle tags as array', async () => {

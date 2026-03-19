@@ -21,7 +21,7 @@ export async function POST(
 
     if (!transaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -29,7 +29,7 @@ export async function POST(
     // Check if transaction is already linked to a recurring expense
     if (transaction.recurringExpenseId) {
       return NextResponse.json(
-        { error: "Esta transacao ja esta vinculada a uma despesa recorrente" },
+        { error: "Esta transação já está vinculada a uma despesa recorrente" },
         { status: 400 }
       );
     }
@@ -37,7 +37,7 @@ export async function POST(
     // Check if transaction is an installment
     if (transaction.isInstallment || transaction.installmentId) {
       return NextResponse.json(
-        { error: "Transacoes parceladas nao podem ser marcadas como recorrentes" },
+        { error: "Transações parceladas não podem ser marcadas como recorrentes" },
         { status: 400 }
       );
     }

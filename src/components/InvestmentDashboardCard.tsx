@@ -103,7 +103,7 @@ export function InvestmentDashboardCard() {
               Comece a investir
             </h3>
             <p className="text-sm text-gray-500 mb-4 max-w-[250px]">
-              Adicione seus investimentos e acompanhe seu patrimonio em um so lugar.
+              Adicione seus investimentos e acompanhe seu patrimônio em um só lugar.
             </p>
             <Link href="/investments?new=true">
               <Button className="bg-emerald-600 hover:bg-emerald-700">
@@ -150,7 +150,7 @@ export function InvestmentDashboardCard() {
           {/* Right side: Summary stats */}
           <div className="flex flex-col justify-center space-y-4">
             <div>
-              <p className="text-sm text-gray-500 mb-1">Patrimonio Total</p>
+              <p className="text-sm text-gray-500 mb-1">Patrimônio Total</p>
               <p className="text-2xl font-bold text-gray-900">
                 {formatCurrency(data.totalValue)}
               </p>
