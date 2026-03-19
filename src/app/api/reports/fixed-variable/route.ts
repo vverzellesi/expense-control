@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching fixed/variable data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados fixos/variaveis" },
+      { error: "Erro ao buscar dados fixos/variáveis" },
       { status: 500 }
     );
   }

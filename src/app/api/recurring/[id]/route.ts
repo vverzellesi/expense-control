@@ -23,7 +23,7 @@ export async function GET(
 
     if (!recurringExpense) {
       return NextResponse.json(
-        { error: "Despesa recorrente nao encontrada" },
+        { error: "Despesa recorrente não encontrada" },
         { status: 404 }
       );
     }

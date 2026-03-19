@@ -285,7 +285,7 @@ function TransactionsContent() {
   return (
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
         <div className="flex flex-col sm:flex-row gap-2">
           <form onSubmit={handleSearch} className="relative flex">
             <div className="relative w-full">
@@ -293,7 +293,7 @@ function TransactionsContent() {
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar por descricao..."
+                placeholder="Buscar por descrição..."
                 className="w-full md:w-64 pl-9 pr-8"
               />
               {searchInput && (
@@ -367,7 +367,7 @@ function TransactionsContent() {
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <Label>Periodo</Label>
+                <Label>Período</Label>
                 <DateRangePicker
                   startDate={filterStartDate}
                   endDate={filterEndDate}
@@ -476,7 +476,7 @@ function TransactionsContent() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {transactions.length} transacao{transactions.length !== 1 ? "es" : ""}
+            {transactions.length} transação{transactions.length !== 1 ? "es" : ""}
             {searchQuery && (
               <Badge variant="secondary" className="font-normal">
                 Busca: &quot;{searchQuery}&quot;
@@ -657,7 +657,7 @@ function TransactionsContent() {
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir esta transação? Esta ação não pode
               ser desfeita.
@@ -680,18 +680,18 @@ function TransactionsContent() {
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Deseja criar uma despesa recorrente a partir desta transacao?
+                  Deseja criar uma despesa recorrente a partir desta transação?
                 </p>
                 {makingRecurring && (
                   <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    <p><strong>Descricao:</strong> {makingRecurring.description}</p>
+                    <p><strong>Descrição:</strong> {makingRecurring.description}</p>
                     <p><strong>Valor:</strong> {formatCurrency(Math.abs(makingRecurring.amount))}</p>
-                    <p><strong>Dia do mes:</strong> {new Date(makingRecurring.date).getDate()}</p>
+                    <p><strong>Dia do mês:</strong> {new Date(makingRecurring.date).getDate()}</p>
                     <p><strong>Origem:</strong> {makingRecurring.origin}</p>
                   </div>
                 )}
                 <p className="text-xs text-gray-500">
-                  A transacao sera vinculada a nova despesa recorrente e marcada como fixa.
+                  A transação será vinculada à nova despesa recorrente e marcada como fixa.
                 </p>
               </div>
             </AlertDialogDescription>

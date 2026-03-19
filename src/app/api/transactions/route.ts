@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar transacoes" },
+      { error: "Erro ao buscar transações" },
       { status: 500 }
     );
   }
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error creating transaction:", error);
     return NextResponse.json(
-      { error: "Erro ao criar transacao" },
+      { error: "Erro ao criar transação" },
       { status: 500 }
     );
   }

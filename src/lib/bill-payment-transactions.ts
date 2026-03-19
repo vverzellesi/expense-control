@@ -5,7 +5,7 @@ import { BillPaymentType } from "@/types";
  * Month names in Portuguese for transaction descriptions
  */
 const MONTH_NAMES = [
-  "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
@@ -321,7 +321,7 @@ export async function generateBillPaymentTransactions(
 
   if (paymentType === "FINANCED") {
     if (!installments || installments < 1) {
-      throw new Error("Numero de parcelas e obrigatorio para financiamento");
+      throw new Error("Número de parcelas é obrigatório para financiamento");
     }
 
     const result = await generateFinancedPaymentTransactions({
@@ -336,7 +336,7 @@ export async function generateBillPaymentTransactions(
     };
   }
 
-  throw new Error(`Tipo de pagamento invalido: ${paymentType}`);
+  throw new Error(`Tipo de pagamento inválido: ${paymentType}`);
 }
 
 /**
@@ -353,7 +353,7 @@ export async function deleteBillPaymentTransactions(
   });
 
   if (!billPayment) {
-    throw new Error("Pagamento de fatura nao encontrado");
+    throw new Error("Pagamento de fatura não encontrado");
   }
 
   // Delete entry transaction if exists

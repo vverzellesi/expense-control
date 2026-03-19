@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching calendar data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados do calendario" },
+      { error: "Erro ao buscar dados do calendário" },
       { status: 500 }
     );
   }

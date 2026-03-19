@@ -110,7 +110,7 @@ export function DateRangePicker({
                   size="sm"
                   onClick={setCurrentMonth}
                 >
-                  Mes atual
+                  Mês atual
                 </Button>
                 <Button
                   variant="outline"
@@ -149,7 +149,7 @@ export function DateRangePicker({
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Ate</Label>
+                  <Label className="text-xs text-gray-500">Até</Label>
                   <Input
                     type="date"
                     value={tempEndDate}

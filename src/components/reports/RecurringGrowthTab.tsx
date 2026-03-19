@@ -110,7 +110,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
               {summary.increasedCount}
             </div>
             <p className="text-xs text-muted-foreground">
-              itens com aumento de preco
+              itens com aumento de preço
             </p>
           </CardContent>
         </Card>
@@ -125,7 +125,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
               {summary.decreasedCount}
             </div>
             <p className="text-xs text-muted-foreground">
-              itens com reducao de preco
+              itens com redução de preço
             </p>
           </CardContent>
         </Card>
@@ -133,7 +133,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Crescimento Medio
+              Crescimento Médio
             </CardTitle>
             <BarChart3 className="h-4 w-4 text-orange-500" />
           </CardHeader>
@@ -147,7 +147,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
               {summary.averageGrowthPercent.toFixed(1)}%
             </div>
             <p className="text-xs text-muted-foreground">
-              variacao media de preco
+              variação média de preço
             </p>
           </CardContent>
         </Card>
@@ -156,7 +156,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Variacao de Preco por Item</CardTitle>
+          <CardTitle>Variação de Preço por Item</CardTitle>
         </CardHeader>
         <CardContent>
           <RecurringGrowthChart data={data.items} />
@@ -174,7 +174,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
               <thead>
                 <tr className="border-b text-left">
                   <th className="pb-3 font-medium text-muted-foreground">
-                    Descricao
+                    Descrição
                   </th>
                   <th className="pb-3 text-right font-medium text-muted-foreground">
                     Valor Atual
@@ -183,7 +183,7 @@ export function RecurringGrowthTab({ filterYear }: Props) {
                     Valor Inicial
                   </th>
                   <th className="pb-3 text-right font-medium text-muted-foreground">
-                    Variacao
+                    Variação
                   </th>
                   <th className="pb-3 text-right font-medium text-muted-foreground">
                     %

@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     if (!description || defaultAmount === undefined || !dayOfMonth || !type || !origin) {
       return NextResponse.json(
-        { error: "Campos obrigatorios faltando" },
+        { error: "Campos obrigatórios faltando" },
         { status: 400 }
       );
     }

@@ -182,7 +182,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<SnapshotsR
     }
     console.error("Error fetching investment snapshots:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar historico de investimentos" },
+      { error: "Erro ao buscar histórico de investimentos" },
       { status: 500 }
     );
   }

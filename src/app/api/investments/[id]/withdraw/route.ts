@@ -28,7 +28,7 @@ export async function POST(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }
@@ -36,7 +36,7 @@ export async function POST(
     // Validate: amount <= currentValue
     if (amount > existingInvestment.currentValue) {
       return NextResponse.json(
-        { error: "Valor do resgate nao pode ser maior que o valor atual do investimento" },
+        { error: "Valor do resgate não pode ser maior que o valor atual do investimento" },
         { status: 400 }
       );
     }

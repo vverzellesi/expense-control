@@ -61,7 +61,7 @@ describe('GET /api/transactions', () => {
         date: new Date('2024-01-15'),
         type: 'EXPENSE',
         userId: testUser.id,
-        category: { id: 'cat-1', name: 'Servicos', color: '#FF0000' }
+        category: { id: 'cat-1', name: 'Serviços', color: '#FF0000' }
       },
       {
         id: 'txn-2',

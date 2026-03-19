@@ -28,7 +28,7 @@ export async function GET() {
     }
     console.error("Error fetching deleted transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar transacoes excluidas" },
+      { error: "Erro ao buscar transações excluídas" },
       { status: 500 }
     );
   }
@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: "ID da transacao e obrigatorio" },
+        { error: "ID da transação é obrigatório" },
         { status: 400 }
       );
     }
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest) {
     }
     console.error("Error restoring transaction:", error);
     return NextResponse.json(
-      { error: "Erro ao restaurar transacao" },
+      { error: "Erro ao restaurar transação" },
       { status: 500 }
     );
   }
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
       await prisma.transaction.delete({
         where: { id, userId },
       });
-      return NextResponse.json({ success: true, message: "Transacao excluida permanentemente" });
+      return NextResponse.json({ success: true, message: "Transação excluída permanentemente" });
     }
 
     if (cleanOld === "true") {
@@ -105,13 +105,13 @@ export async function DELETE(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `${result.count} transacoes antigas excluidas permanentemente`,
+        message: `${result.count} transações antigas excluídas permanentemente`,
         count: result.count,
       });
     }
 
     return NextResponse.json(
-      { error: "Parametro id ou cleanOld=true e obrigatorio" },
+      { error: "Parâmetro id ou cleanOld=true é obrigatório" },
       { status: 400 }
     );
   } catch (error) {
@@ -120,7 +120,7 @@ export async function DELETE(request: NextRequest) {
     }
     console.error("Error permanently deleting transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao excluir transacoes permanentemente" },
+      { error: "Erro ao excluir transações permanentemente" },
       { status: 500 }
     );
   }

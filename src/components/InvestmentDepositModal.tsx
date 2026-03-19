@@ -56,7 +56,7 @@ export function InvestmentDepositModal({
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para o aporte",
+        description: "Informe um valor válido para o aporte",
         variant: "destructive",
       });
       return;
@@ -142,7 +142,7 @@ export function InvestmentDepositModal({
               id="deposit-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Aporte mensal, bonus, etc."
+              placeholder="Ex: Aporte mensal, bônus, etc."
             />
           </div>
 

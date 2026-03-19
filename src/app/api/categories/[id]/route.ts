@@ -21,7 +21,7 @@ export async function GET(
 
     if (!category) {
       return NextResponse.json(
-        { error: "Categoria nao encontrada" },
+        { error: "Categoria não encontrada" },
         { status: 404 }
       );
     }
@@ -93,14 +93,14 @@ export async function DELETE(
 
     if (!category) {
       return NextResponse.json(
-        { error: "Categoria nao encontrada" },
+        { error: "Categoria não encontrada" },
         { status: 404 }
       );
     }
 
     if (category._count.transactions > 0) {
       return NextResponse.json(
-        { error: "Nao e possivel excluir categoria com transacoes vinculadas" },
+        { error: "Não é possível excluir categoria com transações vinculadas" },
         { status: 400 }
       );
     }

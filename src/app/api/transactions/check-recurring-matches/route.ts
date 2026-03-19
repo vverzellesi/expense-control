@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     if (!transactions || !Array.isArray(transactions)) {
       return NextResponse.json(
-        { error: "Transacoes nao fornecidas" },
+        { error: "Transações não fornecidas" },
         { status: 400 }
       );
     }

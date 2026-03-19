@@ -74,7 +74,7 @@ async function extractPDFText(buffer: Buffer): Promise<OCRResult> {
     };
   } catch (error) {
     console.error("PDF text extraction failed:", error);
-    throw new Error("Nao foi possivel extrair texto do PDF");
+    throw new Error("Não foi possível extrair texto do PDF");
   }
 }
 

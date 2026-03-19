@@ -21,7 +21,7 @@ export async function GET(
 
     if (!transaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -33,7 +33,7 @@ export async function GET(
     }
     console.error("Error fetching transaction:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar transacao" },
+      { error: "Erro ao buscar transação" },
       { status: 500 }
     );
   }
@@ -76,7 +76,7 @@ export async function PUT(
 
     if (!existingTransaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -128,7 +128,7 @@ export async function PUT(
     }
     console.error("Error updating transaction:", error);
     return NextResponse.json(
-      { error: "Erro ao atualizar transacao" },
+      { error: "Erro ao atualizar transação" },
       { status: 500 }
     );
   }
@@ -151,7 +151,7 @@ export async function DELETE(
 
     if (!existingTransaction) {
       return NextResponse.json(
-        { error: "Transacao nao encontrada" },
+        { error: "Transação não encontrada" },
         { status: 404 }
       );
     }
@@ -176,7 +176,7 @@ export async function DELETE(
     }
     console.error("Error deleting transaction:", error);
     return NextResponse.json(
-      { error: "Erro ao excluir transacao" },
+      { error: "Erro ao excluir transação" },
       { status: 500 }
     );
   }

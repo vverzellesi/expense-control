@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching settings:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar configuracoes" },
+      { error: "Erro ao buscar configurações" },
       { status: 500 }
     );
   }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     if (!key || value === undefined) {
       return NextResponse.json(
-        { error: "Chave e valor sao obrigatorios" },
+        { error: "Chave e valor são obrigatórios" },
         { status: 400 }
       );
     }
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error saving setting:", error);
     return NextResponse.json(
-      { error: "Erro ao salvar configuracao" },
+      { error: "Erro ao salvar configuração" },
       { status: 500 }
     );
   }
@@ -86,7 +86,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!key) {
       return NextResponse.json(
-        { error: "Chave e obrigatoria" },
+        { error: "Chave é obrigatória" },
         { status: 400 }
       );
     }
@@ -105,7 +105,7 @@ export async function DELETE(request: NextRequest) {
     }
     console.error("Error deleting setting:", error);
     return NextResponse.json(
-      { error: "Erro ao excluir configuracao" },
+      { error: "Erro ao excluir configuração" },
       { status: 500 }
     );
   }

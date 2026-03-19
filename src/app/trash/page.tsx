@@ -42,7 +42,7 @@ export default function TrashPage() {
       console.error("Error fetching deleted transactions:", error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar transacoes excluidas",
+        description: "Erro ao carregar transações excluídas",
         variant: "destructive",
       });
     } finally {
@@ -63,13 +63,13 @@ export default function TrashPage() {
 
       toast({
         title: "Sucesso",
-        description: "Transacao restaurada com sucesso",
+        description: "Transação restaurada com sucesso",
       });
       fetchData();
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Erro ao restaurar transacao",
+        description: "Erro ao restaurar transação",
         variant: "destructive",
       });
     } finally {
@@ -89,14 +89,14 @@ export default function TrashPage() {
 
       toast({
         title: "Sucesso",
-        description: "Transacao excluida permanentemente",
+        description: "Transação excluída permanentemente",
       });
       setDeletingId(null);
       fetchData();
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Erro ao excluir transacao permanentemente",
+        description: "Erro ao excluir transação permanentemente",
         variant: "destructive",
       });
     }
@@ -120,7 +120,7 @@ export default function TrashPage() {
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Erro ao limpar transacoes antigas",
+        description: "Erro ao limpar transações antigas",
         variant: "destructive",
       });
     } finally {
@@ -144,7 +144,7 @@ export default function TrashPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Lixeira</h1>
           <p className="text-gray-500">
-            Transacoes excluidas podem ser restauradas ou removidas permanentemente
+            Transações excluídas podem ser restauradas ou removidas permanentemente
           </p>
         </div>
         {oldTransactions.length > 0 && (
@@ -164,10 +164,10 @@ export default function TrashPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-gray-500" />
-            {transactions.length} transacao{transactions.length !== 1 ? "es" : ""} na lixeira
+            {transactions.length} transação{transactions.length !== 1 ? "es" : ""} na lixeira
           </CardTitle>
           <CardDescription>
-            Itens sao mantidos por 30 dias antes de serem excluidos automaticamente
+            Itens são mantidos por 30 dias antes de serem excluídos automaticamente
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -175,7 +175,7 @@ export default function TrashPage() {
             <div className="text-center text-gray-500 py-8">Carregando...</div>
           ) : transactions.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
-              A lixeira esta vazia
+              A lixeira está vazia
             </div>
           ) : (
             <>
@@ -255,12 +255,12 @@ export default function TrashPage() {
                             </Badge>
                           )}
                           <span className="text-xs text-gray-400">
-                            Excluido ha {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+                            Excluído há {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
                           </span>
                           {isOld && (
                             <span className="text-xs text-red-500 font-medium flex items-center">
                               <AlertTriangle className="h-3 w-3 mr-1" />
-                              Sera removido
+                              Será removido
                             </span>
                           )}
                         </div>
@@ -337,11 +337,11 @@ export default function TrashPage() {
                             )}
                           </div>
                           <div className="text-xs text-gray-400 mt-1">
-                            Excluido ha {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+                            Excluído há {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
                             {isOld && (
                               <span className="ml-2 text-red-500 font-medium">
                                 <AlertTriangle className="inline h-3 w-3 mr-1" />
-                                Sera removido em breve
+                                Será removido em breve
                               </span>
                             )}
                           </div>
@@ -397,8 +397,8 @@ export default function TrashPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir permanentemente</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acao nao pode ser desfeita. A transacao sera removida permanentemente
-              e nao podera ser recuperada.
+              Esta ação não pode ser desfeita. A transação será removida permanentemente
+              e não poderá ser recuperada.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

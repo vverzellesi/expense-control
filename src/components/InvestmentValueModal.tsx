@@ -63,7 +63,7 @@ export function InvestmentValueModal({
     if (!value || isNaN(parsedValue) || parsedValue < 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido",
+        description: "Informe um valor válido",
         variant: "destructive",
       });
       return;
@@ -120,7 +120,7 @@ export function InvestmentValueModal({
 
         {lastUpdatedAt && (
           <div className="rounded-lg bg-muted p-3 text-sm">
-            <span className="text-muted-foreground">Ultima atualizacao:</span>{" "}
+            <span className="text-muted-foreground">Última atualização:</span>{" "}
             <span className="font-medium">{formatDate(lastUpdatedAt)}</span>
           </div>
         )}
@@ -145,7 +145,7 @@ export function InvestmentValueModal({
                 }`}
               >
                 {valueDiff > 0 ? "+" : ""}
-                {formatCurrency(valueDiff)} em relacao ao valor anterior (
+                {formatCurrency(valueDiff)} em relação ao valor anterior (
                 {formatCurrency(currentValue)})
               </p>
             )}

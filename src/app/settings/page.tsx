@@ -583,7 +583,7 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="rules" className="min-h-[44px] flex-1 sm:flex-initial">
             <Tag className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Regras de Categorizacao</span>
+            <span className="hidden sm:inline">Regras de Categorização</span>
             <span className="sm:hidden">Regras</span>
           </TabsTrigger>
           <TabsTrigger value="goals" className="min-h-[44px] flex-1 sm:flex-initial">
@@ -765,8 +765,8 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Nova Regra</CardTitle>
               <CardDescription>
-                Crie regras para categorizar transacoes automaticamente durante a
-                importacao
+                Crie regras para categorizar transações automaticamente durante a
+                importação
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -817,7 +817,7 @@ export default function SettingsPage() {
           {/* Rules List */}
           <Card>
             <CardHeader>
-              <CardTitle>Regras de Categorizacao ({rules.length})</CardTitle>
+              <CardTitle>Regras de Categorização ({rules.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {rules.length === 0 ? (
@@ -870,7 +870,7 @@ export default function SettingsPage() {
                 Meta de Economia Mensal
               </CardTitle>
               <CardDescription>
-                Defina quanto voce deseja economizar por mes. O progresso sera exibido no dashboard.
+                Defina quanto você deseja economizar por mês. O progresso será exibido no dashboard.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -887,7 +887,7 @@ export default function SettingsPage() {
                     className="min-h-[44px]"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    A economia e calculada como: Receitas - Despesas
+                    A economia é calculada como: Receitas - Despesas
                   </p>
                 </div>
                 <div className="flex items-end">
@@ -908,7 +908,7 @@ export default function SettingsPage() {
                 <div className="text-3xl font-bold text-green-600">
                   {formatCurrency(parseFloat(savingsGoal))}
                 </div>
-                <p className="mt-1 text-sm text-gray-500">por mes</p>
+                <p className="mt-1 text-sm text-gray-500">por mês</p>
               </CardContent>
             </Card>
           )}
@@ -918,19 +918,19 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <History className="h-5 w-5" />
-                Historico de Metas
+                Histórico de Metas
               </CardTitle>
               <CardDescription>
-                Acompanhe seu progresso em relacao a meta de economia ao longo dos meses
+                Acompanhe seu progresso em relação à meta de economia ao longo dos meses
               </CardDescription>
             </CardHeader>
             <CardContent>
               {savingsHistory.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
                   <History className="mx-auto h-12 w-12 text-gray-300 mb-2" />
-                  <p>Nenhum historico disponivel</p>
+                  <p>Nenhum histórico disponível</p>
                   <p className="text-sm mt-1">
-                    Navegue para meses anteriores no dashboard para registrar o historico
+                    Navegue para meses anteriores no dashboard para registrar o histórico
                   </p>
                 </div>
               ) : (
@@ -993,7 +993,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Adicionar Origem</CardTitle>
               <CardDescription>
-                Adicione cartoes, bancos ou metodos de pagamento
+                Adicione cartões, bancos ou métodos de pagamento
               </CardDescription>
             </CardHeader>
             <CardContent>
