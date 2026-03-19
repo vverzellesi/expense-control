@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate average transaction amount per category
+    // Calculate average monthly spending per category
     const categoryAvgAmounts: Record<string, number> = {};
     for (const [categoryId, data] of Object.entries(categoryAverages)) {
-      categoryAvgAmounts[categoryId] = data.count > 0 ? data.total / data.count : 0;
+      categoryAvgAmounts[categoryId] = data.months.size > 0 ? data.total / data.months.size : 0;
     }
 
     // Find unusual transactions (amount > threshold * category average)
