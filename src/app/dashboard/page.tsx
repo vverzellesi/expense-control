@@ -402,7 +402,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-amber-700">
-              Transações que excedem 2x a média histórica da categoria
+              Transações que excedem 2x a média mensal da categoria
             </p>
             <div className="space-y-2">
               {unusualTransactions.slice(0, 3).map((t) => (
