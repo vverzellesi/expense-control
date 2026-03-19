@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -183,14 +184,10 @@ export function TransactionForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="amount">Valor *</Label>
-          <Input
+          <CurrencyInput
             id="amount"
-            type="number"
-            step="0.01"
-            min="0"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0,00"
+            onChange={setAmount}
             className="w-full"
           />
         </div>

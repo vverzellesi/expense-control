@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processFile } from "@/lib/ocr-parser";
 import { parseStatementText, suggestCategoryForStatement } from "@/lib/statement-parser";
+import { parseNotificationText } from "@/lib/notification-parser";
 import { suggestCategory, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import prisma from "@/lib/db";
 import { getAuthenticatedUserId, unauthorizedResponse } from "@/lib/auth-utils";
@@ -44,8 +45,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse statement text
-    const parseResult = parseStatementText(ocrResult.text, ocrResult.confidence);
+    // Parse statement text (try bank statement format first, then notification format)
+    let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence);
+
+    // If no transactions found as statement, try notification format (screenshot of bank notification)
+    if (parseResult.transactions.length === 0) {
+      const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence);
+      if (notificationResult) {
+        parseResult = notificationResult;
+      }
+    }
 
     if (parseResult.transactions.length === 0) {
       return NextResponse.json(

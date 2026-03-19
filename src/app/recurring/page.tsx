@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -465,13 +466,9 @@ export default function RecurringPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Valor Padrão *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <CurrencyInput
                     value={defaultAmount}
-                    onChange={(e) => setDefaultAmount(e.target.value)}
-                    placeholder="0,00"
+                    onChange={setDefaultAmount}
                   />
                 </div>
                 <div>
@@ -630,14 +627,11 @@ export default function RecurringPage() {
                       </Badge>
                     ) : generatingId === expense.id ? (
                       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder={String(expense.defaultAmount)}
+                        <CurrencyInput
+                          placeholder={`R$ ${expense.defaultAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
                           value={generateAmount}
-                          onChange={(e) => setGenerateAmount(e.target.value)}
-                          className="w-full sm:w-28 min-h-[44px]"
+                          onChange={setGenerateAmount}
+                          className="w-full sm:w-36 min-h-[44px]"
                         />
                         <Button size="sm" className="min-h-[44px]" onClick={() => handleGenerate(expense)}>
                           OK
