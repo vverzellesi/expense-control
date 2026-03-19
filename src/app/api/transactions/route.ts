@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
       categoryId,
       isFixed,
       isInstallment,
+      currentInstallment: startInstallment,
       totalInstallments,
       installmentAmount,
       tags,
@@ -157,14 +158,17 @@ export async function POST(request: NextRequest) {
 
       const transactions = [];
       const startDate = parseDateLocal(date);
+      const firstInstallment = startInstallment && startInstallment > 1 ? startInstallment : 1;
+      const installmentsToCreate = totalInstallments - firstInstallment + 1;
 
-      for (let i = 0; i < totalInstallments; i++) {
+      for (let i = 0; i < installmentsToCreate; i++) {
+        const installmentNumber = firstInstallment + i;
         const transactionDate = new Date(startDate);
         transactionDate.setMonth(transactionDate.getMonth() + i);
 
         const transaction = await prisma.transaction.create({
           data: {
-            description: `${description} (${i + 1}/${totalInstallments})`,
+            description: `${description} (${installmentNumber}/${totalInstallments})`,
             amount: type === "EXPENSE" ? -Math.abs(installmentAmount || amount) : Math.abs(installmentAmount || amount),
             date: transactionDate,
             type,
@@ -173,7 +177,7 @@ export async function POST(request: NextRequest) {
             isFixed: false,
             isInstallment: true,
             installmentId: installment.id,
-            currentInstallment: i + 1,
+            currentInstallment: installmentNumber,
             tags: processedTags,
             userId,
           },
