@@ -14,9 +14,10 @@ interface CategoryData {
 
 interface Props {
   data: CategoryData[];
+  onCategoryClick?: (categoryId: string) => void;
 }
 
-export function CategoryPieChart({ data }: Props) {
+export function CategoryPieChart({ data, onCategoryClick }: Props) {
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const chartData = data.map((item) => ({
@@ -24,6 +25,7 @@ export function CategoryPieChart({ data }: Props) {
     value: item.total,
     color: item.categoryColor,
     percentage: item.percentage,
+    categoryId: item.categoryId,
   }));
 
   return (
@@ -37,9 +39,13 @@ export function CategoryPieChart({ data }: Props) {
           outerRadius={isMobile ? 60 : 100}
           paddingAngle={2}
           dataKey="value"
+          onClick={onCategoryClick ? (_data: unknown, index: number) => {
+            onCategoryClick(chartData[index].categoryId);
+          } : undefined}
+          style={onCategoryClick ? { cursor: "pointer" } : undefined}
         >
           {chartData.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color} />
+            <Cell key={`cell-${index}`} fill={entry.color} style={onCategoryClick ? { cursor: "pointer" } : undefined} />
           ))}
         </Pie>
         <Tooltip
