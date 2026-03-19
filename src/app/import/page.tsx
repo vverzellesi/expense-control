@@ -1345,6 +1345,50 @@ export default function ImportPage() {
                             </Select>
                           </div>
 
+                          {/* Tag selector */}
+                          {(() => {
+                            const tagsForCategory = t.categoryId
+                              ? categoryTags.filter(ct => ct.categoryId === t.categoryId)
+                              : [];
+                            if (tagsForCategory.length === 0) return null;
+                            return (
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">
+                                  Tag
+                                </Label>
+                                <Select
+                                  value={t.categoryTagId || "__none__"}
+                                  onValueChange={(value) => {
+                                    if (value === "__none__") {
+                                      updateTransaction(index, {
+                                        categoryTagId: undefined,
+                                        categoryTagName: undefined,
+                                      });
+                                    } else {
+                                      const tag = categoryTags.find(ct => ct.id === value);
+                                      updateTransaction(index, {
+                                        categoryTagId: tag?.id,
+                                        categoryTagName: tag?.name,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Sem tag" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Sem tag</SelectItem>
+                                    {tagsForCategory.map((ct) => (
+                                      <SelectItem key={ct.id} value={ct.id}>
+                                        {ct.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          })()}
+
                           {/* Edit description for OCR */}
                           {fileType === "ocr" && (
                             <div>
@@ -1422,6 +1466,7 @@ export default function ImportPage() {
                       )}
                       <TableHead>Descrição</TableHead>
                       <TableHead>Categoria</TableHead>
+                      <TableHead>Tag</TableHead>
                       {fileType === "ocr" && (
                         <TableHead className="w-20">Confiança</TableHead>
                       )}
@@ -1555,12 +1600,6 @@ export default function ImportPage() {
                                   Vincular a recorrente
                                 </Badge>
                               )}
-                              {t.categoryTagName && (
-                                <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
-                                  <Tag className="h-3 w-3 mr-1" />
-                                  Tag: {t.categoryTagName}
-                                </Badge>
-                              )}
                               {t.specialType === "BILL_PAYMENT" && (
                                 <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300" title={t.specialTypeWarning}>
                                   <CreditCard className="h-3 w-3 mr-1" />
@@ -1636,6 +1675,47 @@ export default function ImportPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const tagsForCategory = t.categoryId
+                              ? categoryTags.filter(ct => ct.categoryId === t.categoryId)
+                              : [];
+                            if (tagsForCategory.length === 0) {
+                              return <span className="text-sm text-gray-400">-</span>;
+                            }
+                            return (
+                              <Select
+                                value={t.categoryTagId || "__none__"}
+                                onValueChange={(value) => {
+                                  if (value === "__none__") {
+                                    updateTransaction(index, {
+                                      categoryTagId: undefined,
+                                      categoryTagName: undefined,
+                                    });
+                                  } else {
+                                    const tag = categoryTags.find(ct => ct.id === value);
+                                    updateTransaction(index, {
+                                      categoryTagId: tag?.id,
+                                      categoryTagName: tag?.name,
+                                    });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-36">
+                                  <SelectValue placeholder="Sem tag" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Sem tag</SelectItem>
+                                  {tagsForCategory.map((ct) => (
+                                    <SelectItem key={ct.id} value={ct.id}>
+                                      {ct.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            );
+                          })()}
                         </TableCell>
                         {fileType === "ocr" && (
                           <TableCell>{getConfidenceBadge(t.confidence)}</TableCell>
