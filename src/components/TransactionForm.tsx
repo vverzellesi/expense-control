@@ -120,7 +120,7 @@ export function TransactionForm({
         description: transaction
           ? "Transação atualizada com sucesso"
           : isInstallment
-          ? `${totalInstallments} parcelas criadas com sucesso`
+          ? `${parseInt(totalInstallments) - parseInt(currentInstallment) + 1} parcelas criadas com sucesso`
           : "Transação criada com sucesso",
       });
 
@@ -310,7 +310,9 @@ export function TransactionForm({
             </div>
             {!transaction && (
               <p className="col-span-2 text-xs text-gray-500">
-                Serão criadas {totalInstallments} parcelas de{" "}
+                {parseInt(currentInstallment) > 1
+                  ? `Serão criadas ${parseInt(totalInstallments) - parseInt(currentInstallment) + 1} parcelas (${currentInstallment}/${totalInstallments} a ${totalInstallments}/${totalInstallments}) de `
+                  : `Serão criadas ${totalInstallments} parcelas de `}
                 {amount
                   ? new Intl.NumberFormat("pt-BR", {
                       style: "currency",
