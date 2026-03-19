@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValid) {
       return NextResponse.json(
-        { error: "Formato de arquivo nao suportado. Use PDF ou imagem (PNG, JPG)" },
+        { error: "Formato de arquivo não suportado. Use PDF ou imagem (PNG, JPG)" },
         { status: 400 }
       );
     }
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     if (!ocrResult.text || ocrResult.text.trim().length === 0) {
       return NextResponse.json(
-        { error: "Nao foi possivel extrair texto do arquivo. Verifique se a imagem esta legivel." },
+        { error: "Não foi possível extrair texto do arquivo. Verifique se a imagem está legível." },
         { status: 400 }
       );
     }
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (parseResult.transactions.length === 0) {
       return NextResponse.json(
         {
-          error: "Nenhuma transacao encontrada no arquivo. Certifique-se de que o extrato esta claro e legivel.",
+          error: "Nenhuma transação encontrada no arquivo. Certifique-se de que o extrato está claro e legível.",
           rawText: ocrResult.text,
           confidence: ocrResult.confidence,
         },

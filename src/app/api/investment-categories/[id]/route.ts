@@ -23,7 +23,7 @@ export async function DELETE(
 
     if (!category) {
       return NextResponse.json(
-        { error: "Categoria nao encontrada" },
+        { error: "Categoria não encontrada" },
         { status: 404 }
       );
     }
@@ -31,7 +31,7 @@ export async function DELETE(
     // Cannot delete default categories
     if (category.isDefault) {
       return NextResponse.json(
-        { error: "Nao e possivel excluir categorias padrao" },
+        { error: "Não é possível excluir categorias padrão" },
         { status: 400 }
       );
     }
@@ -39,7 +39,7 @@ export async function DELETE(
     // Cannot delete categories that belong to other users
     if (category.userId !== userId) {
       return NextResponse.json(
-        { error: "Voce nao tem permissao para excluir esta categoria" },
+        { error: "Você não tem permissão para excluir esta categoria" },
         { status: 403 }
       );
     }
@@ -47,7 +47,7 @@ export async function DELETE(
     // Cannot delete categories with linked investments
     if (category._count.investments > 0) {
       return NextResponse.json(
-        { error: "Nao e possivel excluir categoria com investimentos vinculados" },
+        { error: "Não é possível excluir categoria com investimentos vinculados" },
         { status: 400 }
       );
     }

@@ -195,7 +195,7 @@ export function InvestmentsTab() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Evolucao do Patrimonio</CardTitle>
+            <CardTitle>Evolução do Patrimônio</CardTitle>
           </CardHeader>
           <CardContent>
             {chartData.length > 0 ? (
@@ -210,7 +210,7 @@ export function InvestmentsTab() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Distribuicao por Categoria</CardTitle>
+            <CardTitle>Distribuição por Categoria</CardTitle>
           </CardHeader>
           <CardContent>
             {pieData.length > 0 ? (

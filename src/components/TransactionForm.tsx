@@ -71,7 +71,7 @@ export function TransactionForm({
     if (!description || !amount || !date || !origin) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatorios",
+        description: "Preencha todos os campos obrigatórios",
         variant: "destructive",
       });
       return;
@@ -112,23 +112,23 @@ export function TransactionForm({
       });
 
       if (!res.ok) {
-        throw new Error("Erro ao salvar transacao");
+        throw new Error("Erro ao salvar transação");
       }
 
       toast({
         title: "Sucesso",
         description: transaction
-          ? "Transacao atualizada com sucesso"
+          ? "Transação atualizada com sucesso"
           : isInstallment
           ? `${totalInstallments} parcelas criadas com sucesso`
-          : "Transacao criada com sucesso",
+          : "Transação criada com sucesso",
       });
 
       onSuccess();
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Ocorreu um erro ao salvar a transacao",
+        description: "Ocorreu um erro ao salvar a transação",
         variant: "destructive",
       });
     } finally {
@@ -167,12 +167,12 @@ export function TransactionForm({
           }`}
           onClick={() => setType("TRANSFER")}
         >
-          Transferencia
+          Transferência
         </div>
       </div>
 
       <div>
-        <Label htmlFor="description">Descricao *</Label>
+        <Label htmlFor="description">Descrição *</Label>
         <Input
           id="description"
           value={description}
@@ -248,10 +248,10 @@ export function TransactionForm({
           id="tags"
           value={tagsInput}
           onChange={(e) => setTagsInput(e.target.value)}
-          placeholder="Ex: trabalho, viagem, reuniao"
+          placeholder="Ex: trabalho, viagem, reunião"
         />
         <p className="mt-1 text-xs text-gray-500">
-          Separe as tags por virgula
+          Separe as tags por vírgula
         </p>
       </div>
 
@@ -310,7 +310,7 @@ export function TransactionForm({
             </div>
             {!transaction && (
               <p className="col-span-2 text-xs text-gray-500">
-                Serao criadas {totalInstallments} parcelas de{" "}
+                Serão criadas {totalInstallments} parcelas de{" "}
                 {amount
                   ? new Intl.NumberFormat("pt-BR", {
                       style: "currency",

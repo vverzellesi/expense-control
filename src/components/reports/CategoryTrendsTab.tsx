@@ -100,7 +100,7 @@ export function CategoryTrendsTab({ filterYear }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Maior Reducao
+              Maior Redução
             </CardTitle>
             <TrendingDown className="h-4 w-4 text-green-500" />
           </CardHeader>
@@ -124,7 +124,7 @@ export function CategoryTrendsTab({ filterYear }: Props) {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Tendencia por Categoria (Top 8)</CardTitle>
+          <CardTitle>Tendência por Categoria (Top 8)</CardTitle>
         </CardHeader>
         <CardContent>
           <CategoryTrendLineChart categories={top8} months={data.months} />
@@ -146,7 +146,7 @@ export function CategoryTrendsTab({ filterYear }: Props) {
                     Total
                   </th>
                   <th className="pb-2 text-right font-medium text-gray-500">
-                    Tendencia
+                    Tendência
                   </th>
                 </tr>
               </thead>

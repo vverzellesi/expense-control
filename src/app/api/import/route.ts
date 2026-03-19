@@ -11,7 +11,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!batchId) {
       return NextResponse.json(
-        { error: "ID do lote e obrigatorio" },
+        { error: "ID do lote é obrigatório" },
         { status: 400 }
       );
     }
@@ -30,13 +30,13 @@ export async function DELETE(request: NextRequest) {
 
     if (result.count === 0) {
       return NextResponse.json(
-        { error: "Nenhuma transacao encontrada para este lote" },
+        { error: "Nenhuma transação encontrada para este lote" },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
-      message: `${result.count} transacoes removidas`,
+      message: `${result.count} transações removidas`,
       count: result.count,
     });
   } catch (error) {
@@ -45,7 +45,7 @@ export async function DELETE(request: NextRequest) {
     }
     console.error("Error deleting import batch:", error);
     return NextResponse.json(
-      { error: "Erro ao remover importacao" },
+      { error: "Erro ao remover importação" },
       { status: 500 }
     );
   }
@@ -59,15 +59,15 @@ export async function POST(request: NextRequest) {
 
     if (!transactions || !Array.isArray(transactions)) {
       return NextResponse.json(
-        { error: "Transacoes invalidas" },
+        { error: "Transações inválidas" },
         { status: 400 }
       );
     }
 
-    const result = await importTransactions(userId, transactions, origin || "Importacao CSV");
+    const result = await importTransactions(userId, transactions, origin || "Importação CSV");
 
     // Build response message
-    const messageParts = [`${result.created.length} transacoes importadas`];
+    const messageParts = [`${result.created.length} transações importadas`];
     if (result.skippedCount > 0) {
       messageParts.push(`${result.skippedCount} duplicatas ignoradas`);
     }
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     const message =
       result.skippedCount > 0 || result.linkedCount > 0 || result.carryoverLinkedCount > 0
         ? `${messageParts[0]} (${messageParts.slice(1).join(", ")})`
-        : `${result.created.length} transacoes importadas com sucesso`;
+        : `${result.created.length} transações importadas com sucesso`;
 
     return NextResponse.json(
       {
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error importing transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao importar transacoes" },
+      { error: "Erro ao importar transações" },
       { status: 500 }
     );
   }

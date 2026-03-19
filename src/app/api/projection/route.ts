@@ -293,7 +293,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching projection:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar projecao financeira" },
+      { error: "Erro ao buscar projeção financeira" },
       { status: 500 }
     );
   }

@@ -45,7 +45,7 @@ export function InvestmentWithdrawModal({
     const parsedAmount = parseFloat(amount);
     if (amount && !isNaN(parsedAmount) && parsedAmount > currentValue) {
       setValidationError(
-        `O valor do resgate nao pode ser maior que o saldo atual (${formatCurrency(currentValue)})`
+        `O valor do resgate não pode ser maior que o saldo atual (${formatCurrency(currentValue)})`
       );
     } else {
       setValidationError(null);
@@ -73,7 +73,7 @@ export function InvestmentWithdrawModal({
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para o resgate",
+        description: "Informe um valor válido para o resgate",
         variant: "destructive",
       });
       return;
@@ -82,7 +82,7 @@ export function InvestmentWithdrawModal({
     if (parsedAmount > currentValue) {
       toast({
         title: "Erro",
-        description: `O valor do resgate nao pode ser maior que o saldo atual (${formatCurrency(currentValue)})`,
+        description: `O valor do resgate não pode ser maior que o saldo atual (${formatCurrency(currentValue)})`,
         variant: "destructive",
       });
       return;
@@ -138,7 +138,7 @@ export function InvestmentWithdrawModal({
         </DialogHeader>
 
         <div className="rounded-lg bg-muted p-3 text-sm">
-          <span className="text-muted-foreground">Saldo disponivel:</span>{" "}
+          <span className="text-muted-foreground">Saldo disponível:</span>{" "}
           <span className="font-semibold">{formatCurrency(currentValue)}</span>
         </div>
 
@@ -173,7 +173,7 @@ export function InvestmentWithdrawModal({
               id="withdraw-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Resgate para emergencia, etc."
+              placeholder="Ex: Resgate para emergência, etc."
             />
           </div>
 

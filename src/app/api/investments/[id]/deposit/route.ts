@@ -28,7 +28,7 @@ export async function POST(
 
     if (!existingInvestment) {
       return NextResponse.json(
-        { error: "Investimento nao encontrado" },
+        { error: "Investimento não encontrado" },
         { status: 404 }
       );
     }

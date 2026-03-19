@@ -90,7 +90,7 @@ export default function ProjectionPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projecao Financeira</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Projeção Financeira</h1>
           <p className="text-gray-500">Visualize seus compromissos futuros</p>
         </div>
         <div className="flex gap-2">
@@ -190,7 +190,7 @@ export default function ProjectionPage() {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Receitas vs Despesas por Mes</CardTitle>
+          <CardTitle>Receitas vs Despesas por Mês</CardTitle>
         </CardHeader>
         <CardContent>
           {data?.months && data.months.length > 0 ? (
@@ -206,7 +206,7 @@ export default function ProjectionPage() {
       {/* Monthly Details */}
       <Card>
         <CardHeader>
-          <CardTitle>Detalhes por Mes</CardTitle>
+          <CardTitle>Detalhes por Mês</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {data?.months.map((m) => {
@@ -259,7 +259,7 @@ export default function ProjectionPage() {
                     {m.isCurrentMonth && (m.actualExpenses > 0 || m.actualIncome > 0) && (
                       <div className="mb-4">
                         <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                          Gastos Reais (ate agora)
+                          Gastos Reais (até agora)
                         </h4>
                         <div className="space-y-1">
                           {m.actualIncome > 0 && (
@@ -376,13 +376,13 @@ export default function ProjectionPage() {
                     {/* No items */}
                     {!m.isCurrentMonth && m.installments.length === 0 && m.recurringItems.length === 0 && (
                       <p className="text-sm text-gray-500">
-                        Nenhum compromisso projetado para este mes
+                        Nenhum compromisso projetado para este mês
                       </p>
                     )}
 
                     {m.isCurrentMonth && m.actualExpenses === 0 && m.actualIncome === 0 && m.recurringItems.length === 0 && (
                       <p className="text-sm text-gray-500">
-                        Nenhuma transacao registrada este mes
+                        Nenhuma transação registrada este mês
                       </p>
                     )}
                   </div>

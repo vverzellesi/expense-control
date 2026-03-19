@@ -93,7 +93,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Despesas Variaveis</CardTitle>
+            <CardTitle className="text-sm font-medium">Despesas Variáveis</CardTitle>
             <Shuffle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -131,7 +131,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Evolucao Fixas vs Variaveis (12 meses)</CardTitle>
+          <CardTitle>Evolução Fixas vs Variáveis (12 meses)</CardTitle>
         </CardHeader>
         <CardContent>
           {data.monthlyBreakdown.length > 0 ? (
@@ -149,7 +149,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
         {/* Fixed Expenses */}
         <Card>
           <CardHeader>
-            <CardTitle>Despesas Fixas do Mes</CardTitle>
+            <CardTitle>Despesas Fixas do Mês</CardTitle>
           </CardHeader>
           <CardContent>
             {data.fixedExpenses.length > 0 ? (
@@ -168,7 +168,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa fixa neste mes
+                Nenhuma despesa fixa neste mês
               </div>
             )}
           </CardContent>
@@ -177,7 +177,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
         {/* Top Variable Expenses */}
         <Card>
           <CardHeader>
-            <CardTitle>Top 10 Despesas Variaveis</CardTitle>
+            <CardTitle>Top 10 Despesas Variáveis</CardTitle>
           </CardHeader>
           <CardContent>
             {data.topVariableExpenses.length > 0 ? (
@@ -198,7 +198,7 @@ export function FixedVariableTab({ filterMonth, filterYear }: Props) {
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa variavel neste mes
+                Nenhuma despesa variável neste mês
               </div>
             )}
           </CardContent>
