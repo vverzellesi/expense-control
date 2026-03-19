@@ -78,6 +78,10 @@ export function SpaceFamiliaTab() {
   // Member removal
   const [memberToRemove, setMemberToRemove] = useState<Member | null>(null)
 
+  // Space deletion
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
     fetchSpaces()
   }, [])
@@ -162,6 +166,27 @@ export function SpaceFamiliaTab() {
     const url = `${window.location.origin}/invite/${code}`
     await navigator.clipboard.writeText(url)
     toast({ title: 'Link copiado!' })
+  }
+
+  async function handleDeleteSpace() {
+    if (!space) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/spaces/${space.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast({ title: 'Espaço excluído' })
+        setSpace(null)
+        setMembers([])
+        setInvites([])
+        setShowDeleteConfirm(false)
+        window.location.reload()
+      } else {
+        const data = await res.json()
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' })
+      }
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function updateMemberRole(memberId: string, role: string) {
@@ -363,6 +388,28 @@ export function SpaceFamiliaTab() {
         </CardContent>
       </Card>
 
+      {/* Delete Space */}
+      <Card className="border-red-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-700">
+            <Trash2 className="h-5 w-5" />
+            Excluir Espaço
+          </CardTitle>
+          <CardDescription>
+            Remove o espaço, todos os membros, convites, categorias e transações do espaço.
+            Dados pessoais dos membros não são afetados.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            Excluir &quot;{space.name}&quot;
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Remove Member Dialog */}
       <AlertDialog open={!!memberToRemove} onOpenChange={(open) => !open && setMemberToRemove(null)}>
         <AlertDialogContent>
@@ -380,6 +427,30 @@ export function SpaceFamiliaTab() {
               onClick={() => memberToRemove && removeMember(memberToRemove.id)}
             >
               Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Space Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir espaço &quot;{space.name}&quot;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. Todas as transações, categorias, orçamentos e
+              dados do espaço serão permanentemente excluídos. Dados pessoais dos
+              membros não serão afetados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleting}
+              onClick={handleDeleteSpace}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir permanentemente'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
