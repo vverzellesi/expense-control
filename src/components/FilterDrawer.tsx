@@ -26,6 +26,8 @@ interface FilterValues {
   isFixed: boolean;
   isInstallment: boolean;
   tag: string;
+  minAmount: string;
+  maxAmount: string;
 }
 
 interface FilterDrawerProps {
@@ -70,6 +72,8 @@ export function FilterDrawer({
       isFixed: false,
       isInstallment: false,
       tag: "",
+      minAmount: "",
+      maxAmount: "",
     });
   }
 
@@ -257,6 +261,39 @@ export function FilterDrawer({
                   setLocalFilters({ ...localFilters, isInstallment: checked })
                 }
               />
+            </div>
+          </div>
+
+          {/* Amount Range */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Valor</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-500">Mínimo</Label>
+                <Input
+                  type="number"
+                  placeholder="R$ 0"
+                  value={localFilters.minAmount}
+                  onChange={(e) =>
+                    setLocalFilters({ ...localFilters, minAmount: e.target.value })
+                  }
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Máximo</Label>
+                <Input
+                  type="number"
+                  placeholder="Sem limite"
+                  value={localFilters.maxAmount}
+                  onChange={(e) =>
+                    setLocalFilters({ ...localFilters, maxAmount: e.target.value })
+                  }
+                  min="0"
+                  step="0.01"
+                />
+              </div>
             </div>
           </div>
 

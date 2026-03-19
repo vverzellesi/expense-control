@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     const isInstallment = searchParams.get("isInstallment");
     const search = searchParams.get("search");
     const tag = searchParams.get("tag");
+    const minAmount = searchParams.get("minAmount");
+    const maxAmount = searchParams.get("maxAmount");
     const includeDeleted = searchParams.get("includeDeleted");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,6 +92,35 @@ export async function GET(request: NextRequest) {
       where.tags = {
         contains: tag.trim(),
       };
+    }
+
+    // Filter by amount range (absolute value)
+    if (minAmount || maxAmount) {
+      const min = minAmount ? parseFloat(minAmount) : undefined;
+      const max = maxAmount ? parseFloat(maxAmount) : undefined;
+      const amountConditions = [];
+
+      if (min !== undefined && max !== undefined) {
+        amountConditions.push({
+          OR: [
+            { amount: { gte: min, lte: max } },
+            { amount: { gte: -max, lte: -min } },
+          ],
+        });
+      } else if (min !== undefined) {
+        amountConditions.push({
+          OR: [
+            { amount: { gte: min } },
+            { amount: { lte: -min } },
+          ],
+        });
+      } else if (max !== undefined) {
+        amountConditions.push({
+          amount: { gte: -max, lte: max },
+        });
+      }
+
+      where.AND = [...(where.AND || []), ...amountConditions];
     }
 
     // In space context with LIMITED role, only show own transactions
