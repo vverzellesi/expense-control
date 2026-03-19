@@ -65,7 +65,6 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
           name: c.name,
           color: c.color,
           icon: c.icon,
-          userId,
           spaceId,
         })),
       })
@@ -79,7 +78,6 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
       await tx.origin.createMany({
         data: origins.map((o) => ({
           name: o.name,
-          userId,
           spaceId,
         })),
       })
@@ -95,7 +93,6 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
           name: ic.name,
           icon: ic.icon,
           color: ic.color,
-          userId,
           spaceId,
         })),
       })
@@ -103,7 +100,7 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
 
     // Copy category rules (need new category IDs)
     const spaceCategories = await tx.category.findMany({
-      where: { userId, spaceId },
+      where: { spaceId },
     })
     const categoryNameToId = new Map(spaceCategories.map((c) => [c.name, c.id]))
 
@@ -116,7 +113,6 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
       .map((r) => ({
         keyword: r.keyword,
         categoryId: categoryNameToId.get(r.category.name)!,
-        userId,
         spaceId,
       }))
     if (rulesToCreate.length > 0) {
