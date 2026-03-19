@@ -140,5 +140,28 @@ describe("parseNotificationText", () => {
       expect(result).not.toBeNull();
       expect(result!.bank).toBe("C6 Bank");
     });
+
+    it("handles multiline OCR text", () => {
+      const text =
+        "Compra no\ncrédito aprovada\nSua compra no cartão final 6604\nno valor de R$ 27,90, dia 14/03/2026\nàs 16:58, em KALIMERA HORTIFRUIT\nJUNDIAI BRA, foi aprovada.";
+
+      const result = parseNotificationText(text, 75);
+
+      expect(result).not.toBeNull();
+      const t = result!.transactions[0];
+      expect(t.description).toBe("KALIMERA HORTIFRUIT JUNDIAI BRA");
+      expect(t.amount).toBe(-27.9);
+    });
+
+    it("does not false-positive on generic text with 'nu' or 'bb'", () => {
+      // "MANUAL" contains "nu", "HOBBY" contains "BB" - should not detect as bank
+      const text =
+        "Compra aprovada de R$ 10,00 em MANUAL HOBBY dia 01/01/2026";
+
+      const result = parseNotificationText(text, 80);
+
+      expect(result).not.toBeNull();
+      expect(result!.bank).toBe("Notificação");
+    });
   });
 });

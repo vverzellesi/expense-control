@@ -28,14 +28,14 @@ const PIX_RECEIVED_PATTERN =
 
 // Bank detection from notification text
 const NOTIFICATION_BANK_PATTERNS: Record<string, RegExp> = {
-  "C6 Bank": /C6\s*(?:Bank)?/i,
-  "Nubank": /Nu(?:bank)?/i,
-  "Itaú": /Ita[uú]/i,
-  "Bradesco": /Bradesco/i,
-  "Santander": /Santander/i,
-  "Banco do Brasil": /Banco\s+do\s+Brasil|BB/i,
-  "Caixa": /Caixa/i,
-  "BTG": /BTG/i,
+  "C6 Bank": /\bC6\s*Bank\b/i,
+  "Nubank": /\bNubank\b/i,
+  "Itaú": /\bIta[uú]\b/i,
+  "Bradesco": /\bBradesco\b/i,
+  "Santander": /\bSantander\b/i,
+  "Banco do Brasil": /Banco\s+do\s+Brasil|\bBB\b/i,
+  "Caixa": /\bCaixa\s*(?:Econ[oô]mica|Federal)\b/i,
+  "BTG": /\bBTG\b/i,
 };
 
 // Credit vs debit detection
@@ -164,34 +164,48 @@ export function parseNotificationText(
   }
 
   // Try purchase notification patterns
-  let match = normalized.match(PURCHASE_NOTIFICATION_PATTERN);
-  if (!match) {
-    match = normalized.match(SIMPLE_PURCHASE_PATTERN);
-    if (match) {
-      // Reorder captures to match: [_, amount, date, establishment]
-      // SIMPLE pattern: [_, amount, establishment, date]
-      match = [match[0], match[1], match[3], match[2]] as unknown as RegExpMatchArray;
+  // Try purchase notification patterns and extract amount, date, establishment
+  let amountStr: string | undefined;
+  let dateStr: string | undefined;
+  let establishmentStr: string | undefined;
+
+  const mainMatch = normalized.match(PURCHASE_NOTIFICATION_PATTERN);
+  if (mainMatch) {
+    amountStr = mainMatch[1];
+    dateStr = mainMatch[2];
+    establishmentStr = mainMatch[3];
+  }
+
+  if (!amountStr) {
+    const simpleMatch = normalized.match(SIMPLE_PURCHASE_PATTERN);
+    if (simpleMatch) {
+      amountStr = simpleMatch[1];
+      establishmentStr = simpleMatch[2];
+      dateStr = simpleMatch[3];
     }
   }
-  if (!match) {
-    match = normalized.match(VALUE_DATE_ESTABLISHMENT_PATTERN);
+
+  if (!amountStr) {
+    const valueMatch = normalized.match(VALUE_DATE_ESTABLISHMENT_PATTERN);
+    if (valueMatch) {
+      amountStr = valueMatch[1];
+      dateStr = valueMatch[2];
+      establishmentStr = valueMatch[3];
+    }
   }
 
-  if (!match) return null;
+  if (!amountStr || !dateStr || !establishmentStr) return null;
 
-  const amount = parseAmount(match[1]);
-  const date = parseDateStr(match[2]);
-  const establishment = match[3].trim();
+  const amount = parseAmount(amountStr);
+  const date = parseDateStr(dateStr);
+  const establishment = establishmentStr.trim();
 
   if (!date || amount === 0 || !establishment) return null;
 
   // Determine transaction kind
-  let transactionKind = "COMPRA CREDITO";
-  if (DEBIT_PURCHASE.test(normalized)) {
-    transactionKind = "COMPRA DEBITO";
-  } else if (CREDIT_PURCHASE.test(normalized)) {
-    transactionKind = "COMPRA CREDITO";
-  }
+  const transactionKind = DEBIT_PURCHASE.test(normalized)
+    ? "COMPRA DEBITO"
+    : "COMPRA CREDITO";
 
   const transaction: StatementTransaction = {
     date,
