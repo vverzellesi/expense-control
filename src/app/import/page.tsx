@@ -932,6 +932,15 @@ export default function ImportPage() {
   const specialCount = transactions.filter((t) => t.specialType).length;
   const billPaymentCount = transactions.filter((t) => t.specialType === "BILL_PAYMENT").length;
   const financingCount = transactions.filter((t) => t.specialType === "FINANCING").length;
+  const totalIncomeAmount = transactions
+    .filter((t) => t.selected && t.type === "INCOME" && !t.specialType)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalExpenseAmount = transactions
+    .filter((t) => t.selected && t.type === "EXPENSE" && !t.specialType)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalSelectedAmount = transactions
+    .filter((t) => t.selected)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   return (
     <div className="space-y-6">
@@ -1040,6 +1049,11 @@ export default function ImportPage() {
                     <span>
                       {selectedCount} de {transactions.length} selecionadas
                     </span>
+                    {selectedCount > 0 && (
+                      <span className="font-semibold">
+                        Total: {formatCurrency(totalSelectedAmount)}
+                      </span>
+                    )}
                     {duplicateCount > 0 && (
                       <span className="flex items-center gap-1 text-orange-600">
                         <AlertTriangle className="h-4 w-4" />
@@ -1067,13 +1081,13 @@ export default function ImportPage() {
                     {incomeCount > 0 && (
                       <span className="flex items-center gap-1">
                         <ArrowDownCircle className="h-4 w-4 text-green-500" />
-                        {incomeCount} entrada{incomeCount !== 1 ? 's' : ''}
+                        {incomeCount} entrada{incomeCount !== 1 ? 's' : ''} ({formatCurrency(totalIncomeAmount)})
                       </span>
                     )}
                     {expenseCount > 0 && (
                       <span className="flex items-center gap-1">
                         <ArrowUpCircle className="h-4 w-4 text-red-500" />
-                        {expenseCount} despesa{expenseCount !== 1 ? 's' : ''}
+                        {expenseCount} despesa{expenseCount !== 1 ? 's' : ''} ({formatCurrency(totalExpenseAmount)})
                       </span>
                     )}
                     {transferCount > 0 && (

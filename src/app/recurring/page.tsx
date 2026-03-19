@@ -400,6 +400,27 @@ export default function RecurringPage() {
     );
   }
 
+  function getGeneratedThisMonth(typeFilter: "EXPENSE" | "INCOME") {
+    return recurringExpenses
+      .filter((e) => e.isActive && e.type === typeFilter && hasTransactionThisMonth(e))
+      .reduce((sum, e) => {
+        const monthTx = e.transactions.find((t) => {
+          const date = new Date(t.date);
+          return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+        });
+        return sum + (monthTx ? Math.abs(monthTx.amount) : 0);
+      }, 0);
+  }
+  const generatedExpenseThisMonth = getGeneratedThisMonth("EXPENSE");
+  const generatedIncomeThisMonth = getGeneratedThisMonth("INCOME");
+  const totalActiveExpenseAmount = recurringExpenses
+    .filter((e) => e.isActive && e.type === "EXPENSE")
+    .reduce((sum, e) => sum + e.defaultAmount, 0);
+  const totalActiveIncomeAmount = recurringExpenses
+    .filter((e) => e.isActive && e.type === "INCOME")
+    .reduce((sum, e) => sum + e.defaultAmount, 0);
+  const hasIncomeRecurrences = totalActiveIncomeAmount > 0 || generatedIncomeThisMonth > 0;
+
   const monthName = currentDate.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
@@ -580,9 +601,28 @@ export default function RecurringPage() {
           })()}
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm text-gray-500">
-            Gere transações para o mês atual. Você pode ajustar o valor se for diferente do padrão.
-          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">{hasIncomeRecurrences ? "Despesas geradas:" : "Gerado neste mês:"}</span>
+              <span className="font-semibold text-red-600">{formatCurrency(generatedExpenseThisMonth)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">{hasIncomeRecurrences ? "Despesas previstas:" : "Previsto:"}</span>
+              <span className="font-semibold">{formatCurrency(totalActiveExpenseAmount)}</span>
+            </div>
+            {hasIncomeRecurrences && (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500">Receitas geradas:</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(generatedIncomeThisMonth)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500">Receitas previstas:</span>
+                  <span className="font-semibold">{formatCurrency(totalActiveIncomeAmount)}</span>
+                </div>
+              </>
+            )}
+          </div>
           <div className="space-y-2">
             {recurringExpenses.filter(e => e.isActive).map((expense) => {
               const hasThisMonth = hasTransactionThisMonth(expense);

@@ -282,6 +282,14 @@ function TransactionsContent() {
 
   const groupedTransactions = groupTransactionsByDateRange(transactions);
 
+  const totalIncome = transactions
+    .filter((t) => t.type === "INCOME")
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalExpense = transactions
+    .filter((t) => t.type === "EXPENSE")
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const balance = totalIncome - totalExpense;
+
   return (
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -494,6 +502,24 @@ function TransactionsContent() {
               </Badge>
             )}
           </CardTitle>
+          {!loading && transactions.length > 0 && (
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Receitas:</span>
+                <span className="font-semibold text-green-600">+{formatCurrency(totalIncome)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Despesas:</span>
+                <span className="font-semibold text-red-600">-{formatCurrency(totalExpense)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Saldo:</span>
+                <span className={`font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {formatCurrency(balance)}
+                </span>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (
