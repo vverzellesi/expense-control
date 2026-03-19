@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const [currentYearTx, prevYearTx] = await Promise.all([
       prisma.transaction.findMany({
         where: {
-          userId: ctx.userId,
+          ...ctx.ownerFilter,
           deletedAt: null,
           date: {
             gte: new Date(year, 0, 1),
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       }),
       prisma.transaction.findMany({
         where: {
-          userId: ctx.userId,
+          ...ctx.ownerFilter,
           deletedAt: null,
           date: {
             gte: new Date(year - 1, 0, 1),

@@ -15,7 +15,7 @@ export async function GET() {
       where: {
         OR: [
           { userId: null, isDefault: true },
-          { userId: ctx.userId },
+          { ...ctx.ownerFilter },
         ],
       },
       include: {
@@ -60,13 +60,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if category with same name already exists for this user
+    // Check if category with same name already exists for this user/space
     const existingCategory = await prisma.investmentCategory.findFirst({
       where: {
         name,
         OR: [
           { userId: null, isDefault: true },
-          { userId: ctx.userId },
+          { ...ctx.ownerFilter },
         ],
       },
     });
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
         icon,
         isDefault: false,
         userId: ctx.userId,
+        spaceId: ctx.spaceId,
       },
     });
 

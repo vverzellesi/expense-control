@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     // Fetch 12 months of expense transactions
     const transactions = await prisma.transaction.findMany({
       where: {
-        userId: ctx.userId,
+        ...ctx.ownerFilter,
         deletedAt: null,
         type: "EXPENSE",
         investmentTransaction: null,

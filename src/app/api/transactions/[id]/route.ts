@@ -58,6 +58,7 @@ export async function PUT(
       isInstallment,
       currentInstallment,
       totalInstallments,
+      isPrivate,
     } = body;
 
     // Process tags - accept array or string, store as JSON string
@@ -98,6 +99,7 @@ export async function PUT(
         isFixed: isFixed || false,
         tags: processedTags,
         isInstallment: isInstallment || false,
+        ...(isPrivate !== undefined && { isPrivate }),
         currentInstallment: isInstallment ? currentInstallment : null,
         totalInstallments: isInstallment ? totalInstallments : null,
       },

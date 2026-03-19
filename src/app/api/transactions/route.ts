@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
       totalInstallments,
       installmentAmount,
       tags,
+      isPrivate,
     } = body;
 
     // Process tags - accept array or string, store as JSON string
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest) {
             categoryId: categoryId || null,
             isFixed: false,
             isInstallment: true,
+            isPrivate: isPrivate || false,
             installmentId: installment.id,
             currentInstallment: i + 1,
             tags: processedTags,
@@ -197,6 +199,7 @@ export async function POST(request: NextRequest) {
           origin,
           categoryId: categoryId || null,
           isFixed: isFixed || false,
+          isPrivate: isPrivate || false,
           isInstallment: false,
           tags: processedTags,
           userId: ctx.userId,
