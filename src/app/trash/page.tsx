@@ -164,7 +164,7 @@ export default function TrashPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-gray-500" />
-            {transactions.length} transação{transactions.length !== 1 ? "es" : ""} na lixeira
+            {transactions.length} {transactions.length !== 1 ? "transações" : "transação"} na lixeira
           </CardTitle>
           <CardDescription>
             Itens são mantidos por 30 dias antes de serem excluídos automaticamente

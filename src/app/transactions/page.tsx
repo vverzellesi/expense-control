@@ -476,7 +476,7 @@ function TransactionsContent() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {transactions.length} transação{transactions.length !== 1 ? "es" : ""}
+            {transactions.length} {transactions.length !== 1 ? "transações" : "transação"}
             {searchQuery && (
               <Badge variant="secondary" className="font-normal">
                 Busca: &quot;{searchQuery}&quot;

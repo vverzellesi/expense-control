@@ -453,7 +453,7 @@ export default function Dashboard() {
                   {formatCurrency(data.weeklySummary.currentWeek.total)}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {data.weeklySummary.currentWeek.count} transação{data.weeklySummary.currentWeek.count !== 1 ? "es" : ""} esta semana
+                  {data.weeklySummary.currentWeek.count} {data.weeklySummary.currentWeek.count !== 1 ? "transações" : "transação"} esta semana
                 </div>
               </div>
               <div className="flex items-center justify-between text-sm">
