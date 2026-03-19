@@ -26,7 +26,6 @@ import {
   PieChart,
   Calculator,
   Bug,
-  Users,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
@@ -53,7 +52,6 @@ const navigation: {
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Categorias", href: "/categories", icon: Tags },
   { name: "Relatórios", href: "/reports", icon: PieChart },
-  { name: "Espaço Família", href: "/spaces", icon: Users },
   { name: "Lixeira", href: "/trash", icon: Trash2 },
 ];
 
