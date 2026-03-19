@@ -36,8 +36,11 @@ export async function DELETE(
       );
     }
 
-    // Cannot delete categories that belong to other users
-    if (category.userId !== ctx.userId) {
+    // Cannot delete categories that belong to other users/spaces
+    const isOwner = ctx.spaceId
+      ? category.spaceId === ctx.spaceId
+      : category.userId === ctx.userId;
+    if (!isOwner) {
       return NextResponse.json(
         { error: "Voce nao tem permissao para excluir esta categoria" },
         { status: 403 }

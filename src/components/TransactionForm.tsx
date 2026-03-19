@@ -63,7 +63,7 @@ export function TransactionForm({
     transaction?.tags ? JSON.parse(transaction.tags).join(", ") : ""
   );
   const [isPrivate, setIsPrivate] = useState(
-    (transaction as any)?.isPrivate || false
+    transaction?.isPrivate || false
   );
   const [hasSpaces, setHasSpaces] = useState(false);
 
