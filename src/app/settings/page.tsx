@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers, MessageCircle } from "lucide-react";
+import { Plus, Trash2, Target, Tag, PiggyBank, CheckCircle, XCircle, History, Wallet, Pencil, Layers, MessageCircle, Users } from "lucide-react";
+import { SpaceFamiliaTab } from "@/components/SpaceFamiliaTab";
 import type { Category, Budget, CategoryRule, SavingsHistory, Origin, CategoryTag } from "@/types";
 
 interface BudgetWithCategory extends Budget {
@@ -606,6 +607,11 @@ export default function SettingsPage() {
             <MessageCircle className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Telegram</span>
             <span className="sm:hidden">Telegram</span>
+          </TabsTrigger>
+          <TabsTrigger value="familia" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Users className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Espaço Família</span>
+            <span className="sm:hidden">Família</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1291,6 +1297,10 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="familia" className="space-y-6">
+          <SpaceFamiliaTab />
         </TabsContent>
       </Tabs>
 
