@@ -76,6 +76,7 @@ export default function SpaceSettingsPage({
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('MEMBER')
   const [inviting, setInviting] = useState(false)
+  const [createdInviteLink, setCreatedInviteLink] = useState<string | null>(null)
   const [migrating, setMigrating] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<Member | null>(null)
 
@@ -157,7 +158,7 @@ export default function SpaceSettingsPage({
         const invite = await res.json()
         setInvites((prev) => [invite, ...prev])
         setInviteEmail('')
-        toast({ title: 'Convite criado' })
+        setCreatedInviteLink(`${window.location.origin}/invite/${invite.code}`)
       } else {
         const data = await res.json()
         toast({ title: 'Erro', description: data.error, variant: 'destructive' })
@@ -359,6 +360,35 @@ export default function SpaceSettingsPage({
                   {inviting ? 'Enviando...' : 'Criar Convite'}
                 </Button>
               </form>
+
+              {createdInviteLink && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+                  <p className="text-sm font-medium text-emerald-800">Convite criado! Compartilhe o link:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded bg-white px-3 py-2 text-sm text-gray-700 border border-emerald-200 truncate">
+                      {createdInviteLink}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(createdInviteLink)
+                        toast({ title: 'Link copiado!' })
+                      }}
+                    >
+                      <Copy className="mr-1 h-4 w-4" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <button
+                    onClick={() => setCreatedInviteLink(null)}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              )}
 
               {/* Existing invites */}
               {invites.length > 0 && (
