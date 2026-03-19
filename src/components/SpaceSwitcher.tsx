@@ -73,80 +73,10 @@ export function SpaceSwitcher() {
     }
   }
 
-  const [creating, setCreating] = useState(false)
-  const [newSpaceName, setNewSpaceName] = useState('')
-  const [showCreateForm, setShowCreateForm] = useState(false)
-
-  async function handleCreateSpace(e: React.FormEvent) {
-    e.preventDefault()
-    if (!newSpaceName.trim()) return
-    setCreating(true)
-    try {
-      const res = await fetch('/api/spaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newSpaceName.trim() }),
-      })
-      if (res.ok) {
-        const space = await res.json()
-        setNewSpaceName('')
-        setShowCreateForm(false)
-        // Switch to the new space
-        await switchSpace(space.id)
-      }
-    } finally {
-      setCreating(false)
-    }
-  }
-
   const activeSpace = spaces.find((s) => s.space.id === activeSpaceId)
   const label = activeSpace ? activeSpace.space.name : 'Minha Conta'
 
-  if (loading) return null
-
-  // No spaces yet — show create button
-  if (spaces.length === 0) {
-    return (
-      <div className="px-3 mb-2">
-        {!showCreateForm ? (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="font-medium">Criar Espaço Família</span>
-          </button>
-        ) : (
-          <form onSubmit={handleCreateSpace} className="space-y-2">
-            <input
-              type="text"
-              value={newSpaceName}
-              onChange={(e) => setNewSpaceName(e.target.value)}
-              placeholder="Nome do espaço"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={creating || !newSpaceName.trim()}
-                className="flex-1 px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {creating ? 'Criando...' : 'Criar'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowCreateForm(false); setNewSpaceName('') }}
-                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    )
-  }
+  if (loading || spaces.length === 0) return null
 
   return (
     <div className="px-3 mb-2" ref={dropdownRef}>
