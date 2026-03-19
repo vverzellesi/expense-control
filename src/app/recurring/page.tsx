@@ -400,6 +400,19 @@ export default function RecurringPage() {
     );
   }
 
+  const generatedThisMonth = recurringExpenses
+    .filter((e) => e.isActive && hasTransactionThisMonth(e))
+    .reduce((sum, e) => {
+      const monthTx = e.transactions.find((t) => {
+        const date = new Date(t.date);
+        return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      });
+      return sum + (monthTx ? Math.abs(monthTx.amount) : 0);
+    }, 0);
+  const totalActiveExpenses = recurringExpenses
+    .filter((e) => e.isActive)
+    .reduce((sum, e) => sum + e.defaultAmount, 0);
+
   const monthName = currentDate.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
@@ -580,9 +593,16 @@ export default function RecurringPage() {
           })()}
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm text-gray-500">
-            Gere transações para o mês atual. Você pode ajustar o valor se for diferente do padrão.
-          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Gerado neste mês:</span>
+              <span className="font-semibold text-emerald-600">{formatCurrency(generatedThisMonth)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Previsto:</span>
+              <span className="font-semibold">{formatCurrency(totalActiveExpenses)}</span>
+            </div>
+          </div>
           <div className="space-y-2">
             {recurringExpenses.filter(e => e.isActive).map((expense) => {
               const hasThisMonth = hasTransactionThisMonth(expense);
