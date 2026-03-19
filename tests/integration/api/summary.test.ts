@@ -101,7 +101,7 @@ const createMockTransactions = (month: number, year: number) => {
       date: new Date(year, month - 1, 5),
       type: 'EXPENSE',
       categoryId: 'cat-services',
-      category: { id: 'cat-services', name: 'Servicos', color: '#8B5CF6' },
+      category: { id: 'cat-services', name: 'Serviços', color: '#8B5CF6' },
       isFixed: true,
       isInstallment: false,
       userId: testUser.id

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, toLocalDateString } from "@/lib/utils";
 
 interface InvestmentWithdrawModalProps {
   investmentId: string;
@@ -35,7 +36,7 @@ export function InvestmentWithdrawModal({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(toLocalDateString(new Date()));
   const [notes, setNotes] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -44,7 +45,7 @@ export function InvestmentWithdrawModal({
     const parsedAmount = parseFloat(amount);
     if (amount && !isNaN(parsedAmount) && parsedAmount > currentValue) {
       setValidationError(
-        `O valor do resgate nao pode ser maior que o saldo atual (${formatCurrency(currentValue)})`
+        `O valor do resgate não pode ser maior que o saldo atual (${formatCurrency(currentValue)})`
       );
     } else {
       setValidationError(null);
@@ -53,7 +54,7 @@ export function InvestmentWithdrawModal({
 
   function resetForm() {
     setAmount("");
-    setDate(new Date().toISOString().split("T")[0]);
+    setDate(toLocalDateString(new Date()));
     setNotes("");
     setValidationError(null);
   }
@@ -72,7 +73,7 @@ export function InvestmentWithdrawModal({
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para o resgate",
+        description: "Informe um valor válido para o resgate",
         variant: "destructive",
       });
       return;
@@ -81,7 +82,7 @@ export function InvestmentWithdrawModal({
     if (parsedAmount > currentValue) {
       toast({
         title: "Erro",
-        description: `O valor do resgate nao pode ser maior que o saldo atual (${formatCurrency(currentValue)})`,
+        description: `O valor do resgate não pode ser maior que o saldo atual (${formatCurrency(currentValue)})`,
         variant: "destructive",
       });
       return;
@@ -137,22 +138,17 @@ export function InvestmentWithdrawModal({
         </DialogHeader>
 
         <div className="rounded-lg bg-muted p-3 text-sm">
-          <span className="text-muted-foreground">Saldo disponivel:</span>{" "}
+          <span className="text-muted-foreground">Saldo disponível:</span>{" "}
           <span className="font-semibold">{formatCurrency(currentValue)}</span>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="withdraw-amount">Valor *</Label>
-            <Input
+            <CurrencyInput
               id="withdraw-amount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              max={currentValue}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
+              onChange={setAmount}
               className={validationError ? "border-red-500" : ""}
               autoFocus
             />
@@ -177,7 +173,7 @@ export function InvestmentWithdrawModal({
               id="withdraw-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Resgate para emergencia, etc."
+              placeholder="Ex: Resgate para emergência, etc."
             />
           </div>
 

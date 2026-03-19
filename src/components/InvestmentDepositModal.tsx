@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { toLocalDateString } from "@/lib/utils";
 
 interface InvestmentDepositModalProps {
   investmentId: string;
@@ -32,12 +34,12 @@ export function InvestmentDepositModal({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(toLocalDateString(new Date()));
   const [notes, setNotes] = useState("");
 
   function resetForm() {
     setAmount("");
-    setDate(new Date().toISOString().split("T")[0]);
+    setDate(toLocalDateString(new Date()));
     setNotes("");
   }
 
@@ -55,7 +57,7 @@ export function InvestmentDepositModal({
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para o aporte",
+        description: "Informe um valor válido para o aporte",
         variant: "destructive",
       });
       return;
@@ -113,14 +115,10 @@ export function InvestmentDepositModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="deposit-amount">Valor *</Label>
-            <Input
+            <CurrencyInput
               id="deposit-amount"
-              type="number"
-              step="0.01"
-              min="0.01"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
+              onChange={setAmount}
               autoFocus
             />
           </div>
@@ -141,7 +139,7 @@ export function InvestmentDepositModal({
               id="deposit-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Aporte mensal, bonus, etc."
+              placeholder="Ex: Aporte mensal, bônus, etc."
             />
           </div>
 

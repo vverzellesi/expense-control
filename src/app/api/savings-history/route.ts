@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching savings history:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar historico de economia" },
+      { error: "Erro ao buscar histórico de economia" },
       { status: 500 }
     );
   }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (!month || !year || goal === undefined || actual === undefined) {
       return NextResponse.json(
-        { error: "Campos month, year, goal e actual sao obrigatorios" },
+        { error: "Campos month, year, goal e actual são obrigatórios" },
         { status: 400 }
       );
     }
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error saving savings history:", error);
     return NextResponse.json(
-      { error: "Erro ao salvar historico de economia" },
+      { error: "Erro ao salvar histórico de economia" },
       { status: 500 }
     );
   }

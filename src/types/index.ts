@@ -2,13 +2,13 @@ export type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 
 // Special transaction types for credit card statements
 export type SpecialTransactionType =
-  | "BILL_PAYMENT"      // Pagamento de fatura (credito)
+  | "BILL_PAYMENT"      // Pagamento de fatura (crédito)
   | "BILL_CARRYOVER"    // Saldo anterior de fatura
   | "FINANCING"         // Parcelamento de fatura
   | "REFUND"            // Estorno
   | "FEE"               // Tarifa, anuidade
-  | "IOF"               // IOF de transacao internacional
-  | "CURRENCY_SPREAD"   // Spread de cotacao
+  | "IOF"               // IOF de transação internacional
+  | "CURRENCY_SPREAD"   // Spread de cotação
   | null;
 
 export interface Transaction {
@@ -50,7 +50,7 @@ export interface RecurringExpense {
   categoryId: string | null;
   category?: Category | null;
   isActive: boolean;
-  autoGenerate: boolean; // false = aguarda importacao e vincula
+  autoGenerate: boolean; // false = aguarda importação e vincula
   transactions?: Transaction[];
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -131,7 +131,7 @@ export interface ImportedTransaction {
   isRecurring?: boolean;
   recurringName?: string;
   specialType?: SpecialTransactionType;
-  specialTypeWarning?: string; // Aviso para o usuario sobre transacoes especiais
+  specialTypeWarning?: string; // Aviso para o usuário sobre transações especiais
 }
 
 // OCR Types

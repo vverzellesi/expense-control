@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -63,7 +63,7 @@ export function InvestmentValueModal({
     if (!value || isNaN(parsedValue) || parsedValue < 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido",
+        description: "Informe um valor válido",
         variant: "destructive",
       });
       return;
@@ -120,7 +120,7 @@ export function InvestmentValueModal({
 
         {lastUpdatedAt && (
           <div className="rounded-lg bg-muted p-3 text-sm">
-            <span className="text-muted-foreground">Ultima atualizacao:</span>{" "}
+            <span className="text-muted-foreground">Última atualização:</span>{" "}
             <span className="font-medium">{formatDate(lastUpdatedAt)}</span>
           </div>
         )}
@@ -128,14 +128,10 @@ export function InvestmentValueModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="current-value">Valor Atual *</Label>
-            <Input
+            <CurrencyInput
               id="current-value"
-              type="number"
-              step="0.01"
-              min="0"
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="0,00"
+              onChange={setValue}
               autoFocus
             />
             {hasValueChange && (
@@ -145,7 +141,7 @@ export function InvestmentValueModal({
                 }`}
               >
                 {valueDiff > 0 ? "+" : ""}
-                {formatCurrency(valueDiff)} em relacao ao valor anterior (
+                {formatCurrency(valueDiff)} em relação ao valor anterior (
                 {formatCurrency(currentValue)})
               </p>
             )}

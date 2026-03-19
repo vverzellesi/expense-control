@@ -15,7 +15,7 @@ export async function POST(
 
     if (!month || !year) {
       return NextResponse.json(
-        { error: "Mes e ano sao obrigatorios" },
+        { error: "Mês e ano são obrigatórios" },
         { status: 400 }
       );
     }
@@ -26,7 +26,7 @@ export async function POST(
 
     if (!recurringExpense) {
       return NextResponse.json(
-        { error: "Despesa recorrente nao encontrada" },
+        { error: "Despesa recorrente não encontrada" },
         { status: 404 }
       );
     }
@@ -34,7 +34,7 @@ export async function POST(
     // Check if this recurring expense should be auto-generated
     if (!recurringExpense.autoGenerate) {
       return NextResponse.json(
-        { error: "Esta despesa aguarda vinculacao via importacao de fatura. Desative 'Gerar automaticamente' se quiser gerar manualmente." },
+        { error: "Esta despesa aguarda vinculação via importação de fatura. Desative 'Gerar automaticamente' se quiser gerar manualmente." },
         { status: 400 }
       );
     }
@@ -56,7 +56,7 @@ export async function POST(
 
     if (existingTransaction) {
       return NextResponse.json(
-        { error: "Ja existe uma transacao para este mes", transaction: existingTransaction },
+        { error: "Já existe uma transação para este mês", transaction: existingTransaction },
         { status: 400 }
       );
     }

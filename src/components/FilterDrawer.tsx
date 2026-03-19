@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { X, Tag } from "lucide-react";
 import { useScrollLock } from "@/lib/hooks";
+import { toLocalDateString } from "@/lib/utils";
 import type { Category, Origin } from "@/types";
 
 interface FilterValues {
@@ -61,8 +62,8 @@ export function FilterDrawer({
     const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
     setLocalFilters({
-      startDate: currentMonthStart.toISOString().split("T")[0],
-      endDate: currentMonthEnd.toISOString().split("T")[0],
+      startDate: toLocalDateString(currentMonthStart),
+      endDate: toLocalDateString(currentMonthEnd),
       category: "all",
       type: "all",
       origin: "all",
@@ -118,7 +119,7 @@ export function FilterDrawer({
         <div className="overflow-y-auto px-4 py-4 space-y-6" style={{ height: "calc(70vh - 140px)" }}>
           {/* Date Range */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Periodo</Label>
+            <Label className="text-sm font-medium">Período</Label>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs text-gray-500">De</Label>
@@ -131,7 +132,7 @@ export function FilterDrawer({
                 />
               </div>
               <div>
-                <Label className="text-xs text-gray-500">Ate</Label>
+                <Label className="text-xs text-gray-500">Até</Label>
                 <Input
                   type="date"
                   value={localFilters.endDate}
@@ -264,16 +265,16 @@ export function FilterDrawer({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Tag</Label>
               <Select
-                value={localFilters.tag}
+                value={localFilters.tag || "__all__"}
                 onValueChange={(value) =>
-                  setLocalFilters({ ...localFilters, tag: value })
+                  setLocalFilters({ ...localFilters, tag: value === "__all__" ? "" : value })
                 }
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="__all__">Todas</SelectItem>
                   {allTags.map((tag) => (
                     <SelectItem key={tag} value={tag}>
                       <div className="flex items-center gap-1">

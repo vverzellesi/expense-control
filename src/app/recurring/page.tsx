@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -142,7 +143,7 @@ export default function RecurringPage() {
     if (!description || !defaultAmount || !dayOfMonth || !origin) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatorios",
+        description: "Preencha todos os campos obrigatórios",
         variant: "destructive",
       });
       return;
@@ -200,7 +201,7 @@ export default function RecurringPage() {
 
       toast({
         title: "Sucesso",
-        description: "Despesa recorrente excluida",
+        description: "Despesa recorrente excluída",
       });
 
       setDeletingId(null);
@@ -376,7 +377,7 @@ export default function RecurringPage() {
 
       toast({
         title: "Sucesso",
-        description: "Despesa recorrente criada a partir da sugestao",
+        description: "Despesa recorrente criada a partir da sugestão",
       });
 
       fetchData();
@@ -407,7 +408,7 @@ export default function RecurringPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Despesas Recorrentes</h1>
           <p className="text-gray-500">
-            Gerencie suas despesas fixas mensais com valores variaveis
+            Gerencie suas despesas fixas mensais com valores variáveis
           </p>
         </div>
         <Dialog
@@ -464,18 +465,14 @@ export default function RecurringPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Valor Padrao *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <Label>Valor Padrão *</Label>
+                  <CurrencyInput
                     value={defaultAmount}
-                    onChange={(e) => setDefaultAmount(e.target.value)}
-                    placeholder="0,00"
+                    onChange={setDefaultAmount}
                   />
                 </div>
                 <div>
-                  <Label>Dia do Mes *</Label>
+                  <Label>Dia do Mês *</Label>
                   <Input
                     type="number"
                     min="1"
@@ -528,7 +525,7 @@ export default function RecurringPage() {
                 <div>
                   <Label className="text-base">Gerar automaticamente</Label>
                   <p className="text-sm text-gray-500">
-                    Desative para despesas que vem na fatura do cartao
+                    Desative para despesas que vem na fatura do cartão
                   </p>
                 </div>
                 <Switch
@@ -584,7 +581,7 @@ export default function RecurringPage() {
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-gray-500">
-            Gere transacoes para o mes atual. Voce pode ajustar o valor se for diferente do padrao.
+            Gere transações para o mês atual. Você pode ajustar o valor se for diferente do padrão.
           </p>
           <div className="space-y-2">
             {recurringExpenses.filter(e => e.isActive).map((expense) => {
@@ -608,10 +605,10 @@ export default function RecurringPage() {
                     <div className="min-w-0">
                       <span className="font-medium block truncate">{expense.description}</span>
                       <div className="text-sm text-gray-500">
-                        Padrao: {formatCurrency(expense.defaultAmount)}
+                        Padrão: {formatCurrency(expense.defaultAmount)}
                         {lastAmount && lastAmount !== expense.defaultAmount && (
                           <span className="ml-2">
-                            (ultimo: {formatCurrency(lastAmount)})
+                            (último: {formatCurrency(lastAmount)})
                           </span>
                         )}
                       </div>
@@ -630,14 +627,11 @@ export default function RecurringPage() {
                       </Badge>
                     ) : generatingId === expense.id ? (
                       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder={String(expense.defaultAmount)}
+                        <CurrencyInput
+                          placeholder={`R$ ${expense.defaultAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
                           value={generateAmount}
-                          onChange={(e) => setGenerateAmount(e.target.value)}
-                          className="w-full sm:w-28 min-h-[44px]"
+                          onChange={setGenerateAmount}
+                          className="w-full sm:w-36 min-h-[44px]"
                         />
                         <Button size="sm" className="min-h-[44px]" onClick={() => handleGenerate(expense)}>
                           OK
@@ -725,7 +719,7 @@ export default function RecurringPage() {
                         {formatCurrency(expense.defaultAmount)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {expense.transactions.length} lancamento(s)
+                        {expense.transactions.length} lançamento(s)
                       </div>
                     </div>
 
@@ -768,12 +762,12 @@ export default function RecurringPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-purple-800">
               <Lightbulb className="h-5 w-5" />
-              Sugestoes de Despesas Recorrentes
+              Sugestões de Despesas Recorrentes
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-purple-700">
-              Detectamos padroes de gastos que podem ser recorrentes. Clique para adicionar.
+              Detectamos padrões de gastos que podem ser recorrentes. Clique para adicionar.
             </p>
             <div className="space-y-2">
               {suggestions.map((suggestion) => (
@@ -830,9 +824,9 @@ export default function RecurringPage() {
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta despesa recorrente? As transacoes
+              Tem certeza que deseja excluir esta despesa recorrente? As transações
               já geradas serão mantidas, mas não estarão mais vinculadas.
             </AlertDialogDescription>
           </AlertDialogHeader>

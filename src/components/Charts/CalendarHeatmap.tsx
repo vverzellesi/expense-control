@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, parseDateLocal } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface DayData {
@@ -83,7 +83,7 @@ export function CalendarHeatmap({ days, maxExpense }: Props) {
             <PopoverContent className="w-64 p-3">
               <div className="space-y-2">
                 <div className="font-medium text-sm">
-                  {new Date(day.date + "T12:00:00").toLocaleDateString("pt-BR", {
+                  {parseDateLocal(day.date).toLocaleDateString("pt-BR", {
                     weekday: "long",
                     day: "numeric",
                     month: "long",
@@ -91,7 +91,7 @@ export function CalendarHeatmap({ days, maxExpense }: Props) {
                 </div>
                 <div className="text-sm text-gray-600">
                   Total: <span className="font-semibold">{formatCurrency(day.totalExpense)}</span>
-                  {" "} ({day.transactionCount} {day.transactionCount === 1 ? "transacao" : "transacoes"})
+                  {" "} ({day.transactionCount} {day.transactionCount === 1 ? "transação" : "transações"})
                 </div>
                 {day.transactions.length > 0 && (
                   <div className="border-t pt-2 space-y-1 max-h-40 overflow-y-auto">

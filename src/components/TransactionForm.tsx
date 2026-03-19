@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,6 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { Transaction, Category, Origin } from "@/types";
+import { toLocalDateString } from "@/lib/utils";
 
 interface Props {
   categories: Category[];
@@ -39,8 +41,8 @@ export function TransactionForm({
   );
   const [date, setDate] = useState(
     transaction
-      ? new Date(transaction.date).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0]
+      ? toLocalDateString(new Date(transaction.date))
+      : toLocalDateString(new Date())
   );
   const [type, setType] = useState<"INCOME" | "EXPENSE" | "TRANSFER">(
     transaction?.type as "INCOME" | "EXPENSE" | "TRANSFER" || "EXPENSE"
@@ -84,7 +86,7 @@ export function TransactionForm({
     if (!description || !amount || !date || !origin) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatorios",
+        description: "Preencha todos os campos obrigatórios",
         variant: "destructive",
       });
       return;
@@ -126,23 +128,23 @@ export function TransactionForm({
       });
 
       if (!res.ok) {
-        throw new Error("Erro ao salvar transacao");
+        throw new Error("Erro ao salvar transação");
       }
 
       toast({
         title: "Sucesso",
         description: transaction
-          ? "Transacao atualizada com sucesso"
+          ? "Transação atualizada com sucesso"
           : isInstallment
-          ? `${totalInstallments} parcelas criadas com sucesso`
-          : "Transacao criada com sucesso",
+          ? `${parseInt(totalInstallments) - parseInt(currentInstallment) + 1} parcelas criadas com sucesso`
+          : "Transação criada com sucesso",
       });
 
       onSuccess();
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Ocorreu um erro ao salvar a transacao",
+        description: "Ocorreu um erro ao salvar a transação",
         variant: "destructive",
       });
     } finally {
@@ -181,12 +183,12 @@ export function TransactionForm({
           }`}
           onClick={() => setType("TRANSFER")}
         >
-          Transferencia
+          Transferência
         </div>
       </div>
 
       <div>
-        <Label htmlFor="description">Descricao *</Label>
+        <Label htmlFor="description">Descrição *</Label>
         <Input
           id="description"
           value={description}
@@ -198,14 +200,10 @@ export function TransactionForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="amount">Valor *</Label>
-          <Input
+          <CurrencyInput
             id="amount"
-            type="number"
-            step="0.01"
-            min="0"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0,00"
+            onChange={setAmount}
             className="w-full"
           />
         </div>
@@ -266,10 +264,10 @@ export function TransactionForm({
           id="tags"
           value={tagsInput}
           onChange={(e) => setTagsInput(e.target.value)}
-          placeholder="Ex: trabalho, viagem, reuniao"
+          placeholder="Ex: trabalho, viagem, reunião"
         />
         <p className="mt-1 text-xs text-gray-500">
-          Separe as tags por virgula
+          Separe as tags por vírgula
         </p>
       </div>
 
@@ -328,7 +326,9 @@ export function TransactionForm({
             </div>
             {!transaction && (
               <p className="col-span-2 text-xs text-gray-500">
-                Serao criadas {totalInstallments} parcelas de{" "}
+                {parseInt(currentInstallment) > 1
+                  ? `Serão criadas ${parseInt(totalInstallments) - parseInt(currentInstallment) + 1} parcelas (${currentInstallment}/${totalInstallments} a ${totalInstallments}/${totalInstallments}) de `
+                  : `Serão criadas ${totalInstallments} parcelas de `}
                 {amount
                   ? new Intl.NumberFormat("pt-BR", {
                       style: "currency",

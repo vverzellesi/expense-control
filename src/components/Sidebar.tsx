@@ -25,11 +25,13 @@ import {
   HelpCircle,
   PieChart,
   Calculator,
+  Bug,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { PendingInvites } from "@/components/PendingInvites";
 import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
+import { BugReportModal } from "@/components/BugReportModal";
 
 type PermissionKey = "canViewInvestments" | "canViewBudgets" | "canViewIncomes";
 
@@ -64,6 +66,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const permissions = useSpacePermissions();
   const [alertCount, setAlertCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
 
   const filteredNavigation = navigation.filter((item) => {
     if (!item.requiredPermission) return true;
@@ -155,6 +158,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <div className="border-t p-3">
         <button
           onClick={() => {
+            setShowBugReport(true);
+            handleNavClick();
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-emerald-50/50 hover:text-gray-900"
+          title="Reportar um bug"
+        >
+          <Bug className="h-5 w-5" />
+          Reportar Bug
+        </button>
+        <button
+          onClick={() => {
             setShowOnboarding(true);
             handleNavClick();
           }}
@@ -244,6 +258,12 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <OnboardingModal
         open={showOnboarding}
         onComplete={() => setShowOnboarding(false)}
+      />
+
+      {/* Bug Report Modal - opened via Reportar Bug button */}
+      <BugReportModal
+        isOpen={showBugReport}
+        onClose={() => setShowBugReport(false)}
       />
     </>
   );

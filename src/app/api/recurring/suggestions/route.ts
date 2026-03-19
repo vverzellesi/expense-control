@@ -105,9 +105,15 @@ export async function GET() {
       // Need at least 2 different months
       if (monthSet.size < 2) continue;
 
-      // Calculate average values
-      const amounts = group.transactions.map((t) => Math.abs(t.amount));
-      const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      // Calculate average monthly amount (sum per month, then average across months)
+      const monthlyTotals: Record<string, number> = {};
+      for (const t of group.transactions) {
+        const d = new Date(t.date);
+        const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+        monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + Math.abs(t.amount);
+      }
+      const monthlyAmounts = Object.values(monthlyTotals);
+      const avgAmount = monthlyAmounts.reduce((a, b) => a + b, 0) / monthlyAmounts.length;
 
       const days = group.transactions.map((t) => new Date(t.date).getDate());
       const avgDayOfMonth = Math.round(

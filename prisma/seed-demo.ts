@@ -8,16 +8,16 @@ const DEMO_PASSWORD = "demo123";
 
 // Categories for the demo user
 const demoCategories = [
-  { name: "Salario", color: "#10B981", icon: "wallet" },
-  { name: "Alimentacao", color: "#F97316", icon: "utensils" },
+  { name: "Salário", color: "#10B981", icon: "wallet" },
+  { name: "Alimentação", color: "#F97316", icon: "utensils" },
   { name: "Transporte", color: "#3B82F6", icon: "car" },
   { name: "Moradia", color: "#8B5CF6", icon: "home" },
   { name: "Lazer", color: "#EC4899", icon: "gamepad" },
-  { name: "Saude", color: "#EF4444", icon: "heart" },
-  { name: "Educacao", color: "#14B8A6", icon: "book" },
+  { name: "Saúde", color: "#EF4444", icon: "heart" },
+  { name: "Educação", color: "#14B8A6", icon: "book" },
   { name: "Investimentos", color: "#F59E0B", icon: "trending-up" },
   { name: "Compras", color: "#6366F1", icon: "shopping-bag" },
-  { name: "Servicos", color: "#06B6D4", icon: "smartphone" },
+  { name: "Serviços", color: "#06B6D4", icon: "smartphone" },
 ];
 
 const demoOrigins = [
@@ -32,28 +32,28 @@ const demoOrigins = [
 const demoRules = [
   { keyword: "UBER", category: "Transporte" },
   { keyword: "99", category: "Transporte" },
-  { keyword: "IFOOD", category: "Alimentacao" },
-  { keyword: "RAPPI", category: "Alimentacao" },
+  { keyword: "IFOOD", category: "Alimentação" },
+  { keyword: "RAPPI", category: "Alimentação" },
   { keyword: "NETFLIX", category: "Lazer" },
   { keyword: "SPOTIFY", category: "Lazer" },
   { keyword: "AMAZON", category: "Compras" },
-  { keyword: "MERCADO", category: "Alimentacao" },
-  { keyword: "FARMACIA", category: "Saude" },
+  { keyword: "MERCADO", category: "Alimentação" },
+  { keyword: "FARMACIA", category: "Saúde" },
   { keyword: "ALUGUEL", category: "Moradia" },
   { keyword: "SHELL", category: "Transporte" },
-  { keyword: "DROGASIL", category: "Saude" },
+  { keyword: "DROGASIL", category: "Saúde" },
   { keyword: "CINEMARK", category: "Lazer" },
-  { keyword: "SMART FIT", category: "Saude" },
+  { keyword: "SMART FIT", category: "Saúde" },
 ];
 
 const demoBudgets = [
-  { category: "Alimentacao", amount: 1800 },
+  { category: "Alimentação", amount: 1800 },
   { category: "Lazer", amount: 600 },
   { category: "Transporte", amount: 700 },
   { category: "Compras", amount: 1000 },
-  { category: "Saude", amount: 500 },
+  { category: "Saúde", amount: 500 },
   { category: "Moradia", amount: 3000 },
-  { category: "Servicos", amount: 400 },
+  { category: "Serviços", amount: 400 },
 ];
 
 // Fixed/recurring expenses
@@ -63,13 +63,13 @@ const fixedExpenses = [
   { description: "Internet Vivo Fibra 300MB", amount: 120, category: "Moradia", day: 15 },
   { description: "Energia Eletrica - Enel", amount: 180, category: "Moradia", day: 18 },
   { description: "Agua e Esgoto - Sabesp", amount: 95, category: "Moradia", day: 20 },
-  { description: "Academia Smart Fit", amount: 150, category: "Saude", day: 5 },
+  { description: "Academia Smart Fit", amount: 150, category: "Saúde", day: 5 },
   { description: "Netflix Premium", amount: 55, category: "Lazer", day: 12 },
   { description: "Spotify Familia", amount: 35, category: "Lazer", day: 12 },
-  { description: "iCloud 200GB", amount: 15, category: "Servicos", day: 20 },
+  { description: "iCloud 200GB", amount: 15, category: "Serviços", day: 20 },
   { description: "Disney+ Combo", amount: 44, category: "Lazer", day: 14 },
   { description: "HBO Max", amount: 35, category: "Lazer", day: 16 },
-  { description: "Plano de Saude Unimed", amount: 520, category: "Saude", day: 1 },
+  { description: "Plano de Saude Unimed", amount: 520, category: "Saúde", day: 1 },
   { description: "Seguro Auto Porto Seguro", amount: 180, category: "Transporte", day: 8 },
 ];
 
@@ -89,7 +89,7 @@ const installments = [
     totalAmount: 3600,
     totalInstallments: 12,
     startMonthsAgo: 3,
-    category: "Educacao",
+    category: "Educação",
     origin: "Itau",
     day: 15,
   },
@@ -152,7 +152,7 @@ const installments = [
     totalAmount: 5400,
     totalInstallments: 12,
     startMonthsAgo: 3,
-    category: "Saude",
+    category: "Saúde",
     origin: "Bradesco",
     day: 25,
   },
@@ -160,26 +160,26 @@ const installments = [
 
 // Variable expense templates (will be randomized)
 const variableExpenses = [
-  { description: "iFood - ", amounts: [28, 35, 42, 55, 65, 78, 90], category: "Alimentacao", frequency: 10 },
+  { description: "iFood - ", amounts: [28, 35, 42, 55, 65, 78, 90], category: "Alimentação", frequency: 10 },
   { description: "Uber - ", amounts: [15, 22, 28, 35, 45, 58], category: "Transporte", frequency: 7 },
   { description: "99 - ", amounts: [12, 18, 25, 32, 40], category: "Transporte", frequency: 4 },
-  { description: "Supermercado Extra", amounts: [180, 220, 280, 350, 420, 480], category: "Alimentacao", frequency: 2 },
-  { description: "Supermercado Pao de Acucar", amounts: [150, 200, 260, 320, 380], category: "Alimentacao", frequency: 1.5 },
-  { description: "Atacadao", amounts: [300, 420, 550, 680], category: "Alimentacao", frequency: 0.8 },
+  { description: "Supermercado Extra", amounts: [180, 220, 280, 350, 420, 480], category: "Alimentação", frequency: 2 },
+  { description: "Supermercado Pao de Acucar", amounts: [150, 200, 260, 320, 380], category: "Alimentação", frequency: 1.5 },
+  { description: "Atacadao", amounts: [300, 420, 550, 680], category: "Alimentação", frequency: 0.8 },
   { description: "Posto Shell", amounts: [150, 200, 250, 300, 350], category: "Transporte", frequency: 2 },
   { description: "Posto Ipiranga", amounts: [120, 180, 220, 280], category: "Transporte", frequency: 1 },
-  { description: "Farmacia Drogasil", amounts: [35, 65, 90, 130, 180], category: "Saude", frequency: 1.5 },
-  { description: "Farmacia Droga Raia", amounts: [28, 50, 75, 110], category: "Saude", frequency: 0.8 },
-  { description: "Restaurante ", amounts: [55, 75, 95, 120, 150, 180], category: "Alimentacao", frequency: 4 },
+  { description: "Farmacia Drogasil", amounts: [35, 65, 90, 130, 180], category: "Saúde", frequency: 1.5 },
+  { description: "Farmacia Droga Raia", amounts: [28, 50, 75, 110], category: "Saúde", frequency: 0.8 },
+  { description: "Restaurante ", amounts: [55, 75, 95, 120, 150, 180], category: "Alimentação", frequency: 4 },
   { description: "Cinema Cinemark", amounts: [45, 60, 80, 95], category: "Lazer", frequency: 0.8 },
   { description: "Amazon - ", amounts: [40, 75, 120, 180, 250, 350], category: "Compras", frequency: 1.5 },
   { description: "Mercado Livre - ", amounts: [35, 60, 100, 150, 220], category: "Compras", frequency: 1 },
-  { description: "Padaria Pao Quente", amounts: [12, 18, 25, 35, 45], category: "Alimentacao", frequency: 6 },
+  { description: "Padaria Pao Quente", amounts: [12, 18, 25, 35, 45], category: "Alimentação", frequency: 6 },
   { description: "Estacionamento", amounts: [10, 15, 20, 25, 30], category: "Transporte", frequency: 3 },
-  { description: "Rappi - ", amounts: [30, 45, 60, 78, 95], category: "Alimentacao", frequency: 3 },
-  { description: "Livraria Cultura", amounts: [40, 65, 85, 120], category: "Educacao", frequency: 0.3 },
+  { description: "Rappi - ", amounts: [30, 45, 60, 78, 95], category: "Alimentação", frequency: 3 },
+  { description: "Livraria Cultura", amounts: [40, 65, 85, 120], category: "Educação", frequency: 0.3 },
   { description: "Pet Shop Petz", amounts: [80, 120, 160, 200], category: "Compras", frequency: 0.5 },
-  { description: "Barbeiro - Studio Hair", amounts: [45, 60, 80], category: "Servicos", frequency: 0.8 },
+  { description: "Barbeiro - Studio Hair", amounts: [45, 60, 80], category: "Serviços", frequency: 0.8 },
   { description: "Lava Rapido Auto Clean", amounts: [35, 50, 65, 80], category: "Transporte", frequency: 0.5 },
   { description: "Shopee - ", amounts: [25, 45, 70, 100, 140], category: "Compras", frequency: 1.2 },
   { description: "Magazine Luiza - ", amounts: [50, 90, 150, 200], category: "Compras", frequency: 0.4 },
@@ -247,7 +247,7 @@ const investmentData = [
     ],
   },
   {
-    categoryName: "Renda Variavel",
+    categoryName: "Renda Variável",
     categoryColor: "#3B82F6",
     categoryIcon: "trending-up",
     investments: [
@@ -257,7 +257,7 @@ const investmentData = [
     ],
   },
   {
-    categoryName: "Fundos Imobiliarios",
+    categoryName: "Fundos Imobiliários",
     categoryColor: "#8B5CF6",
     categoryIcon: "building",
     investments: [
@@ -444,7 +444,7 @@ async function main() {
         date: new Date(year, month, salaryDay),
         type: "INCOME",
         origin: "Itau",
-        categoryId: categoryMap.get("Salario"),
+        categoryId: categoryMap.get("Salário"),
         userId: demoUser.id,
         isFixed: true,
       },
@@ -542,7 +542,7 @@ async function main() {
               date: new Date(year, month, day),
               type: "INCOME",
               origin: randomElement(["PIX", "Nubank", "Itau"]),
-              categoryId: categoryMap.get("Salario"),
+              categoryId: categoryMap.get("Salário"),
               userId: demoUser.id,
             },
           });

@@ -13,9 +13,11 @@ export const authConfig = {
       const isOnAuthPage = nextUrl.pathname.startsWith("/auth")
       const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth")
       const isLandingPage = nextUrl.pathname === "/"
+      const isTelegramWebhook = nextUrl.pathname === "/api/telegram/webhook"
+      const isTelegramSetup = nextUrl.pathname === "/api/telegram/setup"
 
-      // Allow landing page, auth pages, and auth API routes without authentication
-      if (isLandingPage || isOnAuthPage || isApiAuthRoute) {
+      // Allow landing page, auth pages, auth API routes, and Telegram endpoints without authentication
+      if (isLandingPage || isOnAuthPage || isApiAuthRoute || isTelegramWebhook || isTelegramSetup) {
         return true
       }
 

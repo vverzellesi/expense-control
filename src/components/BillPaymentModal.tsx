@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -142,7 +143,7 @@ export function BillPaymentModal({
     if (parsedAmountToPay <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para pagamento",
+        description: "Informe um valor válido para pagamento",
         variant: "destructive",
       });
       return;
@@ -210,7 +211,7 @@ export function BillPaymentModal({
         title: "Sucesso",
         description:
           partialType === "rollover"
-            ? "Pagamento parcial registrado. Saldo rolado para proxima fatura."
+            ? "Pagamento parcial registrado. Saldo rolado para próxima fatura."
             : `Financiamento registrado em ${installmentCount}x`,
       });
 
@@ -314,28 +315,23 @@ export function BillPaymentModal({
                     onChange={() => setPartialType("rollover")}
                     className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <p className="font-medium">Rolar saldo para proxima fatura</p>
+                  <p className="font-medium">Rolar saldo para próxima fatura</p>
                 </div>
 
                 {partialType === "rollover" && (
                   <div className="space-y-3 pl-7">
                     <div className="space-y-2">
                       <Label htmlFor="rollover-amount">Valor a pagar agora</Label>
-                      <Input
+                      <CurrencyInput
                         id="rollover-amount"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        max={bill.total - 0.01}
                         value={amountToPay}
-                        onChange={(e) => setAmountToPay(e.target.value)}
-                        placeholder="0,00"
+                        onChange={setAmountToPay}
                       />
                     </div>
 
                     <div className="text-sm">
                       <span className="text-muted-foreground">
-                        Saldo para proxima fatura:{" "}
+                        Saldo para próxima fatura:{" "}
                       </span>
                       <span className="font-semibold">
                         {formatCurrency(remainingAmount)}
@@ -382,15 +378,10 @@ export function BillPaymentModal({
                   <div className="space-y-3 pl-7">
                     <div className="space-y-2">
                       <Label htmlFor="finance-entry">Entrada</Label>
-                      <Input
+                      <CurrencyInput
                         id="finance-entry"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max={bill.total - 0.01}
                         value={amountToPay}
-                        onChange={(e) => setAmountToPay(e.target.value)}
-                        placeholder="0,00"
+                        onChange={setAmountToPay}
                       />
                     </div>
 

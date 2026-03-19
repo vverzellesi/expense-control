@@ -75,7 +75,7 @@ export function FixedVariableChart({ data }: Props) {
         <Area
           type="monotone"
           dataKey="variable"
-          name="Variaveis"
+          name="Variáveis"
           stackId="1"
           stroke="#f59e0b"
           fill="#f59e0b"

@@ -49,4 +49,7 @@ ai_docs/brainstorm/
 ai_docs/research/
 ai_docs/handoffs/
 ai_docs/oracle/
+
+# Worktrees
+.worktrees/
 /scripts/reset-password.ts

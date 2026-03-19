@@ -127,7 +127,7 @@ export function InstallmentsTab({ filterYear }: Props) {
       {/* Timeline Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Projecao de Parcelas (12 meses)</CardTitle>
+          <CardTitle>Projeção de Parcelas (12 meses)</CardTitle>
         </CardHeader>
         <CardContent>
           {data.timeline.some((t) => t.total > 0) ? (
@@ -152,7 +152,7 @@ export function InstallmentsTab({ filterYear }: Props) {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2 font-medium text-gray-500">
-                      Descricao
+                      Descrição
                     </th>
                     <th className="pb-2 text-right font-medium text-gray-500">
                       Valor
@@ -210,7 +210,7 @@ export function InstallmentsTab({ filterYear }: Props) {
                                 : "bg-gray-100 text-gray-600"
                             }`}
                           >
-                            {inst.isActive ? "Ativa" : "Concluida"}
+                            {inst.isActive ? "Ativa" : "Concluída"}
                           </span>
                         </td>
                       </tr>

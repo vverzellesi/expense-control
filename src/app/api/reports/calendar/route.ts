@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { toLocalDateString } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       }
 
       days.push({
-        date: dateObj.toISOString().split("T")[0],
+        date: toLocalDateString(dateObj),
         dayOfMonth: d,
         dayOfWeek: dateObj.getDay(),
         totalExpense,
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching calendar data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados do calendario" },
+      { error: "Erro ao buscar dados do calendário" },
       { status: 500 }
     );
   }

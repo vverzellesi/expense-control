@@ -8,9 +8,17 @@ vi.mock('@/lib/db', () => ({
     recurringExpense: {
       findMany: vi.fn()
     },
+    categoryTag: {
+      findMany: vi.fn()
+    },
     transaction: {
       create: vi.fn(),
-      update: vi.fn()
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn()
+    },
+    categoryTag: {
+      findMany: vi.fn()
     },
     billPayment: {
       findMany: vi.fn(),
@@ -20,7 +28,7 @@ vi.mock('@/lib/db', () => ({
 }))
 
 // Import route handlers and prisma mock after mocking
-import { POST } from '@/app/api/import/route'
+import { POST, DELETE } from '@/app/api/import/route'
 import prisma from '@/lib/db'
 
 // Type assertion for mocked prisma
@@ -28,9 +36,17 @@ const mockPrisma = prisma as unknown as {
   recurringExpense: {
     findMany: ReturnType<typeof vi.fn>
   }
+  categoryTag: {
+    findMany: ReturnType<typeof vi.fn>
+  }
   transaction: {
     create: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
+    updateMany: ReturnType<typeof vi.fn>
+  }
+  categoryTag: {
+    findMany: ReturnType<typeof vi.fn>
   }
   billPayment: {
     findMany: ReturnType<typeof vi.fn>
@@ -73,6 +89,10 @@ describe('POST /api/import - Carryover Linking', () => {
 
     // Default mock returns - no recurring expenses
     mockPrisma.recurringExpense.findMany.mockResolvedValue([])
+    // Default - no category tags
+    mockPrisma.categoryTag.findMany.mockResolvedValue([])
+    // Default - no duplicates found
+    mockPrisma.transaction.findFirst.mockResolvedValue(null)
     // Default - no bill payments
     mockPrisma.billPayment.findMany.mockResolvedValue([])
   })
@@ -1056,6 +1076,88 @@ describe('POST /api/import - Carryover Linking', () => {
     })
   })
 
+  describe('DELETE /api/import - Undo import batch', () => {
+    it('should soft-delete all transactions in a batch', async () => {
+      mockPrisma.transaction.updateMany.mockResolvedValue({ count: 5 })
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import?batchId=test-batch-123'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.count).toBe(5)
+      expect(data.message).toContain('5 transacoes removidas')
+
+      expect(mockPrisma.transaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: testUser.id,
+          importBatchId: 'test-batch-123',
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: expect.any(Date),
+        },
+      })
+    })
+
+    it('should return 400 when batchId is missing', async () => {
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('ID do lote e obrigatorio')
+    })
+
+    it('should return 404 when no transactions match the batch', async () => {
+      mockPrisma.transaction.updateMany.mockResolvedValue({ count: 0 })
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/import?batchId=nonexistent-batch'),
+        { method: 'DELETE' }
+      )
+
+      const response = await DELETE(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(404)
+      expect(data.error).toBe('Nenhuma transacao encontrada para este lote')
+    })
+
+    it('should include importBatchId in POST response', async () => {
+      const mockTransaction = createMockTransaction(
+        'txn-batch',
+        'NETFLIX',
+        -39.90,
+        '2024-02-15'
+      )
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'NETFLIX', amount: 39.90, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.importBatchId).toBeDefined()
+      expect(typeof data.importBatchId).toBe('string')
+      expect(data.importBatchId.length).toBeGreaterThan(0)
+    })
+  })
+
   describe('Response message formatting', () => {
     it('should include carryover count in response message', async () => {
       const mockBillPayment = {
@@ -1100,6 +1202,82 @@ describe('POST /api/import - Carryover Linking', () => {
       expect(response.status).toBe(201)
       expect(data.message).toContain('1 transacoes importadas')
       expect(data.message).toContain('1 vinculadas a saldo rolado')
+    })
+  })
+
+  describe('Deduplication', () => {
+    it('should skip duplicate transactions and report skippedCount', async () => {
+      // First transaction is a duplicate (findFirst returns match)
+      mockPrisma.transaction.findFirst
+        .mockResolvedValueOnce({ id: 'existing-txn', description: 'PIX REST FULANO', amount: -45.9 })
+        .mockResolvedValueOnce(null) // second is unique
+
+      const mockTransaction = createMockTransaction('txn-new', 'UBER TRIP', -23.5, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'PIX REST FULANO', amount: 45.9, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'UBER TRIP', amount: 23.5, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(1)
+      expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(1)
+    })
+
+    it('should include duplicatas ignoradas in response message when duplicates found', async () => {
+      mockPrisma.transaction.findFirst
+        .mockResolvedValueOnce({ id: 'dup-1' })
+        .mockResolvedValueOnce({ id: 'dup-2' })
+        .mockResolvedValueOnce(null)
+
+      const mockTransaction = createMockTransaction('txn-new', 'NEW TXN', -10, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'DUP1', amount: 10, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'DUP2', amount: 20, date: '2024-02-15', type: 'EXPENSE' },
+          { description: 'NEW TXN', amount: 10, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(2)
+      expect(data.message).toContain('2 duplicatas ignoradas')
+    })
+
+    it('should import all transactions when no duplicates exist', async () => {
+      mockPrisma.transaction.findFirst.mockResolvedValue(null) // no duplicates
+
+      const mockTransaction = createMockTransaction('txn-1', 'NETFLIX', -39.9, '2024-02-15')
+      mockPrisma.transaction.create.mockResolvedValue(mockTransaction)
+
+      const request = createRequest({
+        transactions: [
+          { description: 'NETFLIX', amount: 39.9, date: '2024-02-15', type: 'EXPENSE' }
+        ],
+        origin: 'Nubank'
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.count).toBe(1)
+      expect(data.skippedCount).toBe(0)
     })
   })
 })

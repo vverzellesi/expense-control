@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     if (!keyword || !categoryId) {
       return NextResponse.json(
-        { error: "Keyword e categoryId sao obrigatorios" },
+        { error: "Keyword e categoryId são obrigatórios" },
         { status: 400 }
       );
     }
@@ -88,7 +88,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: "ID da regra nao informado" },
+        { error: "ID da regra não informado" },
         { status: 400 }
       );
     }

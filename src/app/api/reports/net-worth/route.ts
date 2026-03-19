@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching net worth data:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar dados de patrimonio" },
+      { error: "Erro ao buscar dados de patrimônio" },
       { status: 500 }
     );
   }

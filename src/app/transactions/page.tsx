@@ -34,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { TransactionForm } from "@/components/TransactionForm";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { Plus, Pencil, Trash2, Filter, Search, X, Tag, Repeat } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { FilterDrawer } from "@/components/FilterDrawer";
@@ -57,8 +57,8 @@ function TransactionsContent() {
   const currentDate = new Date();
   const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-  const [filterStartDate, setFilterStartDate] = useState(currentMonthStart.toISOString().split("T")[0]);
-  const [filterEndDate, setFilterEndDate] = useState(currentMonthEnd.toISOString().split("T")[0]);
+  const [filterStartDate, setFilterStartDate] = useState(toLocalDateString(currentMonthStart));
+  const [filterEndDate, setFilterEndDate] = useState(toLocalDateString(currentMonthEnd));
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterFixed, setFilterFixed] = useState(false);
@@ -285,7 +285,7 @@ function TransactionsContent() {
   return (
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
         <div className="flex flex-col sm:flex-row gap-2">
           <form onSubmit={handleSearch} className="relative flex">
             <div className="relative w-full">
@@ -293,7 +293,7 @@ function TransactionsContent() {
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar por descricao..."
+                placeholder="Buscar por descrição..."
                 className="w-full md:w-64 pl-9 pr-8"
               />
               {searchInput && (
@@ -367,7 +367,7 @@ function TransactionsContent() {
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <Label>Periodo</Label>
+                <Label>Período</Label>
                 <DateRangePicker
                   startDate={filterStartDate}
                   endDate={filterEndDate}
@@ -449,12 +449,12 @@ function TransactionsContent() {
               {allTags.length > 0 && (
                 <div>
                   <Label>Tag</Label>
-                  <Select value={filterTag} onValueChange={setFilterTag}>
+                  <Select value={filterTag || "__all__"} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas</SelectItem>
+                      <SelectItem value="__all__">Todas</SelectItem>
                       {allTags.map((tag) => (
                         <SelectItem key={tag} value={tag}>
                           <div className="flex items-center gap-1">
@@ -476,7 +476,7 @@ function TransactionsContent() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {transactions.length} transacao{transactions.length !== 1 ? "es" : ""}
+            {transactions.length} {transactions.length !== 1 ? "transações" : "transação"}
             {searchQuery && (
               <Badge variant="secondary" className="font-normal">
                 Busca: &quot;{searchQuery}&quot;
@@ -657,7 +657,7 @@ function TransactionsContent() {
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir esta transação? Esta ação não pode
               ser desfeita.
@@ -680,18 +680,18 @@ function TransactionsContent() {
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Deseja criar uma despesa recorrente a partir desta transacao?
+                  Deseja criar uma despesa recorrente a partir desta transação?
                 </p>
                 {makingRecurring && (
                   <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    <p><strong>Descricao:</strong> {makingRecurring.description}</p>
+                    <p><strong>Descrição:</strong> {makingRecurring.description}</p>
                     <p><strong>Valor:</strong> {formatCurrency(Math.abs(makingRecurring.amount))}</p>
-                    <p><strong>Dia do mes:</strong> {new Date(makingRecurring.date).getDate()}</p>
+                    <p><strong>Dia do mês:</strong> {new Date(makingRecurring.date).getDate()}</p>
                     <p><strong>Origem:</strong> {makingRecurring.origin}</p>
                   </div>
                 )}
                 <p className="text-xs text-gray-500">
-                  A transacao sera vinculada a nova despesa recorrente e marcada como fixa.
+                  A transação será vinculada à nova despesa recorrente e marcada como fixa.
                 </p>
               </div>
             </AlertDialogDescription>

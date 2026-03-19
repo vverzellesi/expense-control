@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching category trends:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar tendencias de categorias" },
+      { error: "Erro ao buscar tendências de categorias" },
       { status: 500 }
     );
   }

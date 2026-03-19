@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (!name || !color) {
       return NextResponse.json(
-        { error: "Nome e cor sao obrigatorios" },
+        { error: "Nome e cor são obrigatórios" },
         { status: 400 }
       );
     }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     if (existingCategory) {
       return NextResponse.json(
-        { error: "Ja existe uma categoria com este nome" },
+        { error: "Já existe uma categoria com este nome" },
         { status: 400 }
       );
     }
