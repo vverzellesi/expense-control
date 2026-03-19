@@ -75,6 +75,16 @@ function TransactionsContent() {
     fetchData();
   }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag]);
 
+  // Sync category filter with URL searchParams (handles back/forward, client-side navigation)
+  useEffect(() => {
+    const categoryId = searchParams.get("categoryId");
+    setFilterCategory(categoryId || "all");
+    if (categoryId) {
+      setShowFilters(true);
+      setShowFilterDrawer(true);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     fetchCategories();
     fetchOrigins();
