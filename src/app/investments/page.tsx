@@ -158,7 +158,7 @@ export default function InvestmentsPage() {
 
       toast({
         title: "Sucesso",
-        description: "Investimento excluido com sucesso",
+        description: "Investimento excluído com sucesso",
       });
 
       setDeletingInvestment(null);
@@ -180,7 +180,7 @@ export default function InvestmentsPage() {
     if (isNaN(amount) || amount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido maior que zero",
+        description: "Informe um valor válido maior que zero",
         variant: "destructive",
       });
       return;
@@ -226,7 +226,7 @@ export default function InvestmentsPage() {
     if (isNaN(amount) || amount <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido maior que zero",
+        description: "Informe um valor válido maior que zero",
         variant: "destructive",
       });
       return;
@@ -235,7 +235,7 @@ export default function InvestmentsPage() {
     if (amount > withdrawInvestment.currentValue) {
       toast({
         title: "Erro",
-        description: "O valor do resgate nao pode ser maior que o valor atual",
+        description: "O valor do resgate não pode ser maior que o valor atual",
         variant: "destructive",
       });
       return;
@@ -281,7 +281,7 @@ export default function InvestmentsPage() {
     if (isNaN(newValue) || newValue < 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido",
+        description: "Informe um valor válido",
         variant: "destructive",
       });
       return;
@@ -353,11 +353,11 @@ export default function InvestmentsPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
-        {/* Patrimonio Total */}
+        {/* Patrimônio Total */}
         <Card className="border-emerald-200 bg-emerald-50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-emerald-800">
-              Patrimonio Total
+              Patrimônio Total
             </CardTitle>
             <Wallet className="h-4 w-4 text-emerald-600" />
           </CardHeader>
@@ -473,7 +473,7 @@ export default function InvestmentsPage() {
               <p className="mt-2 text-sm text-gray-500">
                 {filterCategory !== "all"
                   ? "Nenhum investimento nesta categoria. Tente outra categoria ou crie um novo investimento."
-                  : "Comece a registrar seus investimentos para acompanhar seu patrimonio."}
+                  : "Comece a registrar seus investimentos para acompanhar seu patrimônio."}
               </p>
               <Button onClick={() => setIsFormOpen(true)} className="mt-6">
                 <Plus className="mr-2 h-4 w-4" />
@@ -545,10 +545,10 @@ export default function InvestmentsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir o investimento &quot;{deletingInvestment?.name}&quot;?
-              Esta acao nao pode ser desfeita e todo o historico de transacoes sera perdido.
+              Esta ação não pode ser desfeita e todo o histórico de transações será perdido.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -629,7 +629,7 @@ export default function InvestmentsPage() {
               <p className="text-sm text-gray-600">Investimento</p>
               <p className="font-medium">{withdrawInvestment?.name}</p>
               <p className="text-sm text-gray-500">
-                Valor disponivel: {withdrawInvestment ? formatCurrency(withdrawInvestment.currentValue) : ""}
+                Valor disponível: {withdrawInvestment ? formatCurrency(withdrawInvestment.currentValue) : ""}
               </p>
             </div>
             <div>
@@ -692,8 +692,8 @@ export default function InvestmentsPage() {
                 onChange={setOperationAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Use esta opcao para atualizar o valor de mercado do investimento
-                (rendimentos, valorizacao/desvalorizacao).
+                Use esta opção para atualizar o valor de mercado do investimento
+                (rendimentos, valorização/desvalorização).
               </p>
             </div>
             <div className="flex gap-2 pt-2">

@@ -91,7 +91,7 @@ export function CalendarHeatmap({ days, maxExpense }: Props) {
                 </div>
                 <div className="text-sm text-gray-600">
                   Total: <span className="font-semibold">{formatCurrency(day.totalExpense)}</span>
-                  {" "} ({day.transactionCount} {day.transactionCount === 1 ? "transacao" : "transacoes"})
+                  {" "} ({day.transactionCount} {day.transactionCount === 1 ? "transação" : "transações"})
                 </div>
                 {day.transactions.length > 0 && (
                   <div className="border-t pt-2 space-y-1 max-h-40 overflow-y-auto">

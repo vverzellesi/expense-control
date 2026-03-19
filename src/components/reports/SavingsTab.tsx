@@ -95,7 +95,7 @@ export function SavingsTab() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
-              {streak} {streak === 1 ? "mes" : "meses"}
+              {streak} {streak === 1 ? "mês" : "meses"}
             </div>
             <p className="text-xs text-muted-foreground">
               meses consecutivos atingindo a meta
@@ -105,7 +105,7 @@ export function SavingsTab() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Melhor Mes</CardTitle>
+            <CardTitle className="text-sm font-medium">Melhor Mês</CardTitle>
             <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -120,7 +120,7 @@ export function SavingsTab() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pior Mes</CardTitle>
+            <CardTitle className="text-sm font-medium">Pior Mês</CardTitle>
             <TrendingDown className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
@@ -136,7 +136,7 @@ export function SavingsTab() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Media Mensal
+              Média Mensal
             </CardTitle>
             <Target className="h-4 w-4 text-blue-500" />
           </CardHeader>
@@ -145,7 +145,7 @@ export function SavingsTab() {
               {formatCurrency(averageActual)}
             </div>
             <p className="text-xs text-muted-foreground">
-              economia media por mes
+              economia média por mês
             </p>
           </CardContent>
         </Card>
@@ -154,7 +154,7 @@ export function SavingsTab() {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Historico de Economia</CardTitle>
+          <CardTitle>Histórico de Economia</CardTitle>
         </CardHeader>
         <CardContent>
           <SavingsHistoryChart data={data} />
@@ -172,7 +172,7 @@ export function SavingsTab() {
               <thead>
                 <tr className="border-b text-left">
                   <th className="pb-3 font-medium text-muted-foreground">
-                    Mes
+                    Mês
                   </th>
                   <th className="pb-3 text-right font-medium text-muted-foreground">
                     Meta

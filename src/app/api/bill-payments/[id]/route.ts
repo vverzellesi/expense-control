@@ -20,7 +20,7 @@ export async function GET(
 
     if (!billPayment) {
       return NextResponse.json(
-        { error: "Pagamento de fatura nao encontrado" },
+        { error: "Pagamento de fatura não encontrado" },
         { status: 404 }
       );
     }
@@ -60,7 +60,7 @@ export async function PUT(
 
     if (!existingBillPayment) {
       return NextResponse.json(
-        { error: "Pagamento de fatura nao encontrado" },
+        { error: "Pagamento de fatura não encontrado" },
         { status: 404 }
       );
     }
@@ -112,7 +112,7 @@ export async function PUT(
       // Validate installments for FINANCED type
       if (paymentType === "FINANCED" && (!installments || installments < 2)) {
         return NextResponse.json(
-          { error: "Para parcelamento, o numero de parcelas deve ser pelo menos 2" },
+          { error: "Para parcelamento, o número de parcelas deve ser pelo menos 2" },
           { status: 400 }
         );
       }
@@ -123,7 +123,7 @@ export async function PUT(
     // If no fields to update, return error
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { error: "Nenhum campo valido para atualizar" },
+        { error: "Nenhum campo válido para atualizar" },
         { status: 400 }
       );
     }
@@ -171,7 +171,7 @@ export async function DELETE(
 
     if (!existingBillPayment) {
       return NextResponse.json(
-        { error: "Pagamento de fatura nao encontrado" },
+        { error: "Pagamento de fatura não encontrado" },
         { status: 404 }
       );
     }

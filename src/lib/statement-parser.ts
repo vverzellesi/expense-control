@@ -54,7 +54,7 @@ const MONTH_FULL: Record<string, number> = {
 // Bank detection patterns
 const BANK_PATTERNS: Record<string, RegExp[]> = {
   "Extrato C6": [/C6\s*BANK/i, /BANCO\s*C6/i, /C6\s*S\.?A/i],
-  "Extrato Itau": [
+  "Extrato Itaú": [
     /ITAU/i,
     /ITAÚ/i,
     /BANCO\s*ITAU/i,
@@ -109,7 +109,7 @@ export function detectBank(text: string): string {
       }
     }
   }
-  return "Extrato Bancario";
+  return "Extrato Bancário";
 }
 
 /**
@@ -588,7 +588,7 @@ function extractFromLine(
   }
 
   if (!description || description.length < 3) {
-    description = "Transacao";
+    description = "Transação";
   }
 
   const type = detectTransactionType(description, amount, line, isCreditCard);
@@ -698,9 +698,9 @@ export function suggestCategoryForStatement(
     "PIX ENVIADO": "Outros",
     "TED RECEBIDO": "Outros",
     "TED ENVIADO": "Outros",
-    BOLETO: "Servicos",
-    "DEBITO AUTO": "Servicos",
-    TARIFA: "Servicos",
+    BOLETO: "Serviços",
+    "DEBITO AUTO": "Serviços",
+    TARIFA: "Serviços",
     SAQUE: "Outros",
     DEPOSITO: "Outros",
     RENDIMENTO: "Investimentos",

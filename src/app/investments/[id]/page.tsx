@@ -135,7 +135,7 @@ export default function InvestmentDetailPage() {
 
       toast({
         title: "Sucesso",
-        description: "Investimento excluido com sucesso",
+        description: "Investimento excluído com sucesso",
       });
       router.push("/investments");
     } catch (error) {
@@ -272,7 +272,7 @@ export default function InvestmentDetailPage() {
   if (!investment) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-gray-500">Investimento nao encontrado</div>
+        <div className="text-gray-500">Investimento não encontrado</div>
       </div>
     );
   }
@@ -467,12 +467,12 @@ export default function InvestmentDetailPage() {
       {/* Transaction History */}
       <Card>
         <CardHeader>
-          <CardTitle>Historico de Transacoes</CardTitle>
+          <CardTitle>Histórico de Transações</CardTitle>
         </CardHeader>
         <CardContent>
           {investment.transactions.length === 0 ? (
             <p className="text-center text-gray-500 py-8">
-              Nenhuma transacao registrada
+              Nenhuma transação registrada
             </p>
           ) : (
             <div className="space-y-3">
@@ -530,7 +530,7 @@ export default function InvestmentDetailPage() {
       {investment.description && (
         <Card>
           <CardHeader>
-            <CardTitle>Descricao</CardTitle>
+            <CardTitle>Descrição</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 whitespace-pre-wrap">
@@ -571,7 +571,7 @@ export default function InvestmentDetailPage() {
                 placeholder="0,00"
               />
               <p className="text-sm text-gray-500 mt-1">
-                Atualiza o valor atual do investimento sem criar uma transacao de aporte ou resgate.
+                Atualiza o valor atual do investimento sem criar uma transação de aporte ou resgate.
               </p>
             </div>
             <div className="flex gap-2 pt-4">
@@ -620,7 +620,7 @@ export default function InvestmentDetailPage() {
               />
             </div>
             <div>
-              <Label htmlFor="depositNotes">Observacoes (opcional)</Label>
+              <Label htmlFor="depositNotes">Observações (opcional)</Label>
               <Input
                 id="depositNotes"
                 value={depositNotes}
@@ -678,7 +678,7 @@ export default function InvestmentDetailPage() {
               />
             </div>
             <div>
-              <Label htmlFor="withdrawNotes">Observacoes (opcional)</Label>
+              <Label htmlFor="withdrawNotes">Observações (opcional)</Label>
               <Input
                 id="withdrawNotes"
                 value={withdrawNotes}
@@ -711,9 +711,9 @@ export default function InvestmentDetailPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este investimento? Esta acao nao pode ser desfeita. As transacoes vinculadas serao mantidas no historico.
+              Tem certeza que deseja excluir este investimento? Esta ação não pode ser desfeita. As transações vinculadas serão mantidas no histórico.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!name || !categoryId || initialValue === undefined) {
       return NextResponse.json(
-        { error: "Campos obrigatorios: name, categoryId, initialValue" },
+        { error: "Campos obrigatórios: name, categoryId, initialValue" },
         { status: 400 }
       );
     }

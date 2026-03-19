@@ -54,7 +54,7 @@ export function InvestmentForm({
     if (!name.trim()) {
       toast({
         title: "Erro",
-        description: "O nome do investimento e obrigatorio",
+        description: "O nome do investimento é obrigatório",
         variant: "destructive",
       });
       return;
@@ -72,7 +72,7 @@ export function InvestmentForm({
     if (!isEditMode && !initialValue) {
       toast({
         title: "Erro",
-        description: "O valor inicial e obrigatorio",
+        description: "O valor inicial é obrigatório",
         variant: "destructive",
       });
       return;
@@ -212,7 +212,7 @@ export function InvestmentForm({
           </div>
 
           <div>
-            <Label htmlFor="description">Descricao (opcional)</Label>
+            <Label htmlFor="description">Descrição (opcional)</Label>
             <textarea
               id="description"
               value={description}

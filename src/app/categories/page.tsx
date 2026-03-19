@@ -163,7 +163,7 @@ export default function CategoriesPage() {
 
       toast({
         title: "Sucesso",
-        description: "Categoria excluida com sucesso",
+        description: "Categoria excluída com sucesso",
       });
 
       setDeletingId(null);
@@ -220,7 +220,7 @@ export default function CategoriesPage() {
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Alimentacao"
+                  placeholder="Ex: Alimentação"
                 />
               </div>
 

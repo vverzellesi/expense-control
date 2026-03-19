@@ -51,11 +51,11 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
 
-// Detecta transacoes especiais de cartao de credito
+// Detecta transações especiais de cartão de crédito
 function detectSpecialTransaction(description: string): { type: SpecialTransactionType; warning: string } | null {
   const upperDesc = description.toUpperCase();
 
-  // Pagamento de fatura (credito na fatura)
+  // Pagamento de fatura (crédito na fatura)
   if (
     upperDesc.includes("INCLUSAO DE PAGAMENTO") ||
     upperDesc.includes("PAGAMENTO RECEBIDO") ||
@@ -66,7 +66,7 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "BILL_PAYMENT",
-      warning: "Este e um registro de pagamento da fatura anterior. Normalmente deve ser ignorado ou tratado como credito."
+      warning: "Este é um registro de pagamento da fatura anterior. Normalmente deve ser ignorado ou tratado como crédito."
     };
   }
 
@@ -80,7 +80,7 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "FINANCING",
-      warning: "Este e um parcelamento/refinanciamento de divida. O valor original ja foi contabilizado anteriormente."
+      warning: "Este é um parcelamento/refinanciamento de dívida. O valor original já foi contabilizado anteriormente."
     };
   }
 
@@ -94,7 +94,7 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "REFUND",
-      warning: "Este e um estorno/devolucao. O valor sera creditado (positivo)."
+      warning: "Este é um estorno/devolução. O valor será creditado (positivo)."
     };
   }
 
@@ -106,11 +106,11 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "FEE",
-      warning: "Esta e uma tarifa/anuidade do cartao."
+      warning: "Esta é uma tarifa/anuidade do cartão."
     };
   }
 
-  // IOF (transacoes internacionais)
+  // IOF (transações internacionais)
   if (
     upperDesc.includes(" IOF") ||
     upperDesc.includes("IOF ") ||
@@ -118,11 +118,11 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "IOF",
-      warning: "Este e o IOF de uma transacao internacional."
+      warning: "Este é o IOF de uma transação internacional."
     };
   }
 
-  // Spread de cotacao (transacoes internacionais)
+  // Spread de cotação (transações internacionais)
   if (
     upperDesc.includes("COTACAO") ||
     upperDesc.includes("COTAÇÃO") ||
@@ -132,7 +132,7 @@ function detectSpecialTransaction(description: string): { type: SpecialTransacti
   ) {
     return {
       type: "CURRENCY_SPREAD",
-      warning: "Este e o spread de cotacao de uma transacao internacional."
+      warning: "Este é o spread de cotação de uma transação internacional."
     };
   }
 
@@ -264,8 +264,8 @@ export default function ImportPage() {
 
       if (data.hasDuplicates) {
         toast({
-          title: "Possiveis duplicatas detectadas",
-          description: `${data.duplicates.length} transacao(es) podem ja existir no sistema`,
+          title: "Possíveis duplicatas detectadas",
+          description: `${data.duplicates.length} transação(ões) podem já existir no sistema`,
           variant: "destructive",
         });
       }
@@ -273,7 +273,7 @@ export default function ImportPage() {
       if (data.hasRelatedInstallments) {
         toast({
           title: "Parcelas relacionadas encontradas",
-          description: `${data.relatedInstallments.length} parcela(s) sao continuacao de compras existentes`,
+          description: `${data.relatedInstallments.length} parcela(s) são continuação de compras existentes`,
         });
       }
 
@@ -407,18 +407,18 @@ export default function ImportPage() {
     let detectedOrigin = "Importação CSV";
 
     if (lowerContent.includes("c6") || file.name.toLowerCase().includes("c6")) {
-      detectedOrigin = "Cartao C6";
+      detectedOrigin = "Cartão C6";
     } else if (
       lowerContent.includes("itau") ||
       lowerContent.includes("itaú") ||
       file.name.toLowerCase().includes("itau")
     ) {
-      detectedOrigin = "Cartao Itau";
+      detectedOrigin = "Cartão Itaú";
     } else if (
       lowerContent.includes("btg") ||
       file.name.toLowerCase().includes("btg")
     ) {
-      detectedOrigin = "Cartao BTG";
+      detectedOrigin = "Cartão BTG";
     }
 
     setOrigin(detectedOrigin);
@@ -426,7 +426,7 @@ export default function ImportPage() {
     // Parse CSV locally
     const lines = text.split("\n").filter((line) => line.trim());
     if (lines.length < 2) {
-      throw new Error("Arquivo vazio ou invalido");
+      throw new Error("Arquivo vazio ou inválido");
     }
 
     const headers = lines[0].split(/[,;]/).map((h) => h.trim().toLowerCase());
@@ -842,7 +842,7 @@ export default function ImportPage() {
     if (confidence >= 90) {
       return <Badge className="bg-green-100 text-green-800">Alta</Badge>;
     } else if (confidence >= 70) {
-      return <Badge className="bg-yellow-100 text-yellow-800">Media</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-800">Média</Badge>;
     } else {
       return <Badge className="bg-red-100 text-red-800">Baixa</Badge>;
     }
@@ -1043,7 +1043,7 @@ export default function ImportPage() {
                     {duplicateCount > 0 && (
                       <span className="flex items-center gap-1 text-orange-600">
                         <AlertTriangle className="h-4 w-4" />
-                        {duplicateCount} possivel(eis) duplicata(s)
+                        {duplicateCount} possível(eis) duplicata(s)
                       </span>
                     )}
                     {relatedInstallmentCount > 0 && (
@@ -1055,7 +1055,7 @@ export default function ImportPage() {
                     {recurringAlreadyCount > 0 && (
                       <span className="flex items-center gap-1 text-amber-600">
                         <RefreshCw className="h-4 w-4" />
-                        {recurringAlreadyCount} recorrente(s) ja gerada(s)
+                        {recurringAlreadyCount} recorrente(s) já gerada(s)
                       </span>
                     )}
                     {recurringMatchCount > 0 && (
@@ -1115,7 +1115,7 @@ export default function ImportPage() {
                       placeholder="Selecione"
                     />
                     <span className="text-xs text-blue-600">
-                      As datas das parcelas serao ajustadas para este mes
+                      As datas das parcelas serão ajustadas para este mês
                     </span>
                   </div>
                 )}
@@ -1126,7 +1126,7 @@ export default function ImportPage() {
                       <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-amber-800">
-                          Transacoes especiais detectadas ({specialCount})
+                          Transações especiais detectadas ({specialCount})
                         </p>
                         <ul className="text-xs text-amber-700 space-y-1">
                           {billPaymentCount > 0 && (
@@ -1144,7 +1144,7 @@ export default function ImportPage() {
                           {(specialCount - billPaymentCount - financingCount) > 0 && (
                             <li className="flex items-center gap-1">
                               <Info className="h-3 w-3" />
-                              <strong>{specialCount - billPaymentCount - financingCount}</strong> outras transacoes especiais (IOF, taxas, estornos)
+                              <strong>{specialCount - billPaymentCount - financingCount}</strong> outras transações especiais (IOF, taxas, estornos)
                             </li>
                           )}
                         </ul>
@@ -1249,7 +1249,7 @@ export default function ImportPage() {
                             {t.recurringAlreadyGenerated && (
                               <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
                                 <AlertTriangle className="h-3 w-3 mr-1" />
-                                Ja gerada
+                                Já gerada
                               </Badge>
                             )}
                             {t.recurringMatchId && !t.recurringAlreadyGenerated && (
@@ -1335,7 +1335,7 @@ export default function ImportPage() {
                           {fileType === "ocr" && (
                             <div>
                               <Label className="text-xs text-gray-500 mb-1 block">
-                                Descricao
+                                Descrição
                               </Label>
                               {t.isEditing ? (
                                 <div className="flex items-center gap-2">
@@ -1371,7 +1371,7 @@ export default function ImportPage() {
                                   onClick={() => startEditing(index)}
                                 >
                                   <Pencil className="h-3 w-3 mr-1" />
-                                  Editar descricao
+                                  Editar descrição
                                 </Button>
                               )}
                             </div>
@@ -1517,7 +1517,7 @@ export default function ImportPage() {
                                 <Badge
                                   variant="outline"
                                   className="text-xs bg-blue-50 text-blue-700 border-blue-200"
-                                  title={`Continuacao de: ${t.relatedInstallmentInfo.relatedDescription}`}
+                                  title={`Continuação de: ${t.relatedInstallmentInfo.relatedDescription}`}
                                 >
                                   <Link2 className="h-3 w-3 mr-1" />
                                   Vinculada a {t.relatedInstallmentInfo.relatedInstallment}/{t.totalInstallments}
@@ -1532,7 +1532,7 @@ export default function ImportPage() {
                               {t.recurringAlreadyGenerated && (
                                 <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
                                   <AlertTriangle className="h-3 w-3 mr-1" />
-                                  Recorrente ja gerada
+                                  Recorrente já gerada
                                 </Badge>
                               )}
                               {t.recurringMatchId && !t.recurringAlreadyGenerated && (

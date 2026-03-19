@@ -119,7 +119,7 @@ export function FilterDrawer({
         <div className="overflow-y-auto px-4 py-4 space-y-6" style={{ height: "calc(70vh - 140px)" }}>
           {/* Date Range */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Periodo</Label>
+            <Label className="text-sm font-medium">Período</Label>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs text-gray-500">De</Label>
@@ -132,7 +132,7 @@ export function FilterDrawer({
                 />
               </div>
               <div>
-                <Label className="text-xs text-gray-500">Ate</Label>
+                <Label className="text-xs text-gray-500">Até</Label>
                 <Input
                   type="date"
                   value={localFilters.endDate}

@@ -98,7 +98,7 @@ export function OverviewTab({ filterMonth, filterYear }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo do Mes</CardTitle>
+            <CardTitle className="text-sm font-medium">Saldo do Mês</CardTitle>
           </CardHeader>
           <CardContent>
             <div
@@ -125,7 +125,7 @@ export function OverviewTab({ filterMonth, filterYear }: Props) {
               <CategoryPieChart data={data.categoryBreakdown} />
             ) : (
               <div className="flex h-64 items-center justify-center text-gray-500">
-                Nenhuma despesa neste periodo
+                Nenhuma despesa neste período
               </div>
             )}
           </CardContent>
@@ -133,7 +133,7 @@ export function OverviewTab({ filterMonth, filterYear }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Evolucao Mensal</CardTitle>
+            <CardTitle>Evolução Mensal</CardTitle>
           </CardHeader>
           <CardContent>
             {data?.monthlyData && data.monthlyData.length > 0 ? (

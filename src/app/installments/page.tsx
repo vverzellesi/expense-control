@@ -449,7 +449,7 @@ export default function InstallmentsPage() {
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir este parcelamento? Todas as parcelas
               serão excluídas. Esta ação não pode ser desfeita.

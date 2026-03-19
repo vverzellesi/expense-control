@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Generate CSV content
-    const headers = ["Data", "Descricao", "Valor", "Tipo", "Categoria", "Origem", "Fixa", "Parcelada"];
+    const headers = ["Data", "Descrição", "Valor", "Tipo", "Categoria", "Origem", "Fixa", "Parcelada"];
     const rows = transactions.map((t) => [
       new Date(t.date).toLocaleDateString("pt-BR"),
       `"${t.description.replace(/"/g, '""')}"`,
@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
       t.type === "INCOME" ? "Receita" : "Despesa",
       t.category?.name || "Sem categoria",
       t.origin,
-      t.isFixed ? "Sim" : "Nao",
-      t.isInstallment ? "Sim" : "Nao",
+      t.isFixed ? "Sim" : "Não",
+      t.isInstallment ? "Sim" : "Não",
     ]);
 
     const csv = [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error exporting transactions:", error);
     return NextResponse.json(
-      { error: "Erro ao exportar transacoes" },
+      { error: "Erro ao exportar transações" },
       { status: 500 }
     );
   }

@@ -169,7 +169,7 @@ export async function parseCSV(
           if (bankType === "unknown") {
             reject(
               new Error(
-                "Formato de arquivo nao reconhecido. Por favor, use um arquivo CSV do C6, Itau ou BTG."
+                "Formato de arquivo não reconhecido. Por favor, use um arquivo CSV do C6, Itaú ou BTG."
               )
             );
             return;
@@ -226,16 +226,16 @@ export function detectBankFromContent(content: string): string {
   const lowerContent = content.toLowerCase();
 
   if (lowerContent.includes("c6 bank") || lowerContent.includes("c6bank")) {
-    return "Cartao C6";
+    return "Cartão C6";
   }
 
   if (lowerContent.includes("itau") || lowerContent.includes("itaú")) {
-    return "Cartao Itau";
+    return "Cartão Itaú";
   }
 
   if (lowerContent.includes("btg")) {
-    return "Cartao BTG";
+    return "Cartão BTG";
   }
 
-  return "Importacao CSV";
+  return "Importação CSV";
 }

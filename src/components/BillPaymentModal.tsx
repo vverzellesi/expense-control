@@ -143,7 +143,7 @@ export function BillPaymentModal({
     if (parsedAmountToPay <= 0) {
       toast({
         title: "Erro",
-        description: "Informe um valor valido para pagamento",
+        description: "Informe um valor válido para pagamento",
         variant: "destructive",
       });
       return;
@@ -211,7 +211,7 @@ export function BillPaymentModal({
         title: "Sucesso",
         description:
           partialType === "rollover"
-            ? "Pagamento parcial registrado. Saldo rolado para proxima fatura."
+            ? "Pagamento parcial registrado. Saldo rolado para próxima fatura."
             : `Financiamento registrado em ${installmentCount}x`,
       });
 
@@ -315,7 +315,7 @@ export function BillPaymentModal({
                     onChange={() => setPartialType("rollover")}
                     className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <p className="font-medium">Rolar saldo para proxima fatura</p>
+                  <p className="font-medium">Rolar saldo para próxima fatura</p>
                 </div>
 
                 {partialType === "rollover" && (
@@ -331,7 +331,7 @@ export function BillPaymentModal({
 
                     <div className="text-sm">
                       <span className="text-muted-foreground">
-                        Saldo para proxima fatura:{" "}
+                        Saldo para próxima fatura:{" "}
                       </span>
                       <span className="font-semibold">
                         {formatCurrency(remainingAmount)}
