@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
-import { detectOriginFromCSV, type StatementType } from "@/lib/csv-parser";
+import { detectOriginFromCSV, isC6ExchangeRateRow, type StatementType } from "@/lib/csv-parser";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
 
 // Detecta transações especiais de cartão de crédito
@@ -189,6 +189,23 @@ export default function ImportPage() {
   useEffect(() => {
     fetchCategories();
   }, []);
+
+  // Re-run duplicate and recurring checks when origin changes after initial load
+  const originCheckRef = useRef(origin);
+  useEffect(() => {
+    if (!origin || origin === originCheckRef.current || transactions.length === 0 || step !== "preview") {
+      originCheckRef.current = origin;
+      return;
+    }
+    originCheckRef.current = origin;
+
+    async function recheckWithNewOrigin() {
+      const transactionsWithDuplicates = await checkDuplicates(transactions);
+      const transactionsWithRecurring = await checkRecurringMatches(transactionsWithDuplicates);
+      setTransactions(transactionsWithRecurring);
+    }
+    recheckWithNewOrigin();
+  }, [origin]);
 
   useEffect(() => {
     if (!invoiceMonth || transactions.length === 0) return;
@@ -487,6 +504,10 @@ export default function ImportPage() {
       const amount = parseFloat(amountStr);
 
       if (isNaN(amount)) continue;
+
+      // Skip C6 exchange rate informational rows (cotação, CUUSD, SPREAD)
+      // These contain the exchange rate in the value field, not a real transaction
+      if (isC6ExchangeRateRow(description)) continue;
 
       // Check for installment pattern using the improved detectInstallment function
       const installmentInfo = detectInstallment(description);

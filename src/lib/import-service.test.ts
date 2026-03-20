@@ -22,6 +22,16 @@ describe('replaceInstallmentNumber', () => {
       .toBe('LOJA XYZ PARC 5 DE 10')
   })
 
+  it('should replace "PARCELA X DE Y" format', () => {
+    expect(replaceInstallmentNumber('COMPRA PARCELA 3 DE 6', 4, 6))
+      .toBe('COMPRA PARCELA 4 DE 6')
+  })
+
+  it('should replace "Parcela X DE Y" case insensitive', () => {
+    expect(replaceInstallmentNumber('LOJA Parcela 2 de 12', 3, 12))
+      .toBe('LOJA Parcela 3 de 12')
+  })
+
   it('should replace trailing "X/Y" format', () => {
     expect(replaceInstallmentNumber('LOJA XYZ 3/10', 5, 10))
       .toBe('LOJA XYZ 5/10')

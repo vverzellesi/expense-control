@@ -19,9 +19,10 @@ export function replaceInstallmentNumber(
 ): string {
   const patterns = [
     /([-–]\s*Parcela\s+)\d+(\s*[\/\\]\s*)\d+/i,
+    /(Parcela\s+)\d+(\s*DE\s*)\d+/i,
     /(Parcela\s+)\d+(\s*[\/\\]\s*)\d+/i,
-    /(PARC\s+)\d+(\s*[\/\\]\s*)\d+/i,
     /(PARC\s+)\d+(\s*DE\s*)\d+/i,
+    /(PARC\s+)\d+(\s*[\/\\]\s*)\d+/i,
     /(\s)\d+(\s*[\/\\]\s*)\d+(\s*$)/i,
   ];
 
