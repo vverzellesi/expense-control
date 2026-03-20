@@ -54,9 +54,10 @@ export async function GET(request: NextRequest) {
       const monthIndex = d.getMonth(); // 0-based
       if (t.type === "INCOME") {
         monthlyIncome[monthIndex] += t.amount;
-      } else {
+      } else if (t.type === "EXPENSE") {
         monthlyExpense[monthIndex] += Math.abs(t.amount);
       }
+      // TRANSFER is excluded from totals
     }
 
     const currentMonth = new Date().getMonth(); // 0-based

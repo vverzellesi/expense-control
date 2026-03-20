@@ -252,7 +252,7 @@ export default function ImportPage() {
         return {
           ...t,
           isDuplicate: data.duplicates.includes(index),
-          selected: !data.duplicates.includes(index), // Auto-deselect duplicates only
+          selected: data.duplicates.includes(index) ? false : t.selected,
           isRelatedInstallment: !!related,
           relatedInstallmentInfo: related ? {
             relatedTransactionId: related.relatedTransactionId,
@@ -526,10 +526,16 @@ export default function ImportPage() {
       }
 
       // Determine transaction type based on special type detection
+      // Transfer takes priority over specialTx because patterns like
+      // "INCLUSAO DE PAGAMENTO" match both detectTransfer and BILL_PAYMENT,
+      // but they represent internal transfers, not income.
       let transactionType: TransactionType = "EXPENSE";
       let finalAmount = amount;
 
-      if (specialTx) {
+      if (isTransfer) {
+        transactionType = "TRANSFER";
+        finalAmount = amount; // Keep original sign
+      } else if (specialTx) {
         switch (specialTx.type) {
           case "BILL_PAYMENT":
             // Bill payments should be positive (credit) or ignored
@@ -556,9 +562,6 @@ export default function ImportPage() {
             finalAmount = -Math.abs(amount);
             break;
         }
-      } else if (isTransfer) {
-        transactionType = "TRANSFER";
-        finalAmount = amount; // Keep original sign
       } else if (amount > 0) {
         transactionType = "INCOME";
         finalAmount = Math.abs(amount);
@@ -578,8 +581,8 @@ export default function ImportPage() {
         }
       }
 
-      // Auto-deselect bill payments (they shouldn't be imported as regular transactions)
-      const shouldBeSelected = specialTx?.type !== "BILL_PAYMENT";
+      // Auto-deselect bill payments and transfers (they shouldn't be imported as regular transactions)
+      const shouldBeSelected = specialTx?.type !== "BILL_PAYMENT" && !isTransfer;
 
       parsedTransactions.push({
         description,

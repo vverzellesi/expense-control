@@ -421,6 +421,25 @@ describe('detectTransfer', () => {
     })
   })
 
+  describe('PIX/TED/DOC between own accounts', () => {
+    it('should detect PIX between own accounts', () => {
+      expect(detectTransfer('PIX TRANSF ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('PIX TRANSF CONTA PROPRIA')).toBe(true)
+      expect(detectTransfer('PIX TRANSF CONTA PRÓPRIA')).toBe(true)
+    })
+
+    it('should detect TED between own accounts', () => {
+      expect(detectTransfer('TED ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('TED CONTA PROPRIA')).toBe(true)
+      expect(detectTransfer('TED PRÓPRIA')).toBe(true)
+    })
+
+    it('should detect DOC between own accounts', () => {
+      expect(detectTransfer('DOC ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('DOC CONTA PROPRIA')).toBe(true)
+    })
+  })
+
   describe('non-transfers', () => {
     it('should not detect regular purchases', () => {
       expect(detectTransfer('MERCADO LIVRE COMPRA')).toBe(false)
@@ -428,9 +447,15 @@ describe('detectTransfer', () => {
       expect(detectTransfer('NETFLIX SUBSCRIPTION')).toBe(false)
     })
 
-    it('should not detect PIX (not a transfer type in this context)', () => {
-      // PIX by itself is not a transfer pattern in this implementation
-      expect(detectTransfer('PIX ENVIADO')).toBe(false)
+    it('should not detect generic PIX/TED/DOC (could be to third parties)', () => {
+      expect(detectTransfer('PIX ENVIADO CP JOAO SILVA')).toBe(false)
+      expect(detectTransfer('PIX RECEBIDO CP MARIA SANTOS')).toBe(false)
+      expect(detectTransfer('PIX TRANSF ITAU')).toBe(false)
+      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(false)
+      expect(detectTransfer('TED ENVIADO')).toBe(false)
+      expect(detectTransfer('TED RECEBIDO')).toBe(false)
+      expect(detectTransfer('DOC ENVIADO')).toBe(false)
+      expect(detectTransfer('DOC TRANSFERENCIA')).toBe(false)
     })
   })
 })
