@@ -41,9 +41,6 @@ next-env.d.ts
 .idea/
 .vscode/
 
-# Claude Code checkpoints
-.entire/
-
 docs/plans/
 ai_docs/brainstorm/
 ai_docs/research/
@@ -53,3 +50,5 @@ ai_docs/oracle/
 # Worktrees
 .worktrees/
 /scripts/reset-password.ts
+
+personal/
