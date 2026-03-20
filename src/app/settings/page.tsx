@@ -82,6 +82,20 @@ export default function SettingsPage() {
   const [editingOrigin, setEditingOrigin] = useState<Origin | null>(null);
   const [editOriginName, setEditOriginName] = useState("");
   const [deletingOrigin, setDeletingOrigin] = useState<Origin | null>(null);
+  const [newOriginType, setNewOriginType] = useState<string>("OTHER");
+  const [newOriginCreditLimit, setNewOriginCreditLimit] = useState("");
+  const [newOriginRotativo, setNewOriginRotativo] = useState("");
+  const [newOriginParcelamento, setNewOriginParcelamento] = useState("");
+  const [newOriginCet, setNewOriginCet] = useState("");
+  const [newOriginBillingDay, setNewOriginBillingDay] = useState("");
+  const [newOriginDueDay, setNewOriginDueDay] = useState("");
+  const [editOriginType, setEditOriginType] = useState<string>("OTHER");
+  const [editOriginCreditLimit, setEditOriginCreditLimit] = useState("");
+  const [editOriginRotativo, setEditOriginRotativo] = useState("");
+  const [editOriginParcelamento, setEditOriginParcelamento] = useState("");
+  const [editOriginCet, setEditOriginCet] = useState("");
+  const [editOriginBillingDay, setEditOriginBillingDay] = useState("");
+  const [editOriginDueDay, setEditOriginDueDay] = useState("");
 
   // Current month spending
   const [spending, setSpending] = useState<Record<string, number>>({});
@@ -439,6 +453,13 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newOriginName.trim(),
+          type: newOriginType,
+          creditLimit: newOriginCreditLimit ? parseFloat(newOriginCreditLimit) : null,
+          rotativoRateMonth: newOriginRotativo ? parseFloat(newOriginRotativo) : null,
+          parcelamentoRate: newOriginParcelamento ? parseFloat(newOriginParcelamento) : null,
+          cetAnual: newOriginCet ? parseFloat(newOriginCet) : null,
+          billingCycleDay: newOriginBillingDay ? parseInt(newOriginBillingDay) : null,
+          dueDateDay: newOriginDueDay ? parseInt(newOriginDueDay) : null,
         }),
       });
 
@@ -453,6 +474,13 @@ export default function SettingsPage() {
       });
 
       setNewOriginName("");
+      setNewOriginType("OTHER");
+      setNewOriginCreditLimit("");
+      setNewOriginRotativo("");
+      setNewOriginParcelamento("");
+      setNewOriginCet("");
+      setNewOriginBillingDay("");
+      setNewOriginDueDay("");
       fetchData();
     } catch (error) {
       toast({
@@ -474,6 +502,13 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editOriginName.trim(),
+          type: editOriginType,
+          creditLimit: editOriginCreditLimit ? parseFloat(editOriginCreditLimit) : null,
+          rotativoRateMonth: editOriginRotativo ? parseFloat(editOriginRotativo) : null,
+          parcelamentoRate: editOriginParcelamento ? parseFloat(editOriginParcelamento) : null,
+          cetAnual: editOriginCet ? parseFloat(editOriginCet) : null,
+          billingCycleDay: editOriginBillingDay ? parseInt(editOriginBillingDay) : null,
+          dueDateDay: editOriginDueDay ? parseInt(editOriginDueDay) : null,
         }),
       });
 
@@ -996,15 +1031,104 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAddOrigin} className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <Input
-                    value={newOriginName}
-                    onChange={(e) => setNewOriginName(e.target.value)}
-                    placeholder="Nome da origem"
-                    className="min-h-[44px]"
-                  />
+              <form onSubmit={handleAddOrigin} className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Input
+                      value={newOriginName}
+                      onChange={(e) => setNewOriginName(e.target.value)}
+                      placeholder="Nome da origem"
+                      className="min-h-[44px]"
+                    />
+                  </div>
+                  <div className="w-full sm:w-48">
+                    <Select value={newOriginType} onValueChange={setNewOriginType}>
+                      <SelectTrigger className="min-h-[44px]">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CREDIT_CARD">Cart&#227;o de Cr&#233;dito</SelectItem>
+                        <SelectItem value="DEBIT">D&#233;bito</SelectItem>
+                        <SelectItem value="PIX">PIX</SelectItem>
+                        <SelectItem value="OTHER">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+
+                {newOriginType === "CREDIT_CARD" && (
+                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <Label className="text-xs text-gray-500">Limite (R$)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={newOriginCreditLimit}
+                        onChange={(e) => setNewOriginCreditLimit(e.target.value)}
+                        placeholder="5000"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Rotativo (%/m&#234;s)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={newOriginRotativo}
+                        onChange={(e) => setNewOriginRotativo(e.target.value)}
+                        placeholder="14.50"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Parcelamento (%)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={newOriginParcelamento}
+                        onChange={(e) => setNewOriginParcelamento(e.target.value)}
+                        placeholder="4.49"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">CET Anual (%)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={newOriginCet}
+                        onChange={(e) => setNewOriginCet(e.target.value)}
+                        placeholder="84.42"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Dia fechamento</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={newOriginBillingDay}
+                        onChange={(e) => setNewOriginBillingDay(e.target.value)}
+                        placeholder="15"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Dia vencimento</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={newOriginDueDay}
+                        onChange={(e) => setNewOriginDueDay(e.target.value)}
+                        placeholder="22"
+                        className="min-h-[36px]"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-end">
                   <Button type="submit" disabled={originSaving} className="w-full sm:w-auto min-h-[44px]">
                     <Plus className="mr-2 h-4 w-4" />
@@ -1033,46 +1157,91 @@ export default function SettingsPage() {
                       className="flex items-center justify-between rounded-lg border p-4"
                     >
                       {editingOrigin?.id === origin.id ? (
-                        <div className="flex items-center gap-2 flex-1">
-                          <Input
-                            value={editOriginName}
-                            onChange={(e) => setEditOriginName(e.target.value)}
-                            className="min-h-[36px]"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleEditOrigin();
-                              } else if (e.key === "Escape") {
+                        <div className="flex flex-col gap-3 flex-1">
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Input
+                              value={editOriginName}
+                              onChange={(e) => setEditOriginName(e.target.value)}
+                              className="min-h-[36px] flex-1"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  setEditingOrigin(null);
+                                  setEditOriginName("");
+                                }
+                              }}
+                            />
+                            <Select value={editOriginType} onValueChange={setEditOriginType}>
+                              <SelectTrigger className="min-h-[36px] w-full sm:w-44">
+                                <SelectValue placeholder="Tipo" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="CREDIT_CARD">Cart&#227;o de Cr&#233;dito</SelectItem>
+                                <SelectItem value="DEBIT">D&#233;bito</SelectItem>
+                                <SelectItem value="PIX">PIX</SelectItem>
+                                <SelectItem value="OTHER">Outro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {editOriginType === "CREDIT_CARD" && (
+                            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <Label className="text-xs text-gray-500">Limite (R$)</Label>
+                                <Input type="number" step="0.01" value={editOriginCreditLimit} onChange={(e) => setEditOriginCreditLimit(e.target.value)} placeholder="5000" className="min-h-[32px]" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500">Rotativo (%/m&#234;s)</Label>
+                                <Input type="number" step="0.01" value={editOriginRotativo} onChange={(e) => setEditOriginRotativo(e.target.value)} placeholder="14.50" className="min-h-[32px]" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500">Parcelamento (%)</Label>
+                                <Input type="number" step="0.01" value={editOriginParcelamento} onChange={(e) => setEditOriginParcelamento(e.target.value)} placeholder="4.49" className="min-h-[32px]" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500">CET Anual (%)</Label>
+                                <Input type="number" step="0.01" value={editOriginCet} onChange={(e) => setEditOriginCet(e.target.value)} placeholder="84.42" className="min-h-[32px]" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500">Dia fechamento</Label>
+                                <Input type="number" min="1" max="31" value={editOriginBillingDay} onChange={(e) => setEditOriginBillingDay(e.target.value)} placeholder="15" className="min-h-[32px]" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500">Dia vencimento</Label>
+                                <Input type="number" min="1" max="31" value={editOriginDueDay} onChange={(e) => setEditOriginDueDay(e.target.value)} placeholder="22" className="min-h-[32px]" />
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleEditOrigin}
+                              className="min-h-[36px]"
+                            >
+                              Salvar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
                                 setEditingOrigin(null);
                                 setEditOriginName("");
-                              }
-                            }}
-                          />
-                          <Button
-                            size="sm"
-                            onClick={handleEditOrigin}
-                            className="min-h-[36px]"
-                          >
-                            Salvar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingOrigin(null);
-                              setEditOriginName("");
-                            }}
-                            className="min-h-[36px]"
-                          >
-                            Cancelar
-                          </Button>
+                              }}
+                              className="min-h-[36px]"
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <Wallet className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                            <span className="font-medium truncate">{origin.name}</span>
+                            <div className="min-w-0">
+                              <span className="font-medium truncate block">{origin.name}</span>
+                              {origin.type === "CREDIT_CARD" && (
+                                <span className="text-xs text-emerald-600">Cart&#227;o de Cr&#233;dito</span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <Button
@@ -1082,6 +1251,13 @@ export default function SettingsPage() {
                               onClick={() => {
                                 setEditingOrigin(origin);
                                 setEditOriginName(origin.name);
+                                setEditOriginType(origin.type || "OTHER");
+                                setEditOriginCreditLimit(origin.creditLimit?.toString() || "");
+                                setEditOriginRotativo(origin.rotativoRateMonth?.toString() || "");
+                                setEditOriginParcelamento(origin.parcelamentoRate?.toString() || "");
+                                setEditOriginCet(origin.cetAnual?.toString() || "");
+                                setEditOriginBillingDay(origin.billingCycleDay?.toString() || "");
+                                setEditOriginDueDay(origin.dueDateDay?.toString() || "");
                               }}
                             >
                               <Pencil className="h-4 w-4 text-gray-500" />
