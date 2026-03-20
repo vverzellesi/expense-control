@@ -63,7 +63,7 @@ function TransactionsContent() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterFixed, setFilterFixed] = useState(false);
   const [filterInstallment, setFilterInstallment] = useState(false);
-  const [filterOrigin, setFilterOrigin] = useState<string>("all");
+  const [filterOrigin, setFilterOrigin] = useState<string>(searchParams.get("origin") || "all");
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");

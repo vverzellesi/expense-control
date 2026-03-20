@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +84,7 @@ function ProportionalBar({ cards, totalAllCards }: { cards: CardSummary[]; total
 }
 
 export default function CartoesPage() {
+  const router = useRouter();
   const [data, setData] = useState<CardsSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
@@ -208,7 +210,7 @@ export default function CartoesPage() {
           {/* Cards Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {data.cards.map((card) => (
-              <Card key={card.id}>
+              <Card key={card.id} className="cursor-pointer transition-shadow hover:shadow-md" onClick={() => router.push(`/transactions?origin=${encodeURIComponent(card.name)}`)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">{card.name}</CardTitle>
