@@ -32,6 +32,13 @@ vi.mock('@/components/onboarding/OnboardingModal', () => ({
 vi.mock('@/components/InvestmentDashboardCard', () => ({
   InvestmentDashboardCard: () => <div data-testid="investment-card">InvestmentDashboardCard</div>,
 }))
+vi.mock('@/components/FinancialHealthSection', () => ({
+  FinancialHealthSection: (props: any) => (
+    <div data-testid="financial-health">
+      FinancialHealthSection income={props.income} expense={props.expense} fixedExpensesTotal={props.fixedExpensesTotal} installmentsTotal={props.installmentsTotal}
+    </div>
+  ),
+}))
 
 import { useSpacePermissions } from '@/lib/hooks/useSpacePermissions'
 const mockUseSpacePermissions = useSpacePermissions as ReturnType<typeof vi.fn>
@@ -50,6 +57,8 @@ const mockSummaryData = {
   budgetAlerts: [],
   allBudgets: [],
   fixedExpenses: [],
+  fixedExpensesTotal: 0,
+  installmentsTotal: 0,
   upcomingInstallments: [],
   weeklySummary: null,
   weeklyBreakdown: null,
@@ -93,5 +102,17 @@ describe('Dashboard', () => {
     })
 
     expect(screen.queryByTestId('investment-card')).toBeNull()
+  })
+
+  it('renders FinancialHealthSection with summary data', async () => {
+    render(<Dashboard />)
+
+    await waitFor(() => {
+      expect(screen.queryByText('Carregando...')).toBeNull()
+    })
+
+    expect(screen.getByTestId('financial-health')).toBeDefined()
+    expect(screen.getByText(/income=5000/)).toBeDefined()
+    expect(screen.getByText(/expense=3000/)).toBeDefined()
   })
 })
