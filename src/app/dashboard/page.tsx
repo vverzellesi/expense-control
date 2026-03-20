@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, Wallet, AlertCircle, AlertTriangle, PiggyBank, Target, Calendar, Zap } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
@@ -14,7 +14,8 @@ import { MonthlyBarChart } from "@/components/Charts/MonthlyBarChart";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { InvestmentDashboardCard } from "@/components/InvestmentDashboardCard";
 import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
-import type { Transaction, Category, WeeklySummary, UnusualTransaction, WeeklyBreakdown } from "@/types";
+import { FinancialHealthSection } from "@/components/FinancialHealthSection";
+import type { Transaction, Category, UnusualTransaction, WeeklySummary, WeeklyBreakdown } from "@/types";
 
 interface BudgetAlert {
   categoryId: string;
@@ -68,6 +69,8 @@ interface SummaryData {
   budgetAlerts: BudgetAlert[];
   allBudgets: BudgetAlert[];
   fixedExpenses: (Transaction & { category: Category | null })[];
+  fixedExpensesTotal: number;
+  installmentsTotal: number;
   upcomingInstallments: (Transaction & { category: Category | null })[];
   weeklySummary: WeeklySummary | null;
   weeklyBreakdown: WeeklyBreakdown | null;
@@ -165,86 +168,13 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* 1. Summary Cards - Top-level KPIs */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receitas</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(data?.summary.income || 0)}
-            </div>
-            {data?.comparison && data.comparison.previousMonth.income > 0 && (
-              <div className={`mt-1 flex items-center text-xs ${
-                data.comparison.incomeChange >= 0 ? "text-green-600" : "text-red-600"
-              }`}>
-                {data.comparison.incomeChange >= 0 ? (
-                  <TrendingUp className="mr-1 h-3 w-3" />
-                ) : (
-                  <TrendingDown className="mr-1 h-3 w-3" />
-                )}
-                {data.comparison.incomeChange >= 0 ? "+" : ""}{data.comparison.incomeChange.toFixed(1)}% vs mês anterior
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Despesas</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(data?.summary.expense || 0)}
-            </div>
-            {data?.comparison && data.comparison.previousMonth.expense > 0 && (
-              <div className={`mt-1 flex items-center text-xs ${
-                data.comparison.expenseChange <= 0 ? "text-green-600" : "text-red-600"
-              }`}>
-                {data.comparison.expenseChange <= 0 ? (
-                  <TrendingDown className="mr-1 h-3 w-3" />
-                ) : (
-                  <TrendingUp className="mr-1 h-3 w-3" />
-                )}
-                {data.comparison.expenseChange >= 0 ? "+" : ""}{data.comparison.expenseChange.toFixed(1)}% vs mês anterior
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo</CardTitle>
-            <Wallet className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                (data?.summary.balance || 0) >= 0
-                  ? "text-green-600"
-                  : "text-red-600"
-              }`}
-            >
-              {formatCurrency(data?.summary.balance || 0)}
-            </div>
-            {data?.comparison && data.comparison.previousMonth.balance !== 0 && (
-              <div className={`mt-1 flex items-center text-xs ${
-                data.comparison.balanceChange >= 0 ? "text-green-600" : "text-red-600"
-              }`}>
-                {data.comparison.balanceChange >= 0 ? (
-                  <TrendingUp className="mr-1 h-3 w-3" />
-                ) : (
-                  <TrendingDown className="mr-1 h-3 w-3" />
-                )}
-                {data.comparison.balanceChange >= 0 ? "+" : ""}{data.comparison.balanceChange.toFixed(1)}% vs mês anterior
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* 1. Financial Health Section */}
+      <FinancialHealthSection
+        income={data?.summary.income || 0}
+        expense={data?.summary.expense || 0}
+        fixedExpensesTotal={data?.fixedExpensesTotal || 0}
+        installmentsTotal={data?.installmentsTotal || 0}
+      />
 
       {/* 2. Charts - Visual overview */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -282,68 +212,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 3. Savings Goal - Key motivator */}
-      {data?.savingsGoal && (
-        <Card className={`border-2 ${
-          data.savingsGoal.isAchieved
-            ? "border-green-200 bg-green-50"
-            : "border-blue-200 bg-blue-50"
-        }`}>
-          <CardHeader className="pb-3">
-            <CardTitle className={`flex items-center gap-2 text-lg ${
-              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
-            }`}>
-              <PiggyBank className="h-5 w-5" />
-              Meta de Economia
-              {data.savingsGoal.isAchieved && (
-                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
-                  Atingida!
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
-                <div className={`text-3xl font-bold ${
-                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
-                }`}>
-                  {formatCurrency(data.savingsGoal.current)}
-                </div>
-                <div className="mt-1 text-sm text-gray-600">
-                  de {formatCurrency(data.savingsGoal.goal)} meta
-                </div>
-                <div className="mt-3">
-                  <Progress
-                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
-                    className={`h-3 ${
-                      data.savingsGoal.isAchieved
-                        ? "[&>div]:bg-green-500"
-                        : "[&>div]:bg-emerald-500"
-                    }`}
-                  />
-                </div>
-                <div className="mt-1 text-xs text-gray-500">
-                  {data.savingsGoal.percentage !== null
-                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
-                    : "0% da meta"}
-                </div>
-              </div>
-              <Link href="/settings">
-                <Button variant="outline" size="sm">
-                  <Target className="mr-2 h-4 w-4" />
-                  Editar Meta
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 3.5. Investments Card */}
-      {permissions.canViewInvestments && <InvestmentDashboardCard />}
-
-      {/* 4. Alerts Section - High priority items need immediate attention */}
+      {/* 3. Alerts Section - High priority items need immediate attention */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader className="pb-3">
@@ -439,49 +308,6 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 4. Weekly Summary - Quick snapshot of current week */}
-      {data?.weeklySummary && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Calendar className="h-5 w-5 text-blue-500" />
-              Resumo da Semana
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div>
-                <div className="text-2xl font-bold text-red-600">
-                  {formatCurrency(data.weeklySummary.currentWeek.total)}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {data.weeklySummary.currentWeek.count} {data.weeklySummary.currentWeek.count !== 1 ? "transações" : "transação"} esta semana
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">
-                  Semana anterior: {formatCurrency(data.weeklySummary.previousWeek.total)}
-                </span>
-                {data.weeklySummary.changePercentage !== null && (
-                  <Badge
-                    variant={data.weeklySummary.changePercentage <= 0 ? "default" : "destructive"}
-                    className={data.weeklySummary.changePercentage <= 0 ? "bg-green-500" : ""}
-                  >
-                    {data.weeklySummary.changePercentage <= 0 ? (
-                      <TrendingDown className="mr-1 h-3 w-3" />
-                    ) : (
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                    )}
-                    {data.weeklySummary.changePercentage >= 0 ? "+" : ""}
-                    {data.weeklySummary.changePercentage.toFixed(0)}%
-                  </Badge>
-                )}
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -673,136 +499,66 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 9. Weekly Breakdown - Detailed view, moved to bottom for power users */}
-      {data?.weeklyBreakdown && data.weeklyBreakdown.weeks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-indigo-500" />
-              Gastos por Semana
+      {/* 9. Savings Goal */}
+      {data?.savingsGoal && (
+        <Card className={`border-2 ${
+          data.savingsGoal.isAchieved
+            ? "border-green-200 bg-green-50"
+            : "border-blue-200 bg-blue-50"
+        }`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${
+              data.savingsGoal.isAchieved ? "text-green-800" : "text-blue-800"
+            }`}>
+              <PiggyBank className="h-5 w-5" />
+              Meta de Economia
+              {data.savingsGoal.isAchieved && (
+                <span className="ml-2 rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
+                  Atingida!
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* Week bars */}
-              <div className="space-y-3">
-                {data.weeklyBreakdown.weeks.map((week) => {
-                  const today = new Date();
-                  const weekStart = new Date(week.startDate);
-                  const weekEnd = new Date(week.endDate);
-
-                  // Determinar se a semana é passada, atual ou futura
-                  const isPastWeek = weekEnd < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                  const isFutureWeek = weekStart > today;
-                  const isCurrentWeek = !isPastWeek && !isFutureWeek;
-
-                  // Só considerar para maior/menor gasto as semanas que já passaram ou estão em andamento
-                  const weeksForComparison = data.weeklyBreakdown!.weeks.filter((w) => {
-                    const wEnd = new Date(w.endDate);
-                    return wEnd <= today || (new Date(w.startDate) <= today && wEnd >= today);
-                  });
-
-                  const maxTotal = Math.max(...data.weeklyBreakdown!.weeks.map((w) => w.total));
-                  const percentage = maxTotal > 0 ? (week.total / maxTotal) * 100 : 0;
-
-                  const maxTotalPastCurrent = Math.max(...weeksForComparison.map((w) => w.total));
-                  const minTotalPastCurrent = Math.min(...weeksForComparison.filter(w => w.total > 0).map((w) => w.total));
-
-                  const isHighest = !isFutureWeek && week.total === maxTotalPastCurrent && week.total > 0;
-                  const isLowest = !isFutureWeek && week.total === minTotalPastCurrent && week.total > 0 && weeksForComparison.filter(w => w.total > 0).length > 1;
-
-                  const startDay = new Date(week.startDate).getDate();
-                  const endDay = new Date(week.endDate).getDate();
-
-                  return (
-                    <div key={week.weekNumber} className={`space-y-1 ${isFutureWeek ? "opacity-60" : ""}`}>
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">Semana {week.weekNumber}</span>
-                          <span className="text-gray-500 text-xs">
-                            ({startDay} - {endDay})
-                          </span>
-                          {isCurrentWeek && (
-                            <Badge variant="outline" className="text-xs border-indigo-500 text-indigo-600">
-                              Atual
-                            </Badge>
-                          )}
-                          {isFutureWeek && (
-                            <Badge variant="outline" className="text-xs border-gray-400 text-gray-500">
-                              Projetado
-                            </Badge>
-                          )}
-                          {isHighest && (
-                            <Badge variant="destructive" className="text-xs">
-                              Maior gasto
-                            </Badge>
-                          )}
-                          {isLowest && (
-                            <Badge className="bg-green-500 text-xs">
-                              Menor gasto
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <span className={`font-semibold ${isFutureWeek ? "text-gray-500" : "text-red-600"}`}>
-                            {formatCurrency(week.total)}
-                          </span>
-                          <span className="text-gray-500 text-xs ml-2">
-                            ({week.count} transações)
-                          </span>
-                        </div>
-                      </div>
-                      <div className="relative h-8 rounded-lg bg-gray-100 overflow-hidden">
-                        <div
-                          className={`absolute left-0 top-0 h-full rounded-lg transition-all ${
-                            isFutureWeek ? "bg-gray-300" :
-                            isHighest ? "bg-red-400" :
-                            isLowest ? "bg-green-400" :
-                            isCurrentWeek ? "bg-indigo-500" : "bg-indigo-400"
-                          }`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                        {/* Category breakdown inside bar */}
-                        {week.categories.length > 0 && (
-                          <div className="absolute inset-0 flex items-center px-2 gap-1">
-                            {week.categories.slice(0, 3).map((cat) => (
-                              <div
-                                key={cat.categoryId}
-                                className="flex items-center gap-1 text-xs text-white bg-black/20 rounded px-1.5 py-0.5"
-                              >
-                                <div
-                                  className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: cat.categoryColor }}
-                                />
-                                <span className="truncate max-w-[60px]">{cat.categoryName}</span>
-                              </div>
-                            ))}
-                            {week.categories.length > 3 && (
-                              <span className="text-xs text-white bg-black/20 rounded px-1.5 py-0.5">
-                                +{week.categories.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <div className={`text-3xl font-bold ${
+                  data.savingsGoal.current >= 0 ? "text-green-600" : "text-red-600"
+                }`}>
+                  {formatCurrency(data.savingsGoal.current)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  de {formatCurrency(data.savingsGoal.goal)} meta
+                </div>
+                <div className="mt-3">
+                  <Progress
+                    value={Math.max(0, Math.min(data.savingsGoal.percentage || 0, 100))}
+                    className={`h-3 ${
+                      data.savingsGoal.isAchieved
+                        ? "[&>div]:bg-green-500"
+                        : "[&>div]:bg-emerald-500"
+                    }`}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {data.savingsGoal.percentage !== null
+                    ? `${Math.max(0, data.savingsGoal.percentage).toFixed(0)}% da meta`
+                    : "0% da meta"}
+                </div>
               </div>
-
-              {/* Summary */}
-              <div className="pt-3 border-t flex justify-between items-center text-sm">
-                <span className="text-gray-500">
-                  Média por semana
-                </span>
-                <span className="font-semibold">
-                  {formatCurrency(data.weeklyBreakdown.averagePerWeek)}
-                </span>
-              </div>
+              <Link href="/settings">
+                <Button variant="outline" size="sm">
+                  <Target className="mr-2 h-4 w-4" />
+                  Editar Meta
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* 10. Investments Card */}
+      {permissions.canViewInvestments && <InvestmentDashboardCard />}
 
       {/* Onboarding Modal */}
       <OnboardingModal
