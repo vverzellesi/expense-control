@@ -26,6 +26,7 @@ import {
   PieChart,
   Calculator,
   Bug,
+  Wallet,
 } from "lucide-react";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
@@ -43,6 +44,7 @@ const navigation: {
 }[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Transações", href: "/transactions", icon: Receipt },
+  { name: "Cartões", href: "/cartoes", icon: Wallet },
   { name: "Investimentos", href: "/investments", icon: TrendingUp, requiredPermission: "canViewInvestments" },
   { name: "Faturas", href: "/bills", icon: FileText },
   { name: "Recorrentes", href: "/recurring", icon: RefreshCw },

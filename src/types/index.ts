@@ -74,9 +74,18 @@ export interface Installment {
   transactions?: Transaction[];
 }
 
+export type OriginType = "CREDIT_CARD" | "DEBIT" | "PIX" | "OTHER";
+
 export interface Origin {
   id: string;
   name: string;
+  type: OriginType;
+  creditLimit: number | null;
+  rotativoRateMonth: number | null;
+  parcelamentoRate: number | null;
+  cetAnual: number | null;
+  billingCycleDay: number | null;
+  dueDateDay: number | null;
 }
 
 export interface Budget {

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext();
 
     const body = await request.json();
-    const { name } = body;
+    const { name, type, creditLimit, rotativoRateMonth, parcelamentoRate, cetAnual, billingCycleDay, dueDateDay } = body;
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json(
@@ -51,6 +51,13 @@ export async function POST(request: NextRequest) {
     const origin = await prisma.origin.create({
       data: {
         name: trimmedName,
+        type: type || "OTHER",
+        creditLimit: creditLimit ?? null,
+        rotativoRateMonth: rotativoRateMonth ?? null,
+        parcelamentoRate: parcelamentoRate ?? null,
+        cetAnual: cetAnual ?? null,
+        billingCycleDay: billingCycleDay ?? null,
+        dueDateDay: dueDateDay ?? null,
         userId: ctx.userId,
         spaceId: ctx.spaceId,
       },
@@ -96,7 +103,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name } = body;
+    const { name, type, creditLimit, rotativoRateMonth, parcelamentoRate, cetAnual, billingCycleDay, dueDateDay } = body;
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json(
@@ -125,7 +132,16 @@ export async function PUT(request: NextRequest) {
     const origin = await prisma.$transaction(async (tx) => {
       const updated = await tx.origin.update({
         where: { id, ...ctx.ownerFilter },
-        data: { name: trimmedName },
+        data: {
+          name: trimmedName,
+          ...(type !== undefined && { type }),
+          ...(creditLimit !== undefined && { creditLimit: creditLimit ?? null }),
+          ...(rotativoRateMonth !== undefined && { rotativoRateMonth: rotativoRateMonth ?? null }),
+          ...(parcelamentoRate !== undefined && { parcelamentoRate: parcelamentoRate ?? null }),
+          ...(cetAnual !== undefined && { cetAnual: cetAnual ?? null }),
+          ...(billingCycleDay !== undefined && { billingCycleDay: billingCycleDay ?? null }),
+          ...(dueDateDay !== undefined && { dueDateDay: dueDateDay ?? null }),
+        },
       });
 
       // Update all transactions with the old origin name

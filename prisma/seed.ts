@@ -91,26 +91,26 @@ const defaultRules = [
 
 const defaultOrigins = [
   // Cartões de crédito
-  { name: "Cartão C6" },
-  { name: "Cartão Itaú" },
-  { name: "Cartão BTG" },
-  { name: "Cartão Nubank" },
+  { name: "Cartão C6", type: "CREDIT_CARD" as const },
+  { name: "Cartão Itaú", type: "CREDIT_CARD" as const },
+  { name: "Cartão BTG", type: "CREDIT_CARD" as const },
+  { name: "Cartão Nubank", type: "CREDIT_CARD" as const },
   // Formas de pagamento
-  { name: "PIX" },
-  { name: "Transferência" },
-  { name: "Dinheiro" },
-  { name: "Boleto" },
-  { name: "Débito Automático" },
+  { name: "PIX", type: "PIX" as const },
+  { name: "Transferência", type: "OTHER" as const },
+  { name: "Dinheiro", type: "OTHER" as const },
+  { name: "Boleto", type: "OTHER" as const },
+  { name: "Débito Automático", type: "DEBIT" as const },
   // Extratos bancários
-  { name: "Extrato C6" },
-  { name: "Extrato Itaú" },
-  { name: "Extrato BTG" },
-  { name: "Extrato Nubank" },
-  { name: "Extrato Bradesco" },
-  { name: "Extrato Santander" },
-  { name: "Extrato BB" },
-  { name: "Extrato Caixa" },
-  { name: "Extrato Bancário" },
+  { name: "Extrato C6", type: "OTHER" as const },
+  { name: "Extrato Itaú", type: "OTHER" as const },
+  { name: "Extrato BTG", type: "OTHER" as const },
+  { name: "Extrato Nubank", type: "OTHER" as const },
+  { name: "Extrato Bradesco", type: "OTHER" as const },
+  { name: "Extrato Santander", type: "OTHER" as const },
+  { name: "Extrato BB", type: "OTHER" as const },
+  { name: "Extrato Caixa", type: "OTHER" as const },
+  { name: "Extrato Bancário", type: "OTHER" as const },
 ];
 
 const defaultInvestmentCategories = [

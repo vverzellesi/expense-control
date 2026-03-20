@@ -230,9 +230,24 @@ model Installment {
   @@index([userId])
 }
 
+enum OriginType {
+  CREDIT_CARD
+  DEBIT
+  PIX
+  OTHER
+}
+
 model Origin {
   id   String @id @default(cuid())
   name String
+
+  type              OriginType @default(OTHER)
+  creditLimit       Float?
+  rotativoRateMonth Float?
+  parcelamentoRate  Float?
+  cetAnual          Float?
+  billingCycleDay   Int?
+  dueDateDay        Int?
 
   // User relationship
   userId String?
