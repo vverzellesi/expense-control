@@ -282,10 +282,10 @@ export default function CartoesPage() {
                     <Info className="h-5 w-5 text-amber-600 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-amber-800">
-                        Configure as taxas dos seus cart&#245;es
+                        Configure as taxas dos seus cartões
                       </p>
                       <p className="text-xs text-amber-600 mt-0.5">
-                        V&#225; em Configura&#231;&#245;es &#8594; Origens e edite cada cart&#227;o para informar taxas de juros. Isso permite comparar custos entre cart&#245;es.
+                        Vá em Configurações → Origens e edite cada cartão para informar taxas de juros. Isso permite comparar custos entre cartões.
                       </p>
                     </div>
                   </CardContent>
@@ -311,8 +311,8 @@ export default function CartoesPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          <th className="text-left py-2 pr-4 font-medium text-gray-500">Cart&#227;o</th>
-                          <th className="text-right py-2 px-4 font-medium text-gray-500">Rotativo (%/m&#234;s)</th>
+                          <th className="text-left py-2 pr-4 font-medium text-gray-500">Cartão</th>
+                          <th className="text-right py-2 px-4 font-medium text-gray-500">Rotativo (%/mês)</th>
                           <th className="text-right py-2 px-4 font-medium text-gray-500">Parcelamento (%)</th>
                           <th className="text-right py-2 px-4 font-medium text-gray-500">CET Anual (%)</th>
                           <th className="text-left py-2 pl-4 font-medium text-gray-500">Melhor para</th>

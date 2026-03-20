@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     if (isNaN(targetMonth) || isNaN(targetYear) || targetMonth < 1 || targetMonth > 12) {
       return NextResponse.json(
-        { error: "Parametros de mes/ano invalidos" },
+        { error: "Parâmetros de mês/ano inválidos" },
         { status: 400 }
       );
     }
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
     console.error("Error fetching cards summary:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar resumo de cartoes" },
+      { error: "Erro ao buscar resumo de cartões" },
       { status: 500 }
     );
   }

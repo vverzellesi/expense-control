@@ -1047,8 +1047,8 @@ export default function SettingsPage() {
                         <SelectValue placeholder="Tipo" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="CREDIT_CARD">Cart&#227;o de Cr&#233;dito</SelectItem>
-                        <SelectItem value="DEBIT">D&#233;bito</SelectItem>
+                        <SelectItem value="CREDIT_CARD">Cartão de Crédito</SelectItem>
+                        <SelectItem value="DEBIT">Débito</SelectItem>
                         <SelectItem value="PIX">PIX</SelectItem>
                         <SelectItem value="OTHER">Outro</SelectItem>
                       </SelectContent>
@@ -1070,7 +1070,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-gray-500">Rotativo (%/m&#234;s)</Label>
+                      <Label className="text-xs text-gray-500">Rotativo (%/mês)</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -1176,8 +1176,8 @@ export default function SettingsPage() {
                                 <SelectValue placeholder="Tipo" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="CREDIT_CARD">Cart&#227;o de Cr&#233;dito</SelectItem>
-                                <SelectItem value="DEBIT">D&#233;bito</SelectItem>
+                                <SelectItem value="CREDIT_CARD">Cartão de Crédito</SelectItem>
+                                <SelectItem value="DEBIT">Débito</SelectItem>
                                 <SelectItem value="PIX">PIX</SelectItem>
                                 <SelectItem value="OTHER">Outro</SelectItem>
                               </SelectContent>
@@ -1190,7 +1190,7 @@ export default function SettingsPage() {
                                 <Input type="number" step="0.01" value={editOriginCreditLimit} onChange={(e) => setEditOriginCreditLimit(e.target.value)} placeholder="5000" className="min-h-[32px]" />
                               </div>
                               <div>
-                                <Label className="text-xs text-gray-500">Rotativo (%/m&#234;s)</Label>
+                                <Label className="text-xs text-gray-500">Rotativo (%/mês)</Label>
                                 <Input type="number" step="0.01" value={editOriginRotativo} onChange={(e) => setEditOriginRotativo(e.target.value)} placeholder="14.50" className="min-h-[32px]" />
                               </div>
                               <div>
@@ -1239,7 +1239,7 @@ export default function SettingsPage() {
                             <div className="min-w-0">
                               <span className="font-medium truncate block">{origin.name}</span>
                               {origin.type === "CREDIT_CARD" && (
-                                <span className="text-xs text-emerald-600">Cart&#227;o de Cr&#233;dito</span>
+                                <span className="text-xs text-emerald-600">Cartão de Crédito</span>
                               )}
                             </div>
                           </div>
