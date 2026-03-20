@@ -89,7 +89,29 @@ export async function calculateCardsSummary(
   const nextMonthEnd = new Date(targetYear, targetMonth + 1, 0);
   nextMonthEnd.setHours(23, 59, 59, 999);
 
+  // Fetch bill payment records to exclude synthetic transactions
+  const billPayments = await prisma.billPayment.findMany({
+    where: {
+      ...ctx.ownerFilter,
+      origin: { in: cardNames },
+    },
+    select: {
+      entryTransactionId: true,
+      carryoverTransactionId: true,
+      installmentId: true,
+    },
+  });
+
+  const excludeTransactionIds = billPayments
+    .flatMap((bp) => [bp.entryTransactionId, bp.carryoverTransactionId])
+    .filter((id): id is string => id !== null);
+
+  const excludeInstallmentIds = billPayments
+    .map((bp) => bp.installmentId)
+    .filter((id): id is string => id !== null);
+
   // Fetch all transactions for credit cards in current month
+  // Exclude bill payment synthetic transactions (entries, carryovers, financing installments)
   const transactions = await prisma.transaction.findMany({
     where: {
       ...ctx.ownerFilter,
@@ -97,6 +119,8 @@ export async function calculateCardsSummary(
       date: { gte: startDate, lte: endDate },
       type: "EXPENSE",
       deletedAt: null,
+      id: excludeTransactionIds.length > 0 ? { notIn: excludeTransactionIds } : undefined,
+      installmentId: excludeInstallmentIds.length > 0 ? { notIn: excludeInstallmentIds } : undefined,
     },
     select: {
       origin: true,
@@ -107,6 +131,7 @@ export async function calculateCardsSummary(
   });
 
   // Fetch future installment transactions for next month
+  // Exclude financing installments from bill payments
   const futureInstallments = await prisma.transaction.findMany({
     where: {
       ...ctx.ownerFilter,
@@ -115,6 +140,7 @@ export async function calculateCardsSummary(
       type: "EXPENSE",
       date: { gte: nextMonthStart, lte: nextMonthEnd },
       deletedAt: null,
+      installmentId: excludeInstallmentIds.length > 0 ? { notIn: excludeInstallmentIds } : undefined,
     },
     select: {
       origin: true,

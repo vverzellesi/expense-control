@@ -3,6 +3,54 @@ import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { Prisma } from "@prisma/client";
 
+const VALID_ORIGIN_TYPES = ["CREDIT_CARD", "DEBIT", "PIX", "OTHER"];
+
+function validateOriginFields(fields: {
+  type?: string;
+  creditLimit?: unknown;
+  rotativoRateMonth?: unknown;
+  parcelamentoRate?: unknown;
+  cetAnual?: unknown;
+  billingCycleDay?: unknown;
+  dueDateDay?: unknown;
+}): string | null {
+  if (fields.type && !VALID_ORIGIN_TYPES.includes(fields.type)) {
+    return `Tipo inválido. Valores aceitos: ${VALID_ORIGIN_TYPES.join(", ")}`;
+  }
+
+  const numericFields = [
+    { name: "creditLimit", value: fields.creditLimit },
+    { name: "rotativoRateMonth", value: fields.rotativoRateMonth },
+    { name: "parcelamentoRate", value: fields.parcelamentoRate },
+    { name: "cetAnual", value: fields.cetAnual },
+  ];
+
+  for (const { name, value } of numericFields) {
+    if (value != null && (typeof value !== "number" || isNaN(value))) {
+      return `Campo ${name} deve ser um número válido`;
+    }
+    if (value != null && typeof value === "number" && value < 0) {
+      return `Campo ${name} não pode ser negativo`;
+    }
+  }
+
+  const dayFields = [
+    { name: "billingCycleDay", value: fields.billingCycleDay },
+    { name: "dueDateDay", value: fields.dueDateDay },
+  ];
+
+  for (const { name, value } of dayFields) {
+    if (value != null) {
+      const num = typeof value === "number" ? value : Number(value);
+      if (isNaN(num) || !Number.isInteger(num) || num < 1 || num > 31) {
+        return `Campo ${name} deve ser um dia válido (1-31)`;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function GET() {
   try {
     const ctx = await getAuthContext();
@@ -46,18 +94,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validationError = validateOriginFields({ type, creditLimit, rotativoRateMonth, parcelamentoRate, cetAnual, billingCycleDay, dueDateDay });
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
     const trimmedName = name.trim();
 
     const origin = await prisma.origin.create({
       data: {
         name: trimmedName,
         type: type || "OTHER",
-        creditLimit: creditLimit ?? null,
-        rotativoRateMonth: rotativoRateMonth ?? null,
-        parcelamentoRate: parcelamentoRate ?? null,
-        cetAnual: cetAnual ?? null,
-        billingCycleDay: billingCycleDay ?? null,
-        dueDateDay: dueDateDay ?? null,
+        creditLimit: creditLimit != null ? Number(creditLimit) : null,
+        rotativoRateMonth: rotativoRateMonth != null ? Number(rotativoRateMonth) : null,
+        parcelamentoRate: parcelamentoRate != null ? Number(parcelamentoRate) : null,
+        cetAnual: cetAnual != null ? Number(cetAnual) : null,
+        billingCycleDay: billingCycleDay != null ? Number(billingCycleDay) : null,
+        dueDateDay: dueDateDay != null ? Number(dueDateDay) : null,
         userId: ctx.userId,
         spaceId: ctx.spaceId,
       },
@@ -110,6 +163,11 @@ export async function PUT(request: NextRequest) {
         { error: "Nome é obrigatório" },
         { status: 400 }
       );
+    }
+
+    const validationError = validateOriginFields({ type, creditLimit, rotativoRateMonth, parcelamentoRate, cetAnual, billingCycleDay, dueDateDay });
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     const trimmedName = name.trim();

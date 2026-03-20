@@ -21,12 +21,12 @@ const demoCategories = [
 ];
 
 const demoOrigins = [
-  { name: "Nubank" },
-  { name: "Itau" },
-  { name: "C6 Bank" },
-  { name: "Bradesco" },
-  { name: "Dinheiro" },
-  { name: "PIX" },
+  { name: "Nubank", type: "CREDIT_CARD" as const },
+  { name: "Itau", type: "CREDIT_CARD" as const },
+  { name: "C6 Bank", type: "CREDIT_CARD" as const },
+  { name: "Bradesco", type: "CREDIT_CARD" as const },
+  { name: "Dinheiro", type: "OTHER" as const },
+  { name: "PIX", type: "PIX" as const },
 ];
 
 const demoRules = [

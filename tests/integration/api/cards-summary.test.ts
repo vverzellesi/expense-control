@@ -14,6 +14,9 @@ vi.mock("@/lib/db", () => ({
     recurringExpense: {
       findMany: vi.fn(),
     },
+    billPayment: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -26,6 +29,7 @@ const mockPrisma = prisma as unknown as {
   origin: { findMany: ReturnType<typeof vi.fn> };
   transaction: { findMany: ReturnType<typeof vi.fn> };
   recurringExpense: { findMany: ReturnType<typeof vi.fn> };
+  billPayment: { findMany: ReturnType<typeof vi.fn> };
 };
 
 function createRequest(url: string): NextRequest {
@@ -35,6 +39,8 @@ function createRequest(url: string): NextRequest {
 describe("GET /api/cards/summary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no bill payments (most tests don't need them)
+    mockPrisma.billPayment.findMany.mockResolvedValue([]);
   });
 
   it("returns empty cards when no credit card origins exist", async () => {
@@ -179,5 +185,54 @@ describe("GET /api/cards/summary", () => {
 
     expect(response.status).toBe(200);
     expect(data.cards).toEqual([]);
+  });
+
+  it("excludes bill payment synthetic transactions from totals", async () => {
+    mockPrisma.origin.findMany.mockResolvedValue([
+      {
+        id: "card-1",
+        name: "Cartao C6",
+        type: "CREDIT_CARD",
+        creditLimit: 10000,
+        billingCycleDay: null,
+        dueDateDay: null,
+        rotativoRateMonth: null,
+        parcelamentoRate: null,
+        cetAnual: null,
+      },
+    ]);
+
+    // Bill payments exist — entry and carryover transactions should be excluded
+    mockPrisma.billPayment.findMany.mockResolvedValue([
+      {
+        entryTransactionId: "bp-entry-1",
+        carryoverTransactionId: "bp-carryover-1",
+        installmentId: "bp-installment-1",
+      },
+    ]);
+
+    // Current month: only real purchases (bill payment transactions are excluded by ID filter)
+    mockPrisma.transaction.findMany
+      .mockResolvedValueOnce([
+        { origin: "Cartao C6", amount: -300, isInstallment: false, isFixed: false },
+      ])
+      .mockResolvedValueOnce([]); // No future installments
+
+    mockPrisma.recurringExpense.findMany.mockResolvedValue([]);
+
+    const response = await GET(createRequest("/api/cards/summary?month=3&year=2026"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.cards[0].currentMonth.total).toBe(300);
+    expect(data.totals.totalAllCards).toBe(300);
+
+    // Verify billPayment.findMany was called
+    expect(mockPrisma.billPayment.findMany).toHaveBeenCalled();
+
+    // Verify transaction query includes exclusion filters
+    const txCallArgs = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(txCallArgs.where.id).toEqual({ notIn: ["bp-entry-1", "bp-carryover-1"] });
+    expect(txCallArgs.where.installmentId).toEqual({ notIn: ["bp-installment-1"] });
   });
 });
