@@ -610,6 +610,17 @@ export default function ImportPage() {
     // Check for recurring matches
     const transactionsWithRecurring = await checkRecurringMatches(transactionsWithDuplicates);
     setTransactions(transactionsWithRecurring);
+
+    // Auto-fill billing month based on the most recent transaction date
+    const validDates = transactionsWithRecurring
+      .map(t => t.date instanceof Date ? t.date : new Date(t.date))
+      .filter(d => !isNaN(d.getTime()));
+    if (validDates.length > 0) {
+      const latestDate = new Date(Math.max(...validDates.map(d => d.getTime())));
+      const suggestedMonth = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+      setInvoiceMonth(suggestedMonth);
+    }
+
     setStep("preview");
   }
 
@@ -647,6 +658,17 @@ export default function ImportPage() {
       // Check for duplicates
       const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
       setTransactions(transactionsWithDuplicates);
+
+      // Auto-fill billing month based on the most recent transaction date
+      const ocrValidDates = transactionsWithDuplicates
+        .map(t => t.date instanceof Date ? t.date : new Date(t.date))
+        .filter(d => !isNaN(d.getTime()));
+      if (ocrValidDates.length > 0) {
+        const latestDate = new Date(Math.max(...ocrValidDates.map(d => d.getTime())));
+        const suggestedMonth = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+        setInvoiceMonth(suggestedMonth);
+      }
+
       setStep("preview");
     } finally {
       clearInterval(progressInterval);

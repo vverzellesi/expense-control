@@ -139,12 +139,13 @@ export default function InstallmentsPage() {
   // Calculate future months summary
   const futureSummary: Record<string, number> = {};
   const now = new Date();
+  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   // Include grouped installments
   installments.forEach((inst) => {
     inst.transactions.forEach((t) => {
       const transactionDate = new Date(t.date);
-      if (transactionDate >= now) {
+      if (transactionDate >= startOfCurrentMonth) {
         const key = `${transactionDate.getFullYear()}-${String(
           transactionDate.getMonth() + 1
         ).padStart(2, "0")}`;

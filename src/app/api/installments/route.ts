@@ -35,8 +35,9 @@ export async function GET(request: NextRequest) {
     // Filter active installments (those with future transactions)
     if (active === "true") {
       const now = new Date();
+      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const activeInstallments = installments.filter((i) =>
-        i.transactions.some((t) => new Date(t.date) >= now)
+        i.transactions.some((t) => new Date(t.date) >= startOfCurrentMonth)
       );
       return NextResponse.json(activeInstallments);
     }

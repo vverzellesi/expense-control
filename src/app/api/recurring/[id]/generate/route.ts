@@ -64,7 +64,7 @@ export async function POST(
     // Calculate the date (use dayOfMonth, but cap at last day of month)
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const day = Math.min(recurringExpense.dayOfMonth, lastDayOfMonth);
-    const transactionDate = new Date(year, month - 1, day);
+    const transactionDate = new Date(year, month - 1, day, 12, 0, 0);
 
     // Use custom amount or default amount
     const finalAmount = amount !== undefined ? Math.abs(amount) : recurringExpense.defaultAmount;

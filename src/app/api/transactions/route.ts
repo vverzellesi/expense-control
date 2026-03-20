@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
+import { parseDateBoundary, getMonthBoundaries, getYearBoundaries } from "@/lib/date-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,19 +36,17 @@ export async function GET(request: NextRequest) {
     // Custom date range filter takes priority
     if (startDate && endDate) {
       where.date = {
-        gte: parseDateLocal(startDate),
-        lte: new Date(parseDateLocal(endDate).setHours(23, 59, 59, 999)),
+        gte: parseDateBoundary(startDate),
+        lte: new Date(parseDateBoundary(endDate).setHours(23, 59, 59, 999)),
       };
     } else if (month && year) {
-      const monthStart = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const monthEnd = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+      const [monthStart, monthEnd] = getMonthBoundaries(parseInt(year), parseInt(month));
       where.date = {
         gte: monthStart,
         lte: monthEnd,
       };
     } else if (year) {
-      const yearStart = new Date(parseInt(year), 0, 1);
-      const yearEnd = new Date(parseInt(year), 11, 31, 23, 59, 59, 999);
+      const [yearStart, yearEnd] = getYearBoundaries(parseInt(year));
       where.date = {
         gte: yearStart,
         lte: yearEnd,
