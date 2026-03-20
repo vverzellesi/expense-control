@@ -1,5 +1,19 @@
 import prisma from "@/lib/db"
 
+/**
+ * Normalizes a transaction description for fuzzy comparison.
+ * Removes dots, asterisks, slashes, accents, collapses spaces, lowercases.
+ */
+export function normalizeDescription(description: string): string {
+  return description
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .toLowerCase()
+    .replace(/[.*\/\\]/g, "")        // remove dots, asterisks, slashes
+    .replace(/\s+/g, " ")            // collapse multiple spaces
+    .trim()
+}
+
 export interface DuplicateCheckParams {
   userId: string
   description: string
@@ -19,13 +33,10 @@ export async function findDuplicate({
   const dayEnd = new Date(date)
   dayEnd.setHours(23, 59, 59, 999)
 
-  const duplicate = await prisma.transaction.findFirst({
+  // Fetch candidates by amount and date, then compare normalized descriptions in JS
+  const candidates = await prisma.transaction.findMany({
     where: {
       userId,
-      description: {
-        equals: description.trim(),
-        mode: "insensitive",
-      },
       amount,
       date: {
         gte: dayStart,
@@ -35,7 +46,10 @@ export async function findDuplicate({
     },
   })
 
-  return duplicate
+  const normalizedInput = normalizeDescription(description)
+  return candidates.find(
+    (c) => normalizeDescription(c.description) === normalizedInput
+  ) ?? null
 }
 
 export async function filterDuplicates<T extends { description: string; amount: number; date: Date }>(
@@ -69,11 +83,11 @@ export async function filterDuplicates<T extends { description: string; amount: 
     select: { description: true, amount: true, date: true },
   })
 
-  // Build a lookup set for O(1) matching
+  // Build a lookup set for O(1) matching using normalized descriptions
   const existingSet = new Set(
     existing.map(e => {
       const d = new Date(e.date)
-      return `${e.description.trim().toLowerCase()}|${e.amount}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      return `${normalizeDescription(e.description)}|${e.amount}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     })
   )
 
@@ -82,7 +96,7 @@ export async function filterDuplicates<T extends { description: string; amount: 
 
   for (const t of transactions) {
     const d = new Date(t.date)
-    const key = `${t.description.trim().toLowerCase()}|${t.amount}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    const key = `${normalizeDescription(t.description)}|${t.amount}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     if (existingSet.has(key)) {
       duplicateCount++
     } else {

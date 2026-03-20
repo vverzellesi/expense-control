@@ -7,6 +7,39 @@ import {
 import { findDuplicate } from "@/lib/dedup";
 import { parseDateLocal } from "@/lib/utils";
 
+/**
+ * Replaces the installment number in a description.
+ * "LOJA XYZ - Parcela 3/10" → "LOJA XYZ - Parcela 5/10"
+ * "LOJA XYZ 3/10" → "LOJA XYZ 5/10"
+ */
+export function replaceInstallmentNumber(
+  description: string,
+  newCurrent: number,
+  total: number
+): string {
+  const patterns = [
+    /([-–]\s*Parcela\s+)\d+(\s*[\/\\]\s*)\d+/i,
+    /(Parcela\s+)\d+(\s*DE\s*)\d+/i,
+    /(Parcela\s+)\d+(\s*[\/\\]\s*)\d+/i,
+    /(PARC\s+)\d+(\s*DE\s*)\d+/i,
+    /(PARC\s+)\d+(\s*[\/\\]\s*)\d+/i,
+    /(\s)\d+(\s*[\/\\]\s*)\d+(\s*$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.test(description)) {
+      if (pattern.source.includes("$")) {
+        // Pattern with end anchor: groups are (prefix)(separator)(suffix)
+        return description.replace(pattern, `$1${newCurrent}$2${total}$3`);
+      }
+      return description.replace(pattern, `$1${newCurrent}$2${total}`);
+    }
+  }
+
+  // Fallback: append installment info
+  return `${description} (${newCurrent}/${total})`;
+}
+
 // Normalize text for matching (lowercase, remove accents)
 function normalizeText(text: string): string {
   return text
@@ -56,6 +89,8 @@ export interface ImportResult {
   skippedCount: number;
   linkedCount: number;
   carryoverLinkedCount: number;
+  installmentGroupsCreated: number;
+  futureInstallmentsCreated: number;
   linkedCarryovers: Array<{
     transactionId: string;
     billPaymentId: string;
@@ -96,6 +131,8 @@ export async function importTransactions(
   let linkedCount = 0;
   let skippedCount = 0;
   let carryoverLinkedCount = 0;
+  let installmentGroupsCreated = 0;
+  let futureInstallmentsCreated = 0;
   const linkedCarryovers: ImportResult["linkedCarryovers"] = [];
 
   for (const t of transactions) {
@@ -214,6 +251,71 @@ export async function importTransactions(
       recurringExpenseId: transaction.recurringExpenseId,
     });
 
+    // Auto-generate remaining installments for installment transactions
+    if (
+      t.isInstallment &&
+      t.currentInstallment &&
+      t.totalInstallments &&
+      t.totalInstallments > 1 &&
+      t.currentInstallment < t.totalInstallments
+    ) {
+      try {
+        const installmentAmount = Math.abs(amount);
+        const installment = await prisma.installment.create({
+          data: {
+            description: t.description,
+            totalAmount: installmentAmount * t.totalInstallments,
+            totalInstallments: t.totalInstallments,
+            installmentAmount,
+            startDate: transactionDate,
+            origin: transactionOrigin,
+            userId,
+          },
+        });
+
+        // Link the current transaction to the installment group
+        await prisma.transaction.update({
+          where: { id: transaction.id },
+          data: { installmentId: installment.id },
+        });
+
+        // Generate future installments
+        const remainingCount = t.totalInstallments - t.currentInstallment;
+        for (let i = 1; i <= remainingCount; i++) {
+          const futureNumber = t.currentInstallment + i;
+          const futureDate = new Date(transactionDate);
+          futureDate.setMonth(futureDate.getMonth() + i);
+
+          const futureDesc = replaceInstallmentNumber(
+            t.description,
+            futureNumber,
+            t.totalInstallments
+          );
+
+          await prisma.transaction.create({
+            data: {
+              userId,
+              description: futureDesc,
+              amount,
+              date: futureDate,
+              type,
+              origin: transactionOrigin,
+              categoryId: t.categoryId || null,
+              isFixed: false,
+              isInstallment: true,
+              installmentId: installment.id,
+              currentInstallment: futureNumber,
+              totalInstallments: t.totalInstallments,
+            },
+          });
+          futureInstallmentsCreated++;
+        }
+        installmentGroupsCreated++;
+      } catch (installmentError) {
+        console.error("Error generating installments:", installmentError);
+      }
+    }
+
     // Check if this is a carryover transaction and try to link it to a BillPayment
     if (isCarryoverTransaction(t.description)) {
       try {
@@ -267,6 +369,8 @@ export async function importTransactions(
     skippedCount,
     linkedCount,
     carryoverLinkedCount,
+    installmentGroupsCreated,
+    futureInstallmentsCreated,
     linkedCarryovers,
   };
 }

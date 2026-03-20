@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { parseDateLocal } from "@/lib/utils";
+import { normalizeDescription } from "@/lib/dedup";
 
 interface TransactionToCheck {
   description: string;
@@ -76,12 +77,9 @@ export async function POST(request: NextRequest) {
       // Parse date safely using local timezone
       const transactionDate = !t.date.includes('T') ? parseDateLocal(t.date) : new Date(t.date);
 
-      // Check for exact duplicates (same date, description, amount, and optionally origin)
-      const duplicateWhere: Prisma.TransactionWhereInput = {
+      // Check for duplicates: same amount, date range, and normalized description match
+      const candidateWhere: Prisma.TransactionWhereInput = {
         ...ctx.ownerFilter,
-        description: {
-          contains: t.description.slice(0, 50),
-        },
         amount: {
           gte: t.amount - 0.01,
           lte: t.amount + 0.01,
@@ -94,9 +92,15 @@ export async function POST(request: NextRequest) {
         ...(origin ? { origin } : {}),
       };
 
-      const existing = await prisma.transaction.findFirst({
-        where: duplicateWhere,
+      const candidates = await prisma.transaction.findMany({
+        where: candidateWhere,
+        select: { id: true, description: true },
       });
+
+      const normalizedInput = normalizeDescription(t.description);
+      const existing = candidates.find(
+        (c) => normalizeDescription(c.description) === normalizedInput
+      );
 
       if (existing) {
         duplicates.push(i);
