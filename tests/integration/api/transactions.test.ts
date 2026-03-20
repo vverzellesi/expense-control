@@ -193,6 +193,60 @@ describe('GET /api/transactions', () => {
     expect(call.where.tags).toEqual({ contains: 'essencial' })
   })
 
+  it('should filter by minAmount (absolute value)', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+
+    const request = createRequest('http://localhost:3000/api/transactions?minAmount=100')
+    await GET(request)
+
+    const call = mockPrisma.transaction.findMany.mock.calls[0][0]
+    expect(call.where.AND).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          OR: [
+            { amount: { gte: 100 } },
+            { amount: { lte: -100 } },
+          ],
+        }),
+      ])
+    )
+  })
+
+  it('should filter by maxAmount (absolute value)', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+
+    const request = createRequest('http://localhost:3000/api/transactions?maxAmount=500')
+    await GET(request)
+
+    const call = mockPrisma.transaction.findMany.mock.calls[0][0]
+    expect(call.where.AND).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          amount: { gte: -500, lte: 500 },
+        }),
+      ])
+    )
+  })
+
+  it('should filter by minAmount and maxAmount combined', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+
+    const request = createRequest('http://localhost:3000/api/transactions?minAmount=100&maxAmount=500')
+    await GET(request)
+
+    const call = mockPrisma.transaction.findMany.mock.calls[0][0]
+    expect(call.where.AND).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          OR: [
+            { amount: { gte: 100, lte: 500 } },
+            { amount: { gte: -500, lte: -100 } },
+          ],
+        }),
+      ])
+    )
+  })
+
   it('should exclude soft-deleted transactions by default', async () => {
     mockPrisma.transaction.findMany.mockResolvedValue([])
 
@@ -232,6 +286,7 @@ describe('GET /api/transactions', () => {
     const call = mockPrisma.transaction.findMany.mock.calls[0][0]
     expect(call.include).toEqual({
       category: true,
+      categoryTag: true,
       installment: true
     })
   })
