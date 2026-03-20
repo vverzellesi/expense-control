@@ -421,29 +421,22 @@ describe('detectTransfer', () => {
     })
   })
 
-  describe('PIX transfers', () => {
-    it('should detect PIX transfer patterns', () => {
-      expect(detectTransfer('PIX TRANSF ITAU')).toBe(true)
-      expect(detectTransfer('PIX TRANSF C6 BANK')).toBe(true)
-      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(true)
+  describe('PIX/TED/DOC between own accounts', () => {
+    it('should detect PIX between own accounts', () => {
       expect(detectTransfer('PIX TRANSF ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('PIX TRANSF CONTA PROPRIA')).toBe(true)
+      expect(detectTransfer('PIX TRANSF CONTA PRÓPRIA')).toBe(true)
     })
-  })
 
-  describe('TED transfers', () => {
-    it('should detect TED transfer patterns', () => {
-      expect(detectTransfer('TED ENVIADO')).toBe(true)
-      expect(detectTransfer('TED RECEBIDO')).toBe(true)
-      expect(detectTransfer('TED TRANSFERENCIA')).toBe(true)
-      expect(detectTransfer('ENVIO TED')).toBe(true)
+    it('should detect TED between own accounts', () => {
+      expect(detectTransfer('TED ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('TED CONTA PROPRIA')).toBe(true)
+      expect(detectTransfer('TED PRÓPRIA')).toBe(true)
     })
-  })
 
-  describe('DOC transfers', () => {
-    it('should detect DOC transfer patterns', () => {
-      expect(detectTransfer('DOC ENVIADO')).toBe(true)
-      expect(detectTransfer('DOC RECEBIDO')).toBe(true)
-      expect(detectTransfer('DOC TRANSFERENCIA')).toBe(true)
+    it('should detect DOC between own accounts', () => {
+      expect(detectTransfer('DOC ENTRE CONTAS')).toBe(true)
+      expect(detectTransfer('DOC CONTA PROPRIA')).toBe(true)
     })
   })
 
@@ -454,13 +447,15 @@ describe('detectTransfer', () => {
       expect(detectTransfer('NETFLIX SUBSCRIPTION')).toBe(false)
     })
 
-    it('should not detect generic PIX (only PIX with transfer keywords)', () => {
-      // Plain PIX without transfer keyword is not necessarily a transfer
+    it('should not detect generic PIX/TED/DOC (could be to third parties)', () => {
       expect(detectTransfer('PIX ENVIADO CP JOAO SILVA')).toBe(false)
       expect(detectTransfer('PIX RECEBIDO CP MARIA SANTOS')).toBe(false)
-      // But PIX with transfer keywords IS a transfer
-      expect(detectTransfer('PIX TRANSF ITAU')).toBe(true)
-      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(true)
+      expect(detectTransfer('PIX TRANSF ITAU')).toBe(false)
+      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(false)
+      expect(detectTransfer('TED ENVIADO')).toBe(false)
+      expect(detectTransfer('TED RECEBIDO')).toBe(false)
+      expect(detectTransfer('DOC ENVIADO')).toBe(false)
+      expect(detectTransfer('DOC TRANSFERENCIA')).toBe(false)
     })
   })
 })

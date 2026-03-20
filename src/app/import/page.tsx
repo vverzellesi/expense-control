@@ -252,7 +252,7 @@ export default function ImportPage() {
         return {
           ...t,
           isDuplicate: data.duplicates.includes(index),
-          selected: !data.duplicates.includes(index), // Auto-deselect duplicates only
+          selected: data.duplicates.includes(index) ? false : t.selected,
           isRelatedInstallment: !!related,
           relatedInstallmentInfo: related ? {
             relatedTransactionId: related.relatedTransactionId,

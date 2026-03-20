@@ -209,14 +209,11 @@ const TRANSFER_PATTERNS: RegExp[] = [
   /TRANSFERENCIA\s*(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
   /APLICACAO|APLICAÇÃO|RESGATE/i,
   /INVEST(IMENTO)?\s*(CDB|LCI|LCA|TESOURO|POUPANCA|POUPANÇA)/i,
-  // PIX transfers (between accounts)
-  /PIX\s+TRANSF/i,
-  /PIX\s+TRANSFERE?NCIA/i,
-  // TED transfers
-  /\bTED\s+(ENVIADO|RECEBIDO|TRANSFERE?NCIA)/i,
-  /ENVIO\s+TED/i,
-  // DOC transfers
-  /\bDOC\s+(ENVIADO|RECEBIDO|TRANSFERE?NCIA)/i,
+  // PIX/TED/DOC only when explicitly between own accounts
+  // (generic "TED ENVIADO" or "PIX TRANSF" could be to third parties)
+  /PIX\s+TRANSF\s*(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
+  /\bTED\s+(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
+  /\bDOC\s+(ENTRE\s*)?(CONTAS?|PROPRIA|PRÓPRIA)/i,
 ];
 
 /**
