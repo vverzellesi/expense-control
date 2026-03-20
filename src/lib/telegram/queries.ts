@@ -23,13 +23,23 @@ export async function handleSummaryQuery(chatId: number, userId: string) {
   // Calculate totals (same logic as /api/summary)
   let income = 0
   let expense = 0
+  let fixedTotal = 0
+  let installmentsTotal = 0
   for (const t of transactions) {
     if ("investmentTransaction" in t && t.investmentTransaction) continue
     if (t.type === "TRANSFER") continue
-    if (t.type === "INCOME") income += Math.abs(t.amount)
-    else if (t.type === "EXPENSE") expense += Math.abs(t.amount)
+    if (t.type === "INCOME") {
+      income += Math.abs(t.amount)
+    } else if (t.type === "EXPENSE") {
+      const abs = Math.abs(t.amount)
+      expense += abs
+      if ("isFixed" in t && t.isFixed) fixedTotal += abs
+      if ("isInstallment" in t && t.isInstallment) installmentsTotal += abs
+    }
   }
   const balance = income - expense
+  const variableTotal = Math.max(0, expense - fixedTotal - installmentsTotal)
+  const available = income - expense
 
   // Get total budget
   const budgets = await prisma.budget.findMany({
@@ -42,10 +52,23 @@ export async function handleSummaryQuery(chatId: number, userId: string) {
   const lines = [
     `📊 Resumo - ${monthName}`,
     "",
-    `Despesas:  ${formatCurrency(expense)}`,
     `Receitas:  ${formatCurrency(income)}`,
+    `Despesas:  ${formatCurrency(expense)}`,
     `Saldo:     ${formatCurrency(balance)}`,
   ]
+
+  // Financial health section (only when there's income)
+  if (income > 0) {
+    const commitmentPct = Math.round((expense / income) * 100)
+    const indicator = commitmentPct < 70 ? "🟢" : commitmentPct <= 90 ? "🟡" : "🔴"
+
+    lines.push("")
+    lines.push(`${indicator} Comprometimento: ${commitmentPct}%`)
+    lines.push(`🔒 Fixas:      ${formatCurrency(fixedTotal)}`)
+    lines.push(`📦 Parcelas:   ${formatCurrency(installmentsTotal)}`)
+    lines.push(`🛒 Variável:   ${formatCurrency(variableTotal)}`)
+    lines.push(`💰 Sobra:      ${formatCurrency(available)}`)
+  }
 
   if (totalBudget > 0) {
     const pct = Math.round((expense / totalBudget) * 100)
