@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
+import { detectOriginFromCSV, type StatementType } from "@/lib/csv-parser";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
 
 // Detecta transações especiais de cartão de crédito
@@ -180,6 +181,8 @@ export default function ImportPage() {
   const [fileType, setFileType] = useState<"csv" | "ocr" | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
+  const [detectedStatementType, setDetectedStatementType] = useState<StatementType | null>(null);
+  const [origins, setOrigins] = useState<{ id: string; name: string }[]>([]);
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
   const [lastImportBatchId, setLastImportBatchId] = useState<string | null>(null);
 
@@ -216,6 +219,12 @@ export default function ImportPage() {
     if (tagsRes.ok) {
       const tagsData = await tagsRes.json();
       setCategoryTags(tagsData);
+    }
+
+    const originsRes = await fetch("/api/origins");
+    if (originsRes.ok) {
+      const originsData = await originsRes.json();
+      setOrigins(originsData);
     }
   }
 
@@ -402,27 +411,6 @@ export default function ImportPage() {
   async function processCSV(file: File) {
     const text = await file.text();
 
-    // Detect bank from content
-    const lowerContent = text.toLowerCase();
-    let detectedOrigin = "Importação CSV";
-
-    if (lowerContent.includes("c6") || file.name.toLowerCase().includes("c6")) {
-      detectedOrigin = "Cartão C6";
-    } else if (
-      lowerContent.includes("itau") ||
-      lowerContent.includes("itaú") ||
-      file.name.toLowerCase().includes("itau")
-    ) {
-      detectedOrigin = "Cartão Itaú";
-    } else if (
-      lowerContent.includes("btg") ||
-      file.name.toLowerCase().includes("btg")
-    ) {
-      detectedOrigin = "Cartão BTG";
-    }
-
-    setOrigin(detectedOrigin);
-
     // Parse CSV locally
     const lines = text.split("\n").filter((line) => line.trim());
     if (lines.length < 2) {
@@ -430,6 +418,12 @@ export default function ImportPage() {
     }
 
     const headers = lines[0].split(/[,;]/).map((h) => h.trim().toLowerCase());
+
+    // Detect bank and statement type from content + headers
+    const contentForDetection = text + " " + file.name;
+    const detected = detectOriginFromCSV(contentForDetection, headers);
+    setOrigin(detected.origin);
+    setDetectedStatementType(detected.statementType);
     const dateIndex = headers.findIndex(
       (h) => h.includes("data") || h === "date"
     );
@@ -889,9 +883,13 @@ export default function ImportPage() {
 
       const data = await res.json();
 
+      const toastParts = [`${data.count} transações importadas`];
+      if (data.futureInstallmentsCreated > 0) {
+        toastParts.push(`${data.futureInstallmentsCreated} parcelas futuras geradas`);
+      }
       toast({
         title: "Sucesso",
-        description: `${data.count} transações importadas com sucesso`,
+        description: toastParts.join(". "),
       });
 
       setLastImportBatchId(data.importBatchId || null);
@@ -911,6 +909,7 @@ export default function ImportPage() {
     setStep("upload");
     setTransactions([]);
     setOrigin("");
+    setDetectedStatementType(null);
     setOcrConfidence(null);
     setFileType(null);
   }
@@ -1038,7 +1037,31 @@ export default function ImportPage() {
                       {getConfidenceBadge(ocrConfidence)}
                     </div>
                   )}
-                  <Badge variant="outline">{origin}</Badge>
+                  <Select value={origin} onValueChange={setOrigin}>
+                    <SelectTrigger className="w-[200px] h-8 text-sm">
+                      <SelectValue placeholder="Selecionar origem" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {origins.map((o) => (
+                        <SelectItem key={o.id} value={o.name}>
+                          {o.name}
+                        </SelectItem>
+                      ))}
+                      {/* Include detected origin if not in list */}
+                      {origin && !origins.some((o) => o.name === origin) && (
+                        <SelectItem value={origin}>{origin}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {detectedStatementType && (
+                    <Badge variant="secondary" className="text-xs">
+                      {detectedStatementType === "fatura" ? (
+                        <><CreditCard className="mr-1 h-3 w-3" /> Fatura de cartão</>
+                      ) : (
+                        <><Receipt className="mr-1 h-3 w-3" /> Extrato bancário</>
+                      )}
+                    </Badge>
+                  )}
                 </div>
               </CardTitle>
             </CardHeader>
