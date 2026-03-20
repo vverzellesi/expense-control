@@ -112,7 +112,7 @@ model Transaction {
   description        String
   amount             Float
   date               DateTime
-  type               String // "INCOME" or "EXPENSE"
+  type               String // "INCOME" | "EXPENSE" | "TRANSFER"
   origin             String
   categoryId         String?
   category           Category?         @relation(fields: [categoryId], references: [id])
@@ -160,7 +160,7 @@ model RecurringExpense {
   description   String
   defaultAmount Float // Valor padrao
   dayOfMonth    Int // Dia do mes para gerar (1-31)
-  type          String // "INCOME" or "EXPENSE"
+  type          String // "INCOME" | "EXPENSE" | "TRANSFER"
   origin        String
   categoryId    String?
   category      Category?     @relation(fields: [categoryId], references: [id])

@@ -180,7 +180,7 @@ export function FilterDrawer({
           {/* Type */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Tipo</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <button
                 type="button"
                 className={`rounded-lg border-2 p-3 text-center text-sm transition-colors ${
@@ -213,6 +213,17 @@ export function FilterDrawer({
                 onClick={() => setLocalFilters({ ...localFilters, type: "INCOME" })}
               >
                 Receita
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg border-2 p-3 text-center text-sm transition-colors ${
+                  localFilters.type === "TRANSFER"
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+                onClick={() => setLocalFilters({ ...localFilters, type: "TRANSFER" })}
+              >
+                Transferência
               </button>
             </div>
           </div>

@@ -421,6 +421,32 @@ describe('detectTransfer', () => {
     })
   })
 
+  describe('PIX transfers', () => {
+    it('should detect PIX transfer patterns', () => {
+      expect(detectTransfer('PIX TRANSF ITAU')).toBe(true)
+      expect(detectTransfer('PIX TRANSF C6 BANK')).toBe(true)
+      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(true)
+      expect(detectTransfer('PIX TRANSF ENTRE CONTAS')).toBe(true)
+    })
+  })
+
+  describe('TED transfers', () => {
+    it('should detect TED transfer patterns', () => {
+      expect(detectTransfer('TED ENVIADO')).toBe(true)
+      expect(detectTransfer('TED RECEBIDO')).toBe(true)
+      expect(detectTransfer('TED TRANSFERENCIA')).toBe(true)
+      expect(detectTransfer('ENVIO TED')).toBe(true)
+    })
+  })
+
+  describe('DOC transfers', () => {
+    it('should detect DOC transfer patterns', () => {
+      expect(detectTransfer('DOC ENVIADO')).toBe(true)
+      expect(detectTransfer('DOC RECEBIDO')).toBe(true)
+      expect(detectTransfer('DOC TRANSFERENCIA')).toBe(true)
+    })
+  })
+
   describe('non-transfers', () => {
     it('should not detect regular purchases', () => {
       expect(detectTransfer('MERCADO LIVRE COMPRA')).toBe(false)
@@ -428,9 +454,13 @@ describe('detectTransfer', () => {
       expect(detectTransfer('NETFLIX SUBSCRIPTION')).toBe(false)
     })
 
-    it('should not detect PIX (not a transfer type in this context)', () => {
-      // PIX by itself is not a transfer pattern in this implementation
-      expect(detectTransfer('PIX ENVIADO')).toBe(false)
+    it('should not detect generic PIX (only PIX with transfer keywords)', () => {
+      // Plain PIX without transfer keyword is not necessarily a transfer
+      expect(detectTransfer('PIX ENVIADO CP JOAO SILVA')).toBe(false)
+      expect(detectTransfer('PIX RECEBIDO CP MARIA SANTOS')).toBe(false)
+      // But PIX with transfer keywords IS a transfer
+      expect(detectTransfer('PIX TRANSF ITAU')).toBe(true)
+      expect(detectTransfer('PIX TRANSFERENCIA')).toBe(true)
     })
   })
 })
