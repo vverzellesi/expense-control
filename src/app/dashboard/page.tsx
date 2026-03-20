@@ -69,6 +69,8 @@ interface SummaryData {
   budgetAlerts: BudgetAlert[];
   allBudgets: BudgetAlert[];
   fixedExpenses: (Transaction & { category: Category | null })[];
+  fixedExpensesTotal: number;
+  installmentsTotal: number;
   upcomingInstallments: (Transaction & { category: Category | null })[];
   weeklySummary: WeeklySummary | null;
   weeklyBreakdown: WeeklyBreakdown | null;
@@ -170,10 +172,8 @@ export default function Dashboard() {
       <FinancialHealthSection
         income={data?.summary.income || 0}
         expense={data?.summary.expense || 0}
-        fixedExpenses={data?.fixedExpenses || []}
-        upcomingInstallments={data?.upcomingInstallments || []}
-        currentMonth={currentMonth}
-        currentYear={currentYear}
+        fixedExpensesTotal={data?.fixedExpensesTotal || 0}
+        installmentsTotal={data?.installmentsTotal || 0}
       />
 
       {/* 2. Charts - Visual overview */}

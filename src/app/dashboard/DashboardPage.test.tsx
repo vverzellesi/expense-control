@@ -35,7 +35,7 @@ vi.mock('@/components/InvestmentDashboardCard', () => ({
 vi.mock('@/components/FinancialHealthSection', () => ({
   FinancialHealthSection: (props: any) => (
     <div data-testid="financial-health">
-      FinancialHealthSection income={props.income} expense={props.expense}
+      FinancialHealthSection income={props.income} expense={props.expense} fixedExpensesTotal={props.fixedExpensesTotal} installmentsTotal={props.installmentsTotal}
     </div>
   ),
 }))
@@ -57,6 +57,8 @@ const mockSummaryData = {
   budgetAlerts: [],
   allBudgets: [],
   fixedExpenses: [],
+  fixedExpensesTotal: 0,
+  installmentsTotal: 0,
   upcomingInstallments: [],
   weeklySummary: null,
   weeklyBreakdown: null,

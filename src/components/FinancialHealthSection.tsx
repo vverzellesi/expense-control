@@ -3,15 +3,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { Wallet, Receipt, Percent, PiggyBank } from "lucide-react";
-import type { Transaction, Category } from "@/types";
 
 interface FinancialHealthSectionProps {
   income: number;
   expense: number;
-  fixedExpenses: (Transaction & { category: Category | null })[];
-  upcomingInstallments: (Transaction & { category: Category | null })[];
-  currentMonth: number;
-  currentYear: number;
+  fixedExpensesTotal: number;
+  installmentsTotal: number;
 }
 
 export function getCommitmentLevel(percentage: number): "green" | "yellow" | "red" {
@@ -23,27 +20,16 @@ export function getCommitmentLevel(percentage: number): "green" | "yellow" | "re
 export function calculateFinancialHealth(
   income: number,
   expense: number,
-  fixedExpenses: { amount: number }[],
-  upcomingInstallments: { amount: number; date: string | Date }[],
-  currentMonth: number,
-  currentYear: number,
+  fixedExpensesTotal: number,
+  installmentsTotal: number,
 ) {
-  const fixedTotal = fixedExpenses.reduce((sum, e) => sum + Math.abs(e.amount), 0);
-
-  const installmentsTotal = upcomingInstallments
-    .filter((inst) => {
-      const d = new Date(inst.date);
-      return d.getUTCMonth() + 1 === currentMonth && d.getUTCFullYear() === currentYear;
-    })
-    .reduce((sum, inst) => sum + Math.abs(inst.amount), 0);
-
-  const variableTotal = Math.max(0, expense - fixedTotal - installmentsTotal);
+  const variableTotal = Math.max(0, expense - fixedExpensesTotal - installmentsTotal);
   const available = income - expense;
   const commitmentPercentage = income > 0 ? (expense / income) * 100 : 0;
   const level = getCommitmentLevel(commitmentPercentage);
 
   return {
-    fixedTotal,
+    fixedTotal: fixedExpensesTotal,
     installmentsTotal,
     variableTotal,
     available,
@@ -61,10 +47,8 @@ const LEVEL_STYLES = {
 export function FinancialHealthSection({
   income,
   expense,
-  fixedExpenses,
-  upcomingInstallments,
-  currentMonth,
-  currentYear,
+  fixedExpensesTotal,
+  installmentsTotal: installmentsTotalProp,
 }: FinancialHealthSectionProps) {
   const {
     fixedTotal,
@@ -73,7 +57,7 @@ export function FinancialHealthSection({
     available,
     commitmentPercentage,
     level,
-  } = calculateFinancialHealth(income, expense, fixedExpenses, upcomingInstallments, currentMonth, currentYear);
+  } = calculateFinancialHealth(income, expense, fixedExpensesTotal, installmentsTotalProp);
 
   const hasIncome = income > 0;
   const styles = hasIncome ? LEVEL_STYLES[level] : { text: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" };

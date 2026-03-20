@@ -397,6 +397,8 @@ export async function GET(request: NextRequest) {
     // Calculate current month summary
     let income = 0;
     let expenseRaw = 0;
+    let fixedExpensesTotal = 0;
+    let installmentsTotal = 0;
     const categoryTotals: Record<string, { total: number; name: string; color: string }> = {};
 
     for (const t of transactions) {
@@ -406,7 +408,10 @@ export async function GET(request: NextRequest) {
       if (t.type === "INCOME") {
         income += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
-        expenseRaw += Math.abs(t.amount);
+        const absAmount = Math.abs(t.amount);
+        expenseRaw += absAmount;
+        if (t.isFixed) fixedExpensesTotal += absAmount;
+        if (t.isInstallment) installmentsTotal += absAmount;
       }
       // TRANSFER is ignored in totals
 
@@ -681,6 +686,8 @@ export async function GET(request: NextRequest) {
       budgetAlerts,
       allBudgets,
       fixedExpenses,
+      fixedExpensesTotal,
+      installmentsTotal,
       upcomingInstallments,
       weeklySummary,
       weeklyBreakdown,

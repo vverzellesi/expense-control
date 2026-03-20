@@ -28,14 +28,7 @@ describe("getCommitmentLevel", () => {
 
 describe("calculateFinancialHealth", () => {
   it("calculates totals correctly", () => {
-    const result = calculateFinancialHealth(
-      5000,
-      3000,
-      [{ amount: -1000 }, { amount: -500 }],
-      [{ amount: -300, date: "2026-03-15" }],
-      3,
-      2026,
-    );
+    const result = calculateFinancialHealth(5000, 3000, 1500, 300);
     expect(result.fixedTotal).toBe(1500);
     expect(result.installmentsTotal).toBe(300);
     expect(result.variableTotal).toBe(1200);
@@ -44,102 +37,37 @@ describe("calculateFinancialHealth", () => {
     expect(result.level).toBe("green");
   });
 
-  it("filters installments by current month", () => {
-    const result = calculateFinancialHealth(
-      5000,
-      3000,
-      [],
-      [
-        { amount: -300, date: "2026-03-15" },
-        { amount: -200, date: "2026-04-15" },
-      ],
-      3,
-      2026,
-    );
-    expect(result.installmentsTotal).toBe(300);
-  });
-
   it("handles zero income", () => {
-    const result = calculateFinancialHealth(0, 500, [{ amount: -500 }], [], 3, 2026);
+    const result = calculateFinancialHealth(0, 500, 500, 0);
     expect(result.commitmentPercentage).toBe(0);
     expect(result.available).toBe(-500);
     expect(result.level).toBe("green");
   });
 
   it("clamps variable to zero when fixed + installments exceed expense", () => {
-    const result = calculateFinancialHealth(
-      5000,
-      1000,
-      [{ amount: -800 }, { amount: -500 }],
-      [],
-      3,
-      2026,
-    );
+    const result = calculateFinancialHealth(5000, 1000, 800, 500);
     expect(result.variableTotal).toBe(0);
   });
 
   it("returns red level for high commitment", () => {
-    const result = calculateFinancialHealth(
-      5000,
-      4800,
-      [{ amount: -2000 }],
-      [],
-      3,
-      2026,
-    );
+    const result = calculateFinancialHealth(5000, 4800, 2000, 0);
     expect(result.commitmentPercentage).toBe(96);
     expect(result.level).toBe("red");
   });
 
   it("returns yellow level for moderate commitment", () => {
-    const result = calculateFinancialHealth(
-      5000,
-      4000,
-      [{ amount: -2000 }],
-      [],
-      3,
-      2026,
-    );
+    const result = calculateFinancialHealth(5000, 4000, 2000, 0);
     expect(result.commitmentPercentage).toBe(80);
     expect(result.level).toBe("yellow");
   });
-});
-
-const makeTransaction = (overrides: Partial<any> = {}) => ({
-  id: "1",
-  description: "Test",
-  amount: -1000,
-  date: new Date("2026-03-15"),
-  type: "EXPENSE" as const,
-  origin: "",
-  isFixed: true,
-  isInstallment: false,
-  tags: null,
-  categoryTagId: null,
-  categoryId: null,
-  installmentId: null,
-  currentInstallment: null,
-  totalInstallments: null,
-  recurringExpenseId: null,
-  deletedAt: null,
-  userId: null,
-  spaceId: null,
-  isPrivate: false,
-  createdByUserId: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  category: null,
-  ...overrides,
 });
 
 describe("FinancialHealthSection", () => {
   const defaultProps = {
     income: 5000,
     expense: 3000,
-    fixedExpenses: [makeTransaction({ amount: -1500, description: "Aluguel" })],
-    upcomingInstallments: [],
-    currentMonth: 3,
-    currentYear: 2026,
+    fixedExpensesTotal: 1500,
+    installmentsTotal: 300,
   };
 
   it("renders all four metric cards", () => {
@@ -156,7 +84,7 @@ describe("FinancialHealthSection", () => {
   });
 
   it("shows empty state when income is zero", () => {
-    render(<FinancialHealthSection {...defaultProps} income={0} expense={0} />);
+    render(<FinancialHealthSection {...defaultProps} income={0} expense={0} fixedExpensesTotal={0} installmentsTotal={0} />);
     expect(
       screen.getByText("Adicione suas receitas para ver o comprometimento da renda"),
     ).toBeDefined();
@@ -168,7 +96,7 @@ describe("FinancialHealthSection", () => {
     expect(screen.getByText("133%")).toBeDefined();
   });
 
-  it("renders commitment bar segments", () => {
+  it("renders commitment bar with correct segments", () => {
     const { container } = render(<FinancialHealthSection {...defaultProps} />);
     const bar = container.querySelector(".rounded-full.bg-gray-100");
     expect(bar).toBeDefined();
@@ -178,8 +106,14 @@ describe("FinancialHealthSection", () => {
   it("renders legend items for non-zero segments", () => {
     render(<FinancialHealthSection {...defaultProps} />);
     expect(screen.getByText(/Fixas:/)).toBeDefined();
+    expect(screen.getByText(/Parcelas:/)).toBeDefined();
     expect(screen.getByText(/Variável:/)).toBeDefined();
     expect(screen.getByText(/Sobra:/)).toBeDefined();
+  });
+
+  it("hides parcelas from legend when zero", () => {
+    render(<FinancialHealthSection {...defaultProps} installmentsTotal={0} />);
+    expect(screen.queryByText(/Parcelas:/)).toBeNull();
   });
 
   it("renders bar when expenses exceed income (overflow normalized)", () => {
@@ -188,7 +122,6 @@ describe("FinancialHealthSection", () => {
     );
     const bar = container.querySelector(".rounded-full.bg-gray-100");
     expect(bar).toBeDefined();
-    // All segments should still render (normalized to 100%)
     expect(bar?.children.length).toBeGreaterThan(0);
   });
 });
