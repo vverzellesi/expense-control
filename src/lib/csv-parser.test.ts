@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { parseCSV, detectBankFromContent } from './csv-parser'
+import { parseCSV, detectBankFromContent, isC6ExchangeRateRow, detectStatementType, detectOriginFromCSV } from './csv-parser'
 
 // Mock the categorizer module
 vi.mock('./categorizer', () => ({
@@ -34,6 +34,96 @@ describe('detectBankFromContent', () => {
     expect(detectBankFromContent('c6 BANK')).toBe('Cartão C6')
     expect(detectBankFromContent('ITAU')).toBe('Cartão Itaú')
     expect(detectBankFromContent('btg')).toBe('Cartão BTG')
+  })
+})
+
+describe('isC6ExchangeRateRow', () => {
+  it('should detect cotação variants', () => {
+    expect(isC6ExchangeRateRow('Cotação do Dólar')).toBe(true)
+    expect(isC6ExchangeRateRow('COTACAO USD')).toBe(true)
+    expect(isC6ExchangeRateRow('cotação usd: r$5,43')).toBe(true)
+  })
+
+  it('should detect CUUSD/CUEUR', () => {
+    expect(isC6ExchangeRateRow('CUUSD 20.00')).toBe(true)
+    expect(isC6ExchangeRateRow('CUEUR 15.00')).toBe(true)
+  })
+
+  it('should detect spread rows', () => {
+    expect(isC6ExchangeRateRow('SPREAD OPENAI')).toBe(true)
+    expect(isC6ExchangeRateRow('Spread cambial')).toBe(true)
+  })
+
+  it('should NOT detect regular transactions', () => {
+    expect(isC6ExchangeRateRow('OPENAI *CHATGPT SUBSCR SA')).toBe(false)
+    expect(isC6ExchangeRateRow('IOF Transações Exterior')).toBe(false)
+    expect(isC6ExchangeRateRow('NETFLIX.COM')).toBe(false)
+    expect(isC6ExchangeRateRow('SUPERMERCADO XYZ')).toBe(false)
+  })
+})
+
+describe('detectOriginFromCSV', () => {
+  it('should detect C6 fatura', () => {
+    const result = detectOriginFromCSV('C6 Bank fatura', ['Data', 'Descricao', 'Valor', 'Categoria'])
+    expect(result.origin).toBe('Cartão C6')
+    expect(result.bank).toBe('C6')
+    expect(result.statementType).toBe('fatura')
+  })
+
+  it('should detect C6 extrato', () => {
+    const result = detectOriginFromCSV('C6 Bank extrato', ['Data', 'Descricao', 'Valor', 'Saldo'])
+    expect(result.origin).toBe('Extrato C6')
+    expect(result.bank).toBe('C6')
+    expect(result.statementType).toBe('extrato')
+  })
+
+  it('should detect Itaú extrato by Lancamento column', () => {
+    const result = detectOriginFromCSV('Itau Bankline', ['Data', 'Lancamento', 'Valor'])
+    expect(result.origin).toBe('Extrato Itaú')
+    expect(result.statementType).toBe('extrato')
+  })
+
+  it('should detect BTG extrato by Historico column', () => {
+    const result = detectOriginFromCSV('BTG Pactual', ['Data', 'Historico', 'Valor'])
+    expect(result.origin).toBe('Extrato BTG')
+    expect(result.statementType).toBe('extrato')
+  })
+
+  it('should return "Importação CSV" for unknown bank', () => {
+    const result = detectOriginFromCSV('Unknown Bank', ['Data', 'Descricao', 'Valor'])
+    expect(result.origin).toBe('Importação CSV')
+    expect(result.bank).toBeNull()
+  })
+})
+
+describe('detectStatementType', () => {
+  it('should detect fatura when "Categoria" column exists', () => {
+    expect(detectStatementType(['Data', 'Descricao', 'Valor', 'Categoria'])).toBe('fatura')
+  })
+
+  it('should detect fatura when "Estabelecimento" column exists', () => {
+    expect(detectStatementType(['Data', 'Estabelecimento', 'Valor'])).toBe('fatura')
+  })
+
+  it('should detect extrato when "Saldo" column exists', () => {
+    expect(detectStatementType(['Data', 'Descricao', 'Valor', 'Saldo'])).toBe('extrato')
+  })
+
+  it('should detect extrato when "Lancamento" column exists', () => {
+    expect(detectStatementType(['Data', 'Lancamento', 'Valor'])).toBe('extrato')
+  })
+
+  it('should detect extrato when "Historico" column exists (BTG)', () => {
+    expect(detectStatementType(['Data', 'Historico', 'Valor'])).toBe('extrato')
+  })
+
+  it('should be case insensitive', () => {
+    expect(detectStatementType(['DATA', 'DESCRICAO', 'VALOR', 'CATEGORIA'])).toBe('fatura')
+    expect(detectStatementType(['data', 'lancamento', 'valor'])).toBe('extrato')
+  })
+
+  it('should default to fatura for generic columns', () => {
+    expect(detectStatementType(['Data', 'Descricao', 'Valor'])).toBe('fatura')
   })
 })
 
@@ -249,6 +339,78 @@ value1,value2,value3`
       expect(result).toHaveLength(2)
       expect(result[0].amount).toBe(-100.00) // Positive converted to negative
       expect(result[1].amount).toBe(-50.00) // Already negative
+    })
+  })
+
+  describe('C6 international transactions', () => {
+    it('should skip exchange rate informational rows (Cotação)', async () => {
+      const csv = `Data,Descricao,Valor,Categoria
+24/02/2024,OPENAI *CHATGPT SUBSCR SA,"-108,68",Servicos
+24/02/2024,Cotação do Dólar,"-5,43",
+24/02/2024,IOF Transações Exterior,"-3,80",`
+
+      const result = await parseCSV(csv, 'Cartão C6')
+
+      expect(result).toHaveLength(2)
+      expect(result[0].description).toBe('OPENAI *CHATGPT SUBSCR SA')
+      expect(result[0].amount).toBe(-108.68)
+      expect(result[1].description).toBe('IOF Transações Exterior')
+      expect(result[1].amount).toBe(-3.80)
+    })
+
+    it('should skip CUUSD/CUEUR currency info rows', async () => {
+      const csv = `Data,Descricao,Valor,Categoria
+24/02/2024,OPENAI *CHATGPT SUBSCR SA,"-108,68",Servicos
+24/02/2024,CUUSD 20.00,"-5,43",`
+
+      const result = await parseCSV(csv, 'Cartão C6')
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('OPENAI *CHATGPT SUBSCR SA')
+      expect(result[0].amount).toBe(-108.68)
+    })
+
+    it('should skip spread rows', async () => {
+      const csv = `Data,Descricao,Valor,Categoria
+24/02/2024,OPENAI *CHATGPT SUBSCR SA,"-108,68",Servicos
+24/02/2024,SPREAD OPENAI,"-2,15",`
+
+      const result = await parseCSV(csv, 'Cartão C6')
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('OPENAI *CHATGPT SUBSCR SA')
+    })
+
+    it('should keep IOF rows as real transactions', async () => {
+      const csv = `Data,Descricao,Valor,Categoria
+24/02/2024,IOF Transações Exterior,"-3,80",`
+
+      const result = await parseCSV(csv, 'Cartão C6')
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('IOF Transações Exterior')
+      expect(result[0].amount).toBe(-3.80)
+    })
+
+    it('should handle multiple international transactions in same CSV', async () => {
+      const csv = `Data,Descricao,Valor,Categoria
+24/02/2024,OPENAI *CHATGPT SUBSCR SA,"-108,68",Servicos
+24/02/2024,Cotação do Dólar,"-5,43",
+24/02/2024,IOF Transações Exterior,"-3,80",
+25/02/2024,SPOTIFY USA,"-34,90",Servicos
+25/02/2024,Cotação USD,"-5,40",
+25/02/2024,IOF Transações Exterior,"-1,20",
+26/02/2024,SUPERMERCADO XYZ,"-150,00",Mercado`
+
+      const result = await parseCSV(csv, 'Cartão C6')
+
+      expect(result).toHaveLength(5) // 2 main + 2 IOF + 1 domestic
+      const descriptions = result.map(r => r.description)
+      expect(descriptions).not.toContain('Cotação do Dólar')
+      expect(descriptions).not.toContain('Cotação USD')
+      expect(descriptions).toContain('OPENAI *CHATGPT SUBSCR SA')
+      expect(descriptions).toContain('SPOTIFY USA')
+      expect(descriptions).toContain('SUPERMERCADO XYZ')
     })
   })
 

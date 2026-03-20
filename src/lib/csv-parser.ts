@@ -48,6 +48,17 @@ function detectBank(headers: string[]): BankType {
   return "unknown";
 }
 
+const C6_EXCHANGE_RATE_PATTERNS = [
+  /cota[cç][aã]o/i,
+  /\bCUUSD\b/,
+  /\bCUEUR\b/,
+  /\bSPREAD\b/i,
+];
+
+export function isC6ExchangeRateRow(description: string): boolean {
+  return C6_EXCHANGE_RATE_PATTERNS.some((pattern) => pattern.test(description));
+}
+
 function parseC6Row(row: Record<string, string>): ParsedRow | null {
   const dateKey = Object.keys(row).find((k) =>
     k.toLowerCase().includes("data")
@@ -194,6 +205,11 @@ export async function parseCSV(
 
             if (!parsed) continue;
 
+            // Skip C6 exchange rate informational rows (cotação, spread, CUUSD)
+            if (bankType === "c6" && isC6ExchangeRateRow(parsed.description)) {
+              continue;
+            }
+
             const installmentInfo = detectInstallment(parsed.description);
             const suggestedCategory = await suggestCategory(parsed.description);
 
@@ -222,6 +238,72 @@ export async function parseCSV(
   });
 }
 
+export type StatementType = "fatura" | "extrato";
+
+/**
+ * Detects whether a CSV is a credit card bill (fatura) or bank statement (extrato)
+ * based on column headers.
+ */
+export function detectStatementType(headers: string[]): StatementType {
+  const headerStr = headers.join(",").toLowerCase();
+
+  // Extrato indicators: balance column, lancamento (Itaú), historico (BTG)
+  if (
+    headerStr.includes("saldo") ||
+    headerStr.includes("lancamento") ||
+    headerStr.includes("historico")
+  ) {
+    return "extrato";
+  }
+
+  // Fatura indicators: categoria (C6), estabelecimento
+  if (
+    headerStr.includes("categoria") ||
+    headerStr.includes("estabelecimento")
+  ) {
+    return "fatura";
+  }
+
+  // Default: assume fatura (credit card bill) for generic CSV
+  return "fatura";
+}
+
+export interface DetectedOriginResult {
+  origin: string;
+  bank: string | null;
+  statementType: StatementType;
+}
+
+/**
+ * Detects bank and statement type from CSV content and headers.
+ * Returns appropriate origin name (e.g. "Cartão C6" or "Extrato C6").
+ */
+export function detectOriginFromCSV(
+  content: string,
+  headers: string[]
+): DetectedOriginResult {
+  const lowerContent = content.toLowerCase();
+  const statementType = detectStatementType(headers);
+  const prefix = statementType === "fatura" ? "Cartão" : "Extrato";
+
+  let bank: string | null = null;
+
+  if (lowerContent.includes("c6 bank") || lowerContent.includes("c6bank") || lowerContent.includes("c6")) {
+    bank = "C6";
+  } else if (lowerContent.includes("itau") || lowerContent.includes("itaú")) {
+    bank = "Itaú";
+  } else if (lowerContent.includes("btg")) {
+    bank = "BTG";
+  }
+
+  const origin = bank ? `${prefix} ${bank}` : "Importação CSV";
+
+  return { origin, bank, statementType };
+}
+
+/**
+ * @deprecated Use detectOriginFromCSV() for richer detection.
+ */
 export function detectBankFromContent(content: string): string {
   const lowerContent = content.toLowerCase();
 
