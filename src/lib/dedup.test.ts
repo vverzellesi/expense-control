@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { findDuplicate, filterDuplicates } from "./dedup"
+import { findDuplicate, filterDuplicates, normalizeDescription } from "./dedup"
 
 // Mock prisma
 vi.mock("@/lib/db", () => ({
@@ -16,6 +16,42 @@ import prisma from "@/lib/db"
 const mockFindFirst = vi.mocked(prisma.transaction.findFirst)
 const mockFindMany = vi.mocked(prisma.transaction.findMany)
 
+describe("normalizeDescription", () => {
+  it("should lowercase and trim", () => {
+    expect(normalizeDescription("  NETFLIX  ")).toBe("netflix")
+  })
+
+  it("should remove dots", () => {
+    expect(normalizeDescription("MERCHANT.COM")).toBe("merchantcom")
+  })
+
+  it("should remove asterisks", () => {
+    expect(normalizeDescription("OPENAI *CHATGPT")).toBe("openai chatgpt")
+  })
+
+  it("should remove slashes", () => {
+    expect(normalizeDescription("MERCHANT.COM/BILL")).toBe("merchantcombill")
+  })
+
+  it("should collapse multiple spaces", () => {
+    expect(normalizeDescription("FOO   BAR    BAZ")).toBe("foo bar baz")
+  })
+
+  it("should normalize similar descriptions to same output", () => {
+    const a = normalizeDescription("MERCHANTCOMBILL")
+    const b = normalizeDescription("MERCHANT.COM/BILL")
+    expect(a).toBe(b)
+  })
+
+  it("should handle empty string", () => {
+    expect(normalizeDescription("")).toBe("")
+  })
+
+  it("should strip accents for comparison", () => {
+    expect(normalizeDescription("Café Açaí")).toBe("cafe acai")
+  })
+})
+
 describe("findDuplicate", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -28,7 +64,7 @@ describe("findDuplicate", () => {
       amount: -45.9,
       date: new Date("2026-03-05T15:30:00"),
     }
-    mockFindFirst.mockResolvedValue(existingTx as never)
+    mockFindMany.mockResolvedValue([existingTx] as never)
 
     const result = await findDuplicate({
       userId: "user1",
@@ -38,25 +74,10 @@ describe("findDuplicate", () => {
     })
 
     expect(result).toEqual(existingTx)
-    expect(mockFindFirst).toHaveBeenCalledWith({
-      where: {
-        userId: "user1",
-        description: {
-          equals: "PIX REST FULANO",
-          mode: "insensitive",
-        },
-        amount: -45.9,
-        date: {
-          gte: expect.any(Date),
-          lte: expect.any(Date),
-        },
-        deletedAt: null,
-      },
-    })
   })
 
   it("returns null when no duplicate exists", async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindMany.mockResolvedValue([])
 
     const result = await findDuplicate({
       userId: "user1",
@@ -68,30 +89,46 @@ describe("findDuplicate", () => {
     expect(result).toBeNull()
   })
 
-  it("trims description before comparing", async () => {
-    mockFindFirst.mockResolvedValue(null)
+  it("matches with normalized descriptions (dots, slashes removed)", async () => {
+    const existingTx = {
+      id: "tx1",
+      description: "MERCHANT.COM/BILL",
+      amount: -50,
+      date: new Date("2026-03-05T12:00:00"),
+    }
+    mockFindMany.mockResolvedValue([existingTx] as never)
 
-    await findDuplicate({
+    const result = await findDuplicate({
       userId: "user1",
-      description: "  PIX REST FULANO  ",
-      amount: -45.9,
-      date: new Date("2026-03-05"),
+      description: "MERCHANTCOMBILL",
+      amount: -50,
+      date: new Date("2026-03-05T08:00:00"),
     })
 
-    expect(mockFindFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          description: {
-            equals: "PIX REST FULANO",
-            mode: "insensitive",
-          },
-        }),
-      })
-    )
+    expect(result).toEqual(existingTx)
+  })
+
+  it("matches with asterisks removed", async () => {
+    const existingTx = {
+      id: "tx1",
+      description: "OPENAI *CHATGPT",
+      amount: -20,
+      date: new Date("2026-03-05T12:00:00"),
+    }
+    mockFindMany.mockResolvedValue([existingTx] as never)
+
+    const result = await findDuplicate({
+      userId: "user1",
+      description: "OPENAI CHATGPT",
+      amount: -20,
+      date: new Date("2026-03-05T08:00:00"),
+    })
+
+    expect(result).toEqual(existingTx)
   })
 
   it("uses day boundaries for date comparison", async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindMany.mockResolvedValue([])
 
     await findDuplicate({
       userId: "user1",
@@ -100,7 +137,7 @@ describe("findDuplicate", () => {
       date: new Date("2026-03-05T14:30:00"),
     })
 
-    const call = mockFindFirst.mock.calls[0][0]
+    const call = mockFindMany.mock.calls[0][0]
     const dateFilter = call?.where?.date as { gte: Date; lte: Date }
     expect(dateFilter.gte.getHours()).toBe(0)
     expect(dateFilter.gte.getMinutes()).toBe(0)
@@ -152,5 +189,35 @@ describe("filterDuplicates", () => {
     expect(result.unique).toHaveLength(0)
     expect(result.duplicateCount).toBe(0)
     expect(mockFindMany).not.toHaveBeenCalled()
+  })
+
+  it("detects duplicates with normalized descriptions (dots, slashes)", async () => {
+    mockFindMany.mockResolvedValue([
+      { description: "MERCHANT.COM/BILL", amount: -50, date: new Date("2026-03-05T12:00:00") },
+    ] as never)
+
+    const transactions = [
+      { description: "MERCHANTCOMBILL", amount: -50, date: new Date("2026-03-05T12:00:00") },
+    ]
+
+    const result = await filterDuplicates("user1", transactions)
+
+    expect(result.unique).toHaveLength(0)
+    expect(result.duplicateCount).toBe(1)
+  })
+
+  it("detects duplicates with asterisks in descriptions", async () => {
+    mockFindMany.mockResolvedValue([
+      { description: "OPENAI *CHATGPT", amount: -20, date: new Date("2026-03-05T12:00:00") },
+    ] as never)
+
+    const transactions = [
+      { description: "OPENAI CHATGPT", amount: -20, date: new Date("2026-03-05T12:00:00") },
+    ]
+
+    const result = await filterDuplicates("user1", transactions)
+
+    expect(result.unique).toHaveLength(0)
+    expect(result.duplicateCount).toBe(1)
   })
 })
