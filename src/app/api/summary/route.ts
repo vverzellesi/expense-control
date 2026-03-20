@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getMonthBoundaries } from "@/lib/date-utils";
 
 // Helper to get Monday of a given week
 function getMondayOfWeek(date: Date): Date {
@@ -201,9 +202,7 @@ export async function GET(request: NextRequest) {
     const targetMonth = month ? parseInt(month) : currentDate.getMonth() + 1;
     const targetYear = year ? parseInt(year) : currentDate.getFullYear();
 
-    const startDate = new Date(targetYear, targetMonth - 1, 1);
-    const endDate = new Date(targetYear, targetMonth, 0);
-    endDate.setHours(23, 59, 59, 999);
+    const [startDate, endDate] = getMonthBoundaries(targetYear, targetMonth);
 
     // Check if viewing a past month (for auto-recording savings history)
     const isCurrentMonth = targetMonth === currentDate.getMonth() + 1 && targetYear === currentDate.getFullYear();

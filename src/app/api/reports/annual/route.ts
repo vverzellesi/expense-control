@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
 import { MONTH_LABELS } from "@/lib/constants";
+import { getLocalMonth, getYearBoundaries } from "@/lib/date-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,8 +17,8 @@ export async function GET(request: NextRequest) {
           ...ctx.ownerFilter,
           deletedAt: null,
           date: {
-            gte: new Date(year, 0, 1),
-            lte: new Date(year, 11, 31, 23, 59, 59, 999),
+            gte: getYearBoundaries(year)[0],
+            lte: getYearBoundaries(year)[1],
           },
           investmentTransaction: null,
         },
@@ -27,8 +28,8 @@ export async function GET(request: NextRequest) {
           ...ctx.ownerFilter,
           deletedAt: null,
           date: {
-            gte: new Date(year - 1, 0, 1),
-            lte: new Date(year - 1, 11, 31, 23, 59, 59, 999),
+            gte: getYearBoundaries(year - 1)[0],
+            lte: getYearBoundaries(year - 1)[1],
           },
           investmentTransaction: null,
         },
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
       currentByMonth[m] = { income: 0, expense: 0 };
     }
     for (const t of currentYearTx) {
-      const m = new Date(t.date).getMonth() + 1;
+      const m = getLocalMonth(t.date);
       if (t.type === "INCOME") {
         currentByMonth[m].income += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
       prevByMonth[m] = { income: 0, expense: 0 };
     }
     for (const t of prevYearTx) {
-      const m = new Date(t.date).getMonth() + 1;
+      const m = getLocalMonth(t.date);
       if (t.type === "INCOME") {
         prevByMonth[m].income += Math.abs(t.amount);
       } else if (t.type === "EXPENSE") {
