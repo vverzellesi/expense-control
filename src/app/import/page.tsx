@@ -650,11 +650,21 @@ export default function ImportPage() {
 
       setOrigin(data.origin);
       setOcrConfidence(data.confidence);
-      const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => ({
-        ...t,
-        date: new Date(t.date),
-        selected: true,
-      }));
+      const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
+        // Normalize OCR dates: JSON serialization produces UTC strings like
+        // "2026-03-01T00:00:00Z" which, when parsed with new Date(), shift
+        // the day backwards in BRT. Extract YYYY-MM-DD and build at noon local.
+        let normalizedDate: Date;
+        if (typeof t.date === "string") {
+          const match = (t.date as string).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          normalizedDate = match
+            ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0)
+            : new Date(t.date);
+        } else {
+          normalizedDate = new Date(t.date);
+        }
+        return { ...t, date: normalizedDate, selected: true };
+      });
       // Check for duplicates
       const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
       setTransactions(transactionsWithDuplicates);

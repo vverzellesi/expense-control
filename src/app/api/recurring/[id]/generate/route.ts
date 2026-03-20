@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getMonthBoundaries } from "@/lib/date-utils";
 
 export async function POST(
   request: NextRequest,
@@ -40,8 +41,7 @@ export async function POST(
     }
 
     // Check if transaction already exists for this month
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 0);
+    const [startOfMonth, endOfMonth] = getMonthBoundaries(year, month);
 
     const existingTransaction = await prisma.transaction.findFirst({
       where: {

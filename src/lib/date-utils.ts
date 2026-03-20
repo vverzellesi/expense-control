@@ -43,24 +43,32 @@ export function getStartOfMonth(date: Date): Date {
 
 /** Extracts month (1-12) from a date in a timezone-safe way by normalizing to noon first. */
 export function getLocalMonth(date: Date | string): number {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return (
-    new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0).getMonth() +
-    1
-  );
+  const d = toLocalDate(date);
+  return d.getMonth() + 1;
 }
 
 /** Extracts year from a date in a timezone-safe way by normalizing to noon first. */
 export function getLocalYear(date: Date | string): number {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return new Date(
-    d.getFullYear(),
-    d.getMonth(),
-    d.getDate(),
-    12,
-    0,
-    0
-  ).getFullYear();
+  return toLocalDate(date).getFullYear();
+}
+
+/**
+ * Converts a Date or YYYY-MM-DD string to a local-timezone Date at noon.
+ * Strings are parsed with the numeric Date constructor to avoid UTC interpretation.
+ */
+function toLocalDate(date: Date | string): Date {
+  if (typeof date === "string") {
+    // YYYY-MM-DD strings parsed via new Date() are treated as UTC — avoid that.
+    // Also handle ISO strings with time component (e.g. from JSON serialization).
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+    }
+    // Fallback: parse and normalize
+    const d = new Date(date);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+  }
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
 }
 
 /**

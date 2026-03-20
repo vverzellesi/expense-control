@@ -73,6 +73,19 @@ describe("getMonthBoundaries", () => {
     expect(end.getMonth()).toBe(11);
     expect(end.getDate()).toBe(31);
   });
+
+  it("end boundary includes noon transactions on last day of month", () => {
+    // Regression: transactions stored at noon on the last day must fall within boundaries
+    const [, end] = getMonthBoundaries(2026, 2);
+    const noonOnLastDay = new Date(2026, 1, 28, 12, 0, 0);
+    expect(noonOnLastDay.getTime()).toBeLessThanOrEqual(end.getTime());
+  });
+
+  it("end boundary includes noon transactions on day 31", () => {
+    const [, end] = getMonthBoundaries(2026, 3);
+    const noonOn31st = new Date(2026, 2, 31, 12, 0, 0);
+    expect(noonOn31st.getTime()).toBeLessThanOrEqual(end.getTime());
+  });
 });
 
 describe("getYearBoundaries", () => {
@@ -117,7 +130,6 @@ describe("getLocalMonth", () => {
   });
 
   it("extracts month from ISO string", () => {
-    // This creates a local date - the month extraction should be consistent
     const date = new Date(2026, 11, 31, 12, 0, 0);
     expect(getLocalMonth(date)).toBe(12);
   });
@@ -126,6 +138,20 @@ describe("getLocalMonth", () => {
     const date = new Date(2026, 0, 1, 0, 0, 0);
     expect(getLocalMonth(date)).toBe(1);
     expect(getLocalYear(date)).toBe(2026);
+  });
+
+  it("parses YYYY-MM-DD string without UTC shift", () => {
+    // new Date("2026-01-01") is parsed as UTC midnight, which in BRT is Dec 31 2025.
+    // getLocalMonth must still return January.
+    expect(getLocalMonth("2026-01-01")).toBe(1);
+    expect(getLocalMonth("2026-03-01")).toBe(3);
+    expect(getLocalMonth("2025-12-31")).toBe(12);
+  });
+
+  it("parses ISO datetime strings correctly", () => {
+    // Simulates JSON-serialized dates from server (UTC midnight)
+    expect(getLocalMonth("2026-03-01T00:00:00.000Z")).toBe(3);
+    expect(getLocalMonth("2026-01-01T00:00:00.000Z")).toBe(1);
   });
 });
 
@@ -138,6 +164,15 @@ describe("getLocalYear", () => {
   it("extracts year from date at midnight", () => {
     const date = new Date(2026, 0, 1, 0, 0, 0);
     expect(getLocalYear(date)).toBe(2026);
+  });
+
+  it("parses YYYY-MM-DD string without UTC shift", () => {
+    expect(getLocalYear("2026-01-01")).toBe(2026);
+    expect(getLocalYear("2025-12-31")).toBe(2025);
+  });
+
+  it("parses ISO datetime strings correctly", () => {
+    expect(getLocalYear("2026-01-01T00:00:00.000Z")).toBe(2026);
   });
 });
 
