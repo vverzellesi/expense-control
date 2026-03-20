@@ -35,7 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { TransactionForm } from "@/components/TransactionForm";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
-import { Plus, Pencil, Trash2, Filter, Search, X, Tag, Repeat } from "lucide-react";
+import { Plus, Pencil, Trash2, Filter, Search, X, Tag, Repeat, DollarSign } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { FilterDrawer } from "@/components/FilterDrawer";
 import type { Transaction, Category, Origin } from "@/types";
@@ -64,23 +64,25 @@ function TransactionsContent() {
   const [filterFixed, setFilterFixed] = useState(false);
   const [filterInstallment, setFilterInstallment] = useState(false);
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(!!searchParams.get("categoryId"));
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterTag, setFilterTag] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [filterMinAmount, setFilterMinAmount] = useState("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState("");
+  const [minAmountInput, setMinAmountInput] = useState("");
+  const [maxAmountInput, setMaxAmountInput] = useState("");
 
   useEffect(() => {
     fetchData();
-  }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag]);
+  }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag, filterMinAmount, filterMaxAmount]);
 
   // Sync category filter with URL searchParams (handles back/forward, client-side navigation)
   useEffect(() => {
     const categoryId = searchParams.get("categoryId");
     setFilterCategory(categoryId || "all");
     if (categoryId) {
-      setShowFilters(true);
       setShowFilterDrawer(true);
     }
   }, [searchParams]);
@@ -103,6 +105,8 @@ function TransactionsContent() {
       if (filterOrigin && filterOrigin !== "all") params.set("origin", filterOrigin);
       if (searchQuery) params.set("search", searchQuery);
       if (filterTag) params.set("tag", filterTag);
+      if (filterMinAmount) params.set("minAmount", filterMinAmount);
+      if (filterMaxAmount) params.set("maxAmount", filterMaxAmount);
 
       const res = await fetch(`/api/transactions?${params.toString()}`);
       const data = await res.json();
@@ -212,7 +216,7 @@ function TransactionsContent() {
     setSearchQuery("");
   }
 
-  // Count active filters for badge
+  // Count active filters for badge (excludes date range since it always has a value)
   function getActiveFilterCount() {
     let count = 0;
     if (filterCategory && filterCategory !== "all") count++;
@@ -221,6 +225,8 @@ function TransactionsContent() {
     if (filterFixed) count++;
     if (filterInstallment) count++;
     if (filterTag) count++;
+    if (filterMinAmount) count++;
+    if (filterMaxAmount) count++;
     return count;
   }
 
@@ -234,6 +240,8 @@ function TransactionsContent() {
     isFixed: boolean;
     isInstallment: boolean;
     tag: string;
+    minAmount: string;
+    maxAmount: string;
   }) {
     setFilterStartDate(filters.startDate);
     setFilterEndDate(filters.endDate);
@@ -243,6 +251,39 @@ function TransactionsContent() {
     setFilterFixed(filters.isFixed);
     setFilterInstallment(filters.isInstallment);
     setFilterTag(filters.tag);
+    setFilterMinAmount(filters.minAmount);
+    setFilterMaxAmount(filters.maxAmount);
+    setMinAmountInput(filters.minAmount);
+    setMaxAmountInput(filters.maxAmount);
+  }
+
+  function clearAllFilters() {
+    setFilterStartDate(toLocalDateString(currentMonthStart));
+    setFilterEndDate(toLocalDateString(currentMonthEnd));
+    setFilterCategory("all");
+    setFilterType("all");
+    setFilterOrigin("all");
+    setFilterFixed(false);
+    setFilterInstallment(false);
+    setFilterTag("");
+    setFilterMinAmount("");
+    setFilterMaxAmount("");
+    setMinAmountInput("");
+    setMaxAmountInput("");
+  }
+
+  function handleAmountBlur(field: "min" | "max") {
+    if (field === "min") {
+      setFilterMinAmount(minAmountInput);
+    } else {
+      setFilterMaxAmount(maxAmountInput);
+    }
+  }
+
+  function handleAmountKeyDown(e: React.KeyboardEvent, field: "min" | "max") {
+    if (e.key === "Enter") {
+      handleAmountBlur(field);
+    }
   }
 
   const activeFilterCount = getActiveFilterCount();
@@ -300,8 +341,16 @@ function TransactionsContent() {
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
   const balance = totalIncome - totalExpense;
 
+  const typeButtons = [
+    { value: "all", label: "Todos", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+    { value: "EXPENSE", label: "Despesa", activeClass: "bg-red-500 text-white border-red-500" },
+    { value: "INCOME", label: "Receita", activeClass: "bg-green-500 text-white border-green-500" },
+    { value: "TRANSFER", label: "Transferência", activeClass: "bg-blue-500 text-white border-blue-500" },
+  ];
+
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-4 overflow-x-hidden">
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -340,15 +389,6 @@ function TransactionsContent() {
                 </span>
               )}
             </Button>
-            {/* Desktop filter button */}
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="hidden md:flex"
-            >
-              <Filter className="mr-2 h-4 w-4" />
-              Filtros
-            </Button>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -379,115 +419,265 @@ function TransactionsContent() {
         </div>
       </div>
 
-      {/* Desktop Filters */}
-      {showFilters && (
-        <Card className="hidden md:block">
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap items-end gap-4">
-              <div>
-                <Label>Período</Label>
-                <DateRangePicker
-                  startDate={filterStartDate}
-                  endDate={filterEndDate}
-                  onRangeChange={handleDateRangeChange}
-                />
-              </div>
+      {/* Desktop Filters - Always visible */}
+      <div className="hidden md:block rounded-lg border bg-gray-50/50 p-4">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          {/* Date Range */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Período</span>
+            <DateRangePicker
+              startDate={filterStartDate}
+              endDate={filterEndDate}
+              onRangeChange={handleDateRangeChange}
+            />
+          </div>
 
-              <div>
-                <Label>Categoria</Label>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Tipo</Label>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="INCOME">Receita</SelectItem>
-                    <SelectItem value="EXPENSE">Despesa</SelectItem>
-                    <SelectItem value="TRANSFER">Transferencia</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Origem</Label>
-                <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {origins.map((o) => (
-                      <SelectItem key={o.id} value={o.name}>
-                        {o.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-end gap-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="fixed"
-                    checked={filterFixed}
-                    onCheckedChange={setFilterFixed}
-                  />
-                  <Label htmlFor="fixed">Fixas</Label>
-                </div>
-              </div>
-
-              <div className="flex items-end gap-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="installment"
-                    checked={filterInstallment}
-                    onCheckedChange={setFilterInstallment}
-                  />
-                  <Label htmlFor="installment">Parceladas</Label>
-                </div>
-              </div>
-
-              {allTags.length > 0 && (
-                <div>
-                  <Label>Tag</Label>
-                  <Select value={filterTag || "__all__"} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">Todas</SelectItem>
-                      {allTags.map((tag) => (
-                        <SelectItem key={tag} value={tag}>
-                          <div className="flex items-center gap-1">
-                            <Tag className="h-3 w-3" />
-                            {tag}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+          {/* Type - Button Group */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Tipo</span>
+            <div className="inline-flex rounded-lg border bg-white overflow-hidden">
+              {typeButtons.map((btn) => (
+                <button
+                  key={btn.value}
+                  type="button"
+                  className={`px-3 py-[7px] text-sm font-medium transition-colors border-r last:border-r-0 ${
+                    filterType === btn.value
+                      ? btn.activeClass
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                  onClick={() => setFilterType(btn.value)}
+                >
+                  {btn.label}
+                </button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Category */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Categoria</span>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className={`w-[180px] bg-white ${filterCategory !== "all" ? "border-emerald-300 ring-1 ring-emerald-100" : ""}`}>
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: c.color }}
+                      />
+                      {c.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Origin */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Origem</span>
+            <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+              <SelectTrigger className={`w-[160px] bg-white ${filterOrigin !== "all" ? "border-emerald-300 ring-1 ring-emerald-100" : ""}`}>
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as origens</SelectItem>
+                {origins.map((o) => (
+                  <SelectItem key={o.id} value={o.name}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Amount Range */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Valor (R$)</span>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                placeholder="Mín"
+                value={minAmountInput}
+                onChange={(e) => setMinAmountInput(e.target.value)}
+                onBlur={() => handleAmountBlur("min")}
+                onKeyDown={(e) => handleAmountKeyDown(e, "min")}
+                className={`w-24 h-9 bg-white ${filterMinAmount ? "border-emerald-300 ring-1 ring-emerald-100" : ""}`}
+                min="0"
+                step="0.01"
+              />
+              <span className="text-gray-400 text-sm">-</span>
+              <Input
+                type="number"
+                placeholder="Máx"
+                value={maxAmountInput}
+                onChange={(e) => setMaxAmountInput(e.target.value)}
+                onBlur={() => handleAmountBlur("max")}
+                onKeyDown={(e) => handleAmountKeyDown(e, "max")}
+                className={`w-24 h-9 bg-white ${filterMaxAmount ? "border-emerald-300 ring-1 ring-emerald-100" : ""}`}
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+
+          {/* Switches */}
+          <div className="flex items-center gap-4 pb-1">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="fixed"
+                checked={filterFixed}
+                onCheckedChange={setFilterFixed}
+              />
+              <Label htmlFor="fixed" className="text-sm cursor-pointer">Fixas</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="installment"
+                checked={filterInstallment}
+                onCheckedChange={setFilterInstallment}
+              />
+              <Label htmlFor="installment" className="text-sm cursor-pointer">Parceladas</Label>
+            </div>
+          </div>
+
+          {/* Tags */}
+          {allTags.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-500">Tag</span>
+              <Select value={filterTag || "__all__"} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
+                <SelectTrigger className={`w-[140px] bg-white ${filterTag ? "border-emerald-300 ring-1 ring-emerald-100" : ""}`}>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todas</SelectItem>
+                  {allTags.map((tag) => (
+                    <SelectItem key={tag} value={tag}>
+                      <div className="flex items-center gap-1">
+                        <Tag className="h-3 w-3" />
+                        {tag}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Clear Filters */}
+          {activeFilterCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="text-gray-500 hover:text-gray-700 pb-1"
+            >
+              <X className="mr-1 h-3 w-3" />
+              Limpar filtros ({activeFilterCount})
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Active Filter Badges (visible on both mobile and desktop) */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {filterCategory !== "all" && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterCategory("all")}
+            >
+              {categories.find((c) => c.id === filterCategory)?.name || "Categoria"}
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {filterType !== "all" && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterType("all")}
+            >
+              {typeButtons.find((b) => b.value === filterType)?.label}
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {filterOrigin !== "all" && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterOrigin("all")}
+            >
+              {filterOrigin}
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {filterFixed && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterFixed(false)}
+            >
+              Fixas
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {filterInstallment && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterInstallment(false)}
+            >
+              Parceladas
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {filterTag && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => setFilterTag("")}
+            >
+              <Tag className="h-3 w-3" />
+              {filterTag}
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {(filterMinAmount || filterMaxAmount) && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={() => {
+                setFilterMinAmount("");
+                setFilterMaxAmount("");
+                setMinAmountInput("");
+                setMaxAmountInput("");
+              }}
+            >
+              <DollarSign className="h-3 w-3" />
+              {filterMinAmount && filterMaxAmount
+                ? `R$ ${filterMinAmount} - R$ ${filterMaxAmount}`
+                : filterMinAmount
+                  ? `A partir de R$ ${filterMinAmount}`
+                  : `Até R$ ${filterMaxAmount}`}
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+          {searchQuery && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 pr-1"
+              onClick={clearSearch}
+            >
+              Busca: &quot;{searchQuery}&quot;
+              <X className="h-3 w-3 hover:text-red-500" />
+            </Badge>
+          )}
+        </div>
       )}
 
       {/* Transactions List */}
@@ -495,22 +685,6 @@ function TransactionsContent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {transactions.length} {transactions.length !== 1 ? "transações" : "transação"}
-            {searchQuery && (
-              <Badge variant="secondary" className="font-normal">
-                Busca: &quot;{searchQuery}&quot;
-              </Badge>
-            )}
-            {filterTag && (
-              <Badge variant="outline" className="font-normal">
-                <Tag className="mr-1 h-3 w-3" />
-                {filterTag}
-              </Badge>
-            )}
-            {filterOrigin && filterOrigin !== "all" && (
-              <Badge variant="secondary" className="font-normal">
-                Origem: {filterOrigin}
-              </Badge>
-            )}
           </CardTitle>
           {!loading && transactions.length > 0 && (
             <div className="flex flex-wrap gap-4 text-sm">
@@ -754,6 +928,8 @@ function TransactionsContent() {
           isFixed: filterFixed,
           isInstallment: filterInstallment,
           tag: filterTag,
+          minAmount: filterMinAmount,
+          maxAmount: filterMaxAmount,
         }}
         onApply={handleFilterDrawerApply}
         categories={categories}
