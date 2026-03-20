@@ -59,7 +59,7 @@ Verificação: `npm run test:unit` passa, `npm run build` compila sem erros.
 
 | # | Phase | File | Summary | Status | Depends On |
 |---|-------|------|---------|--------|------------|
-| 1 | Saúde Financeira | `phase-1-financial-health.md` | Componente + integração no dashboard + testes | pending | — |
+| 1 | Saúde Financeira | `phase-1-financial-health.md` | Componente + integração no dashboard + testes | complete | — |
 
 ---
 
@@ -127,6 +127,11 @@ Verificação: `npm run test:unit` passa, `npm run build` compila sem erros.
 ---
 
 ## Learnings
+
+- TypeScript `as const` necessário em helpers de teste para literais de tipo (ex: `type: "EXPENSE" as const`)
+- Ícone `Zap` ainda usado pela seção Gastos Incomuns — não removível. `Wallet` e `Calendar` removidos com sucesso.
+- Tipos `WeeklySummary`/`WeeklyBreakdown` mantidos no import pois `SummaryData` os referencia (contrato da API)
+- Strings de UI em PT-BR devem usar acentuação correta ("Mês", "Disponível", "Variável")
 
 ---
 
