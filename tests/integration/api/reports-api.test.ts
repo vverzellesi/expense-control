@@ -620,6 +620,47 @@ describe('GET /api/reports/net-worth', () => {
     expect(data.current).toHaveProperty('monthlyChange')
   })
 
+  it('should exclude TRANSFER transactions from income and expense totals', async () => {
+    const mockTransactions = [
+      {
+        amount: 5000,
+        type: 'INCOME',
+        date: new Date(2024, 0, 10)
+      },
+      {
+        amount: -2000,
+        type: 'EXPENSE',
+        date: new Date(2024, 0, 15)
+      },
+      {
+        amount: -3000,
+        type: 'TRANSFER',
+        date: new Date(2024, 0, 20)
+      }
+    ]
+    const mockSnapshots: unknown[] = []
+    const mockAggregate = {
+      _sum: { currentValue: 0, totalInvested: 0 }
+    }
+
+    mockPrisma.transaction.findMany.mockResolvedValue(mockTransactions)
+    mockPrisma.investmentSnapshot.findMany.mockResolvedValue(mockSnapshots)
+    mockPrisma.investment.aggregate.mockResolvedValue(mockAggregate)
+
+    const request = createRequest('http://localhost:3000/api/reports/net-worth?year=2024')
+    const response = await netWorthGET(request)
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+
+    // January (index 0) should only count INCOME and EXPENSE, not TRANSFER
+    const jan = data.months[0]
+    expect(jan.income).toBe(5000)
+    expect(jan.expense).toBe(2000)
+    // cashDelta = income - expense = 5000 - 2000 = 3000 (TRANSFER excluded)
+    expect(jan.cashDelta).toBe(3000)
+  })
+
   it('should return 401 when unauthenticated', async () => {
     mockGetAuthenticatedUserId.mockRejectedValue(new Error('Unauthorized'))
 
