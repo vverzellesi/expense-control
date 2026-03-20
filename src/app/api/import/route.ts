@@ -28,8 +28,12 @@ export async function POST(request: NextRequest) {
     if (result.carryoverLinkedCount > 0) {
       messageParts.push(`${result.carryoverLinkedCount} vinculadas a saldo rolado`);
     }
-    const message =
-      result.skippedCount > 0 || result.linkedCount > 0 || result.carryoverLinkedCount > 0
+    if (result.futureInstallmentsCreated > 0) {
+      messageParts.push(`${result.futureInstallmentsCreated} parcelas futuras geradas`);
+    }
+    const hasExtras = result.skippedCount > 0 || result.linkedCount > 0 ||
+      result.carryoverLinkedCount > 0 || result.futureInstallmentsCreated > 0;
+    const message = hasExtras
         ? `${messageParts[0]} (${messageParts.slice(1).join(", ")})`
         : `${result.created.length} transações importadas com sucesso`;
 
@@ -40,6 +44,8 @@ export async function POST(request: NextRequest) {
         skippedCount: result.skippedCount,
         linkedCount: result.linkedCount,
         carryoverLinkedCount: result.carryoverLinkedCount,
+        installmentGroupsCreated: result.installmentGroupsCreated,
+        futureInstallmentsCreated: result.futureInstallmentsCreated,
         linkedCarryovers: result.linkedCarryovers,
       },
       { status: 201 }
