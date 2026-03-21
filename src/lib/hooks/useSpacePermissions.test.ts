@@ -69,6 +69,7 @@ describe('useSpacePermissions', () => {
     }
 
     mockFetch.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve(spacePermissions),
     })
 

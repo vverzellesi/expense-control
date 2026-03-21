@@ -547,13 +547,14 @@ model Space {
 }
 
 model SpaceMember {
-  id       String    @id @default(cuid())
-  spaceId  String
-  space    Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  userId   String
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role     SpaceRole
-  joinedAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  spaceId     String
+  space       Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        SpaceRole
+  joinedAt    DateTime  @default(now())
+  hasMigrated Boolean   @default(false)
 
   @@unique([spaceId, userId])
 }

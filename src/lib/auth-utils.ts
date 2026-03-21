@@ -1,6 +1,6 @@
 import { auth } from "@/auth"
 import { NextResponse } from "next/server"
-import { getActiveSpaceId, validateSpaceAccess, SpacePermissions } from "./space-context"
+import { getActiveSpaceId, validateSpaceAccess, SpacePermissions, hasExplicitSpaceContext, getUserDefaultSpace, setActiveSpaceId } from "./space-context"
 
 /**
  * Gets the authenticated user's ID from the session.
@@ -71,9 +71,28 @@ export type AuthContext = {
 /**
  * Gets the full auth context including space awareness.
  * Returns userId, active spaceId (if any), permissions, and ownerFilter for queries.
+ * Auto-defaults to user's space if no explicit context has been set (first login).
  */
 export async function getAuthContext(): Promise<AuthContext> {
   const userId = await getAuthenticatedUserId()
+  const hasExplicit = await hasExplicitSpaceContext()
+
+  // Auto-default to space on first request when no explicit choice was made
+  if (!hasExplicit) {
+    const defaultSpace = await getUserDefaultSpace(userId)
+    if (defaultSpace) {
+      await setActiveSpaceId(defaultSpace.spaceId)
+      return {
+        userId,
+        spaceId: defaultSpace.spaceId,
+        permissions: new SpacePermissions(defaultSpace.role as 'ADMIN' | 'MEMBER' | 'LIMITED'),
+        ownerFilter: { spaceId: defaultSpace.spaceId },
+      }
+    }
+    // No space — set to personal to prevent future DB lookups
+    await setActiveSpaceId(null)
+  }
+
   const spaceId = await getActiveSpaceId()
 
   if (!spaceId) {

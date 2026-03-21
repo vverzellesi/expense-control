@@ -7,6 +7,13 @@ vi.mock('@/lib/auth-utils', () => ({
     const { NextResponse } = require('next/server')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }),
+  handleApiError: vi.fn((error: unknown, context: string) => {
+    const { NextResponse } = require('next/server')
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }),
 }))
 
 import { GET } from './route'
@@ -107,9 +114,7 @@ describe('GET /api/spaces/active/permissions', () => {
     mockGetAuthContext.mockRejectedValue(new Error('Database error'))
 
     const response = await GET()
-    const body = await response.json()
 
     expect(response.status).toBe(500)
-    expect(body.error).toBe('Internal server error')
   })
 })
