@@ -117,8 +117,9 @@ export function SpaceFamiliaTab() {
           }
         }
 
+        // Only use active space if user is ADMIN in it (tab shows admin controls)
         const activeMatch = activeSpaceId
-          ? memberships.find((m) => m.space.id === activeSpaceId)
+          ? memberships.find((m) => m.space.id === activeSpaceId && m.role === 'ADMIN')
           : null
         const adminSpace = memberships.find((m) => m.role === 'ADMIN')
         const s = activeMatch?.space || adminSpace?.space || memberships[0].space
