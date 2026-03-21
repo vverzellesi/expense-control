@@ -82,6 +82,13 @@ async function copyUserDataToSpace(userId: string, spaceId: string) {
       await tx.origin.createMany({
         data: origins.map((o) => ({
           name: o.name,
+          type: o.type,
+          creditLimit: o.creditLimit,
+          rotativoRateMonth: o.rotativoRateMonth,
+          parcelamentoRate: o.parcelamentoRate,
+          cetAnual: o.cetAnual,
+          billingCycleDay: o.billingCycleDay,
+          dueDateDay: o.dueDateDay,
           spaceId,
         })),
       })

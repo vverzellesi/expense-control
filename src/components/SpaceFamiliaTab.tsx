@@ -100,13 +100,28 @@ export function SpaceFamiliaTab() {
   async function fetchSpaces() {
     setLoading(true)
     try {
-      const res = await fetch('/api/spaces')
-      if (!res.ok) return
-      const memberships: SpaceMembership[] = await res.json()
+      const [spacesRes, activeRes] = await Promise.all([
+        fetch('/api/spaces'),
+        fetch('/api/spaces/active/permissions'),
+      ])
+      if (!spacesRes.ok) return
+      const memberships: SpaceMembership[] = await spacesRes.json()
 
       if (memberships.length > 0) {
+        // Prefer the currently active space, then first admin space, then first space
+        let activeSpaceId: string | null = null
+        if (activeRes.ok) {
+          const perms = await activeRes.json()
+          if (perms.isSpaceContext && perms.spaceId) {
+            activeSpaceId = perms.spaceId
+          }
+        }
+
+        const activeMatch = activeSpaceId
+          ? memberships.find((m) => m.space.id === activeSpaceId)
+          : null
         const adminSpace = memberships.find((m) => m.role === 'ADMIN')
-        const s = adminSpace?.space || memberships[0].space
+        const s = activeMatch?.space || adminSpace?.space || memberships[0].space
         setSpace(s)
         await Promise.all([fetchSpaceData(s.id), fetchMigrationStatus(s.id)])
       }

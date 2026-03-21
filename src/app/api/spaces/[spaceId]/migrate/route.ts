@@ -79,6 +79,13 @@ export async function POST(
         await tx.origin.createMany({
           data: newOrigins.map((o) => ({
             name: o.name,
+            type: o.type,
+            creditLimit: o.creditLimit,
+            rotativoRateMonth: o.rotativoRateMonth,
+            parcelamentoRate: o.parcelamentoRate,
+            cetAnual: o.cetAnual,
+            billingCycleDay: o.billingCycleDay,
+            dueDateDay: o.dueDateDay,
             spaceId,
           })),
         })
@@ -97,12 +104,16 @@ export async function POST(
       })
       const existingSpaceRules = await tx.categoryRule.findMany({
         where: { spaceId },
-        select: { keyword: true },
+        select: { keyword: true, categoryId: true },
       })
-      const existingRuleKeywords = new Set(existingSpaceRules.map((r) => r.keyword))
+      // Dedup by keyword+categoryId pair (matches the unique constraint)
+      const existingRuleKeys = new Set(existingSpaceRules.map((r) => `${r.keyword}::${r.categoryId}`))
 
       const newRules = userRules
-        .filter((r) => !existingRuleKeywords.has(r.keyword) && categoryNameToSpaceId.has(r.category.name))
+        .filter((r) => {
+          const spaceCatId = categoryNameToSpaceId.get(r.category.name)
+          return spaceCatId && !existingRuleKeys.has(`${r.keyword}::${spaceCatId}`)
+        })
         .map((r) => ({
           keyword: r.keyword,
           categoryId: categoryNameToSpaceId.get(r.category.name)!,
