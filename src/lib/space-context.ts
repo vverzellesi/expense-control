@@ -46,8 +46,7 @@ export async function validateSpaceAccess(userId: string, spaceId: string) {
   if (!membership) {
     // Clear stale cookie when membership no longer exists
     try {
-      const cookieStore = await cookies()
-      cookieStore.delete('activeSpaceId')
+      await setActiveSpaceId(null)
     } catch {
       // Cookie clearing may fail in some contexts, ignore
     }
@@ -59,20 +58,37 @@ export async function validateSpaceAccess(userId: string, spaceId: string) {
 
 export async function getActiveSpaceId(): Promise<string | null> {
   const cookieStore = await cookies()
-  return cookieStore.get('activeSpaceId')?.value ?? null
+  const value = cookieStore.get('activeSpaceId')?.value
+  if (!value || value === 'personal') return null
+  return value
+}
+
+/**
+ * Checks if the user has made an explicit space context choice.
+ * Returns false only when no cookie exists (fresh login).
+ */
+export async function hasExplicitSpaceContext(): Promise<boolean> {
+  const cookieStore = await cookies()
+  return !!cookieStore.get('activeSpaceId')?.value
 }
 
 export async function setActiveSpaceId(spaceId: string | null): Promise<void> {
   const cookieStore = await cookies()
-  if (spaceId) {
-    cookieStore.set('activeSpaceId', spaceId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 365, // 1 year
-    })
-  } else {
-    cookieStore.delete('activeSpaceId')
-  }
+  cookieStore.set('activeSpaceId', spaceId || 'personal', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+  })
+}
+
+/**
+ * Gets the user's first space membership for auto-defaulting.
+ */
+export async function getUserDefaultSpace(userId: string) {
+  return prisma.spaceMember.findFirst({
+    where: { userId },
+    select: { spaceId: true, role: true },
+  })
 }

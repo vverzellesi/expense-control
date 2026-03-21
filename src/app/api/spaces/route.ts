@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { getAuthenticatedUserId, handleApiError } from '@/lib/auth-utils'
+import { setActiveSpaceId } from '@/lib/space-context'
 
 export async function GET() {
   try {
@@ -46,6 +47,9 @@ export async function POST(request: Request) {
 
     // Copy user's categories, origins, rules, investment categories to space
     await copyUserDataToSpace(userId, space.id)
+
+    // Auto-activate the new space
+    await setActiveSpaceId(space.id)
 
     return NextResponse.json(space, { status: 201 })
   } catch (error) {

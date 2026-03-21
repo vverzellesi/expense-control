@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { Users, Mail, Trash2, Copy, Loader2, Plus } from 'lucide-react'
+import { Users, Mail, Trash2, Copy, Loader2, Plus, Upload, CheckCircle2 } from 'lucide-react'
 
 type Member = {
   id: string
@@ -79,6 +79,16 @@ export function SpaceFamiliaTab() {
   // Member removal
   const [memberToRemove, setMemberToRemove] = useState<Member | null>(null)
 
+  // Migration
+  const [migrating, setMigrating] = useState(false)
+  const [hasMigrated, setHasMigrated] = useState(false)
+  const [migrationResult, setMigrationResult] = useState<{
+    copiedCount: number
+    newCategories: number
+    newOrigins: number
+    newRules: number
+  } | null>(null)
+
   // Space deletion
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -98,7 +108,7 @@ export function SpaceFamiliaTab() {
         const adminSpace = memberships.find((m) => m.role === 'ADMIN')
         const s = adminSpace?.space || memberships[0].space
         setSpace(s)
-        await fetchSpaceData(s.id)
+        await Promise.all([fetchSpaceData(s.id), fetchMigrationStatus(s.id)])
       }
     } finally {
       setLoading(false)
@@ -112,6 +122,36 @@ export function SpaceFamiliaTab() {
     ])
     if (membersRes.ok) setMembers(await membersRes.json())
     if (invitesRes.ok) setInvites(await invitesRes.json())
+  }
+
+  async function fetchMigrationStatus(spaceId: string) {
+    const res = await fetch(`/api/spaces/${spaceId}/migrate`)
+    if (res.ok) {
+      const data = await res.json()
+      setHasMigrated(data.hasMigrated)
+    }
+  }
+
+  async function migrateData() {
+    if (!space) return
+    setMigrating(true)
+    try {
+      const res = await fetch(`/api/spaces/${space.id}/migrate`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setHasMigrated(true)
+        setMigrationResult(data)
+        toast({
+          title: 'Migração concluída!',
+          description: `${data.copiedCount} transações, ${data.newCategories} categorias, ${data.newOrigins} origens e ${data.newRules} regras copiadas.`,
+        })
+      } else {
+        const data = await res.json()
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' })
+      }
+    } finally {
+      setMigrating(false)
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -129,11 +169,9 @@ export function SpaceFamiliaTab() {
         toast({ title: 'Erro', description: data.error, variant: 'destructive' })
         return
       }
-      const data = await res.json()
-      setSpace({ id: data.id, name: data.name })
-      setSpaceName('')
-      await fetchSpaceData(data.id)
-      toast({ title: 'Espaço criado!' })
+      toast({ title: 'Espaço criado! Recarregando...' })
+      // Reload to activate the space context (cookie was set server-side)
+      window.location.reload()
     } finally {
       setCreating(false)
     }
@@ -414,6 +452,61 @@ export function SpaceFamiliaTab() {
                 </div>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Migration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {hasMigrated ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            ) : (
+              <Upload className="h-5 w-5 text-emerald-600" />
+            )}
+            Migrar dados pessoais
+          </CardTitle>
+          <CardDescription>
+            Copie suas categorias, origens, regras e transações pessoais para o espaço
+            compartilhado. Os dados originais na sua conta pessoal não são afetados.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {hasMigrated ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Seus dados pessoais já foram migrados para este espaço.
+              </p>
+              {migrationResult && (
+                <p className="text-xs text-emerald-600 mt-1">
+                  {migrationResult.copiedCount} transações, {migrationResult.newCategories} categorias,{' '}
+                  {migrationResult.newOrigins} origens e {migrationResult.newRules} regras copiadas.
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm text-amber-800">
+                  <strong>O que será copiado:</strong> todas as suas categorias, origens,
+                  regras de categorização e transações que estão na sua conta pessoal.
+                  Isso garante que todo o seu histórico fique disponível no espaço compartilhado.
+                </p>
+              </div>
+              <Button
+                onClick={migrateData}
+                disabled={migrating}
+                className="bg-emerald-600 hover:bg-emerald-700 min-h-[44px]"
+              >
+                {migrating ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Migrando...</>
+                ) : (
+                  <><Upload className="mr-2 h-4 w-4" />Copiar dados para o espaço</>
+                )}
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
