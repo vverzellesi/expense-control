@@ -277,7 +277,7 @@ describe('GET /api/transactions', () => {
     expect(call.orderBy).toEqual({ date: 'desc' })
   })
 
-  it('should include category and installment relations', async () => {
+  it('should include category, installment, and recurringExpense relations', async () => {
     mockPrisma.transaction.findMany.mockResolvedValue([])
 
     const request = createRequest('http://localhost:3000/api/transactions')
@@ -287,8 +287,50 @@ describe('GET /api/transactions', () => {
     expect(call.include).toEqual({
       category: true,
       categoryTag: true,
-      installment: true
+      installment: true,
+      recurringExpense: true,
     })
+  })
+
+  it('should return recurring-generated transactions without filtering them out', async () => {
+    const mockTransactions = [
+      {
+        id: 'txn-regular',
+        description: 'Compra no mercado',
+        amount: -150,
+        date: new Date('2024-01-15'),
+        type: 'EXPENSE',
+        userId: testUser.id,
+        recurringExpenseId: null,
+        recurringExpense: null,
+        category: null,
+      },
+      {
+        id: 'txn-recurring',
+        description: 'Netflix',
+        amount: -39.90,
+        date: new Date('2024-01-05'),
+        type: 'EXPENSE',
+        userId: testUser.id,
+        recurringExpenseId: 'rec-1',
+        recurringExpense: { id: 'rec-1', description: 'Netflix', defaultAmount: 39.90 },
+        category: null,
+        isFixed: true,
+      },
+    ]
+
+    mockPrisma.transaction.findMany.mockResolvedValue(mockTransactions)
+
+    const request = createRequest('http://localhost:3000/api/transactions')
+    const response = await GET(request)
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data).toHaveLength(2)
+    // Verify recurring transaction is present in the response
+    const recurringTx = data.find((t: { id: string }) => t.id === 'txn-recurring')
+    expect(recurringTx).toBeDefined()
+    expect(recurringTx.recurringExpenseId).toBe('rec-1')
   })
 
   it('should handle database errors gracefully', async () => {
