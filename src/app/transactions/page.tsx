@@ -795,7 +795,13 @@ function TransactionsContent() {
                                     {transaction.totalInstallments || transaction.installment?.totalInstallments}
                                   </Badge>
                                 )}
-                                {transaction.isFixed && (
+                                {transaction.recurringExpenseId && (
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                    <Repeat className="mr-1 h-3 w-3" />
+                                    Recorrente
+                                  </Badge>
+                                )}
+                                {transaction.isFixed && !transaction.recurringExpenseId && (
                                   <Badge variant="secondary" className="text-xs">Fixa</Badge>
                                 )}
                                 {transaction.tags && (() => {

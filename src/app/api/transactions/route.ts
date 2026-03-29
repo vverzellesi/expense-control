@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
         category: true,
         categoryTag: true,
         installment: true,
+        recurringExpense: true,
       },
       orderBy: {
         date: "desc",
