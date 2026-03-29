@@ -9,6 +9,7 @@ interface FinancialHealthSectionProps {
   expense: number;
   fixedExpensesTotal: number;
   installmentsTotal: number;
+  onNavigate?: (path: string) => void;
 }
 
 export function getCommitmentLevel(percentage: number): "green" | "yellow" | "red" {
@@ -49,6 +50,7 @@ export function FinancialHealthSection({
   expense,
   fixedExpensesTotal,
   installmentsTotal: installmentsTotalProp,
+  onNavigate,
 }: FinancialHealthSectionProps) {
   const {
     fixedTotal,
@@ -81,7 +83,10 @@ export function FinancialHealthSection({
     <div className="space-y-4">
       {/* Metric Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card
+          className={onNavigate ? "cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all" : ""}
+          onClick={onNavigate ? () => onNavigate("type=INCOME") : undefined}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Renda do Mês</CardTitle>
             <Wallet className="h-4 w-4 text-green-500" />
@@ -93,7 +98,10 @@ export function FinancialHealthSection({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          className={onNavigate ? "cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all" : ""}
+          onClick={onNavigate ? () => onNavigate("isFixed=true") : undefined}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Despesas Fixas</CardTitle>
             <Receipt className="h-4 w-4 text-gray-500" />
