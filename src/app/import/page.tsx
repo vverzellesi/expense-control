@@ -1017,7 +1017,7 @@ export default function ImportPage() {
           <CardContent>
             <div className="space-y-4">
               <div
-                className={`flex items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
+                className={`flex items-center justify-center rounded-lg border-2 border-dashed p-6 md:p-12 transition-colors ${
                   isDragging
                     ? "border-primary bg-primary/5"
                     : "border-gray-300 hover:border-gray-400"
@@ -1027,7 +1027,7 @@ export default function ImportPage() {
                 onDrop={handleDrop}
               >
                 <div className="text-center">
-                  <div className={`mx-auto flex justify-center gap-4 ${isDragging ? "text-primary" : "text-gray-400"}`}>
+                  <div className={`mx-auto hidden sm:flex justify-center gap-4 ${isDragging ? "text-primary" : "text-gray-400"}`}>
                     <FileSpreadsheet className="h-10 w-10" />
                     <FileText className="h-10 w-10" />
                     <Image className="h-10 w-10" />
@@ -1039,7 +1039,7 @@ export default function ImportPage() {
                       <>
                         <Label
                           htmlFor="file"
-                          className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+                          className="cursor-pointer rounded-md bg-primary px-6 py-3 text-base sm:px-4 sm:py-2 sm:text-sm font-medium text-white hover:bg-primary/90"
                         >
                           {loading ? "Processando..." : "Selecionar arquivo"}
                         </Label>
@@ -1084,9 +1084,9 @@ export default function ImportPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+              <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span>Preview das Transações</span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {ocrConfidence !== null && (
                     <div className="flex items-center gap-1 text-sm">
                       <span className="text-gray-500">Confiança OCR:</span>
@@ -1094,7 +1094,7 @@ export default function ImportPage() {
                     </div>
                   )}
                   <Select value={origin} onValueChange={setOrigin}>
-                    <SelectTrigger className="w-[200px] h-8 text-sm">
+                    <SelectTrigger className="w-full sm:w-[200px] h-8 text-sm">
                       <SelectValue placeholder="Selecionar origem" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1123,8 +1123,8 @@ export default function ImportPage() {
             </CardHeader>
             <CardContent>
               <div className="mb-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm text-gray-500">
                     <span>
                       {selectedCount} de {transactions.length} selecionadas
                     </span>
@@ -1276,7 +1276,7 @@ export default function ImportPage() {
                               selected: e.target.checked,
                             })
                           }
-                          className="h-4 w-4 mt-1"
+                          className="h-5 w-5 mt-1"
                         />
                         <div
                           className="flex-1 cursor-pointer"
@@ -1829,11 +1829,11 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
-          <div className="flex gap-4">
-            <Button variant="outline" onClick={resetForm}>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto">
               Cancelar
             </Button>
-            <Button onClick={handleImport} disabled={importing || selectedCount === 0}>
+            <Button onClick={handleImport} disabled={importing || selectedCount === 0} className="w-full sm:w-auto">
               {importing
                 ? "Importando..."
                 : `Importar ${selectedCount} transações`}

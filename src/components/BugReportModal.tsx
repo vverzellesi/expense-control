@@ -224,7 +224,7 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 transition-colors ${
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 sm:p-4 transition-colors ${
                 isDragOver
                   ? "border-emerald-500 bg-emerald-50"
                   : "border-gray-300 hover:border-gray-400"
@@ -260,15 +260,15 @@ export function BugReportModal({ isOpen, onClose }: BugReportModalProps) {
                   <img
                     src={img.previewUrl}
                     alt={`Anexo ${index + 1}`}
-                    className="h-16 w-16 rounded-md object-cover border"
+                    className="h-20 w-20 sm:h-16 sm:w-16 rounded-md object-cover border"
                   />
                   <button
                     type="button"
                     onClick={() => removeImage(index)}
-                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100"
                     disabled={loading}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ))}

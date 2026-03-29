@@ -197,7 +197,7 @@ export function TransactionForm({
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="amount">Valor *</Label>
           <CurrencyInput
@@ -301,12 +301,13 @@ export function TransactionForm({
         </div>
 
         {isInstallment && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="currentInstallment">Parcela atual</Label>
               <Input
                 id="currentInstallment"
                 type="number"
+                inputMode="numeric"
                 min="1"
                 max={totalInstallments}
                 value={currentInstallment}
@@ -318,6 +319,7 @@ export function TransactionForm({
               <Input
                 id="totalInstallments"
                 type="number"
+                inputMode="numeric"
                 min="2"
                 max="48"
                 value={totalInstallments}
@@ -325,7 +327,7 @@ export function TransactionForm({
               />
             </div>
             {!transaction && (
-              <p className="col-span-2 text-xs text-gray-500">
+              <p className="sm:col-span-2 text-xs text-gray-500">
                 {parseInt(currentInstallment) > 1
                   ? `Serão criadas ${parseInt(totalInstallments) - parseInt(currentInstallment) + 1} parcelas (${currentInstallment}/${totalInstallments} a ${totalInstallments}/${totalInstallments}) de `
                   : `Serão criadas ${totalInstallments} parcelas de `}
@@ -338,7 +340,7 @@ export function TransactionForm({
               </p>
             )}
             {transaction && !transaction.installmentId && (
-              <p className="col-span-2 text-xs text-gray-500">
+              <p className="sm:col-span-2 text-xs text-gray-500">
                 Parcela {currentInstallment} de {totalInstallments}
               </p>
             )}

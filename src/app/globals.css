@@ -60,3 +60,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Mobile touch scrolling improvements */
+@media (max-width: 768px) {
+  /* Ensure smooth momentum scrolling on iOS */
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent horizontal overflow on mobile */
+  body {
+    overflow-x: hidden;
+  }
+}

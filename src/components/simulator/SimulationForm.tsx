@@ -41,7 +41,7 @@ export function SimulationForm({
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Input
