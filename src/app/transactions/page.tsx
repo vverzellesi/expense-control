@@ -78,11 +78,35 @@ function TransactionsContent() {
     fetchData();
   }, [filterStartDate, filterEndDate, filterCategory, filterType, filterFixed, filterInstallment, filterOrigin, searchQuery, filterTag, filterMinAmount, filterMaxAmount]);
 
-  // Sync category filter with URL searchParams (handles back/forward, client-side navigation)
+  // Sync filters with URL searchParams (handles back/forward, client-side navigation from dashboard)
   useEffect(() => {
     const categoryId = searchParams.get("categoryId");
+    const type = searchParams.get("type");
+    const isFixed = searchParams.get("isFixed");
+    const isInstallment = searchParams.get("isInstallment");
+    const origin = searchParams.get("origin");
+    const month = searchParams.get("month");
+    const year = searchParams.get("year");
+
     setFilterCategory(categoryId || "all");
-    if (categoryId) {
+    if (type) setFilterType(type);
+    if (isFixed === "true") setFilterFixed(true);
+    if (isInstallment === "true") setFilterInstallment(true);
+    if (origin) setFilterOrigin(origin);
+
+    // Convert month/year to date range
+    if (month && year) {
+      const m = parseInt(month, 10);
+      const y = parseInt(year, 10);
+      if (!isNaN(m) && !isNaN(y)) {
+        const start = new Date(y, m - 1, 1);
+        const end = new Date(y, m, 0);
+        setFilterStartDate(toLocalDateString(start));
+        setFilterEndDate(toLocalDateString(end));
+      }
+    }
+
+    if (categoryId || type || isFixed || isInstallment || origin) {
       setShowFilterDrawer(true);
     }
   }, [searchParams]);

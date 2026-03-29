@@ -85,7 +85,12 @@ export function FinancialHealthSection({
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card
           className={onNavigate ? "cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all" : ""}
-          onClick={onNavigate ? () => onNavigate("type=INCOME") : undefined}
+          {...(onNavigate ? {
+            role: "button",
+            tabIndex: 0,
+            onClick: () => onNavigate("type=INCOME"),
+            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate("type=INCOME"); } },
+          } : {})}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Renda do Mês</CardTitle>
@@ -100,7 +105,12 @@ export function FinancialHealthSection({
 
         <Card
           className={onNavigate ? "cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all" : ""}
-          onClick={onNavigate ? () => onNavigate("isFixed=true") : undefined}
+          {...(onNavigate ? {
+            role: "button",
+            tabIndex: 0,
+            onClick: () => onNavigate("isFixed=true"),
+            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate("isFixed=true"); } },
+          } : {})}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Despesas Fixas</CardTitle>

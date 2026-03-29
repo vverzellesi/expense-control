@@ -88,6 +88,24 @@ export default function Dashboard() {
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
 
+  function navigateTo(path: string) {
+    router.push(path);
+  }
+
+  function clickable(handler: () => void) {
+    return {
+      role: "button" as const,
+      tabIndex: 0,
+      onClick: handler,
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handler();
+        }
+      },
+    };
+  }
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -228,7 +246,7 @@ export default function Dashboard() {
                 <div
                   key={alert.categoryId}
                   className="rounded-lg bg-white p-3 shadow-sm cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all"
-                  onClick={() => router.push(`/transactions?categoryId=${alert.categoryId}&month=${currentMonth}&year=${currentYear}`)}
+                  {...clickable(() => navigateTo(`/transactions?categoryId=${alert.categoryId}&month=${currentMonth}&year=${currentYear}`))}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -285,7 +303,7 @@ export default function Dashboard() {
                 <div
                   key={t.id}
                   className="flex items-center justify-between rounded-lg bg-white p-3 shadow-sm cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all"
-                  onClick={() => t.categoryId && router.push(`/transactions?categoryId=${t.categoryId}&month=${currentMonth}&year=${currentYear}`)}
+                  {...clickable(() => { if (t.categoryId) navigateTo(`/transactions?categoryId=${t.categoryId}&month=${currentMonth}&year=${currentYear}`); })}
                 >
                   <div className="flex items-center gap-2">
                     {t.categoryColor && (
@@ -331,7 +349,7 @@ export default function Dashboard() {
                 <div
                   key={category.categoryId}
                   className="flex items-center justify-between rounded-lg border p-3 cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all"
-                  onClick={() => router.push(`/transactions?categoryId=${category.categoryId}&month=${currentMonth}&year=${currentYear}`)}
+                  {...clickable(() => navigateTo(`/transactions?categoryId=${category.categoryId}&month=${currentMonth}&year=${currentYear}`))}
                 >
                   <div className="flex items-center gap-2">
                     <div
@@ -385,7 +403,7 @@ export default function Dashboard() {
                     ? "border-orange-200 bg-orange-50"
                     : "border-gray-200"
                 }`}
-                onClick={() => router.push(`/transactions?categoryId=${budget.categoryId}&month=${currentMonth}&year=${currentYear}`)}
+                {...clickable(() => navigateTo(`/transactions?categoryId=${budget.categoryId}&month=${currentMonth}&year=${currentYear}`))}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -442,7 +460,7 @@ export default function Dashboard() {
                   <div
                     key={expense.id}
                     className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-lg p-1 -m-1 transition-all"
-                    onClick={() => router.push(`/transactions?isFixed=true&month=${currentMonth}&year=${currentYear}`)}
+                    {...clickable(() => navigateTo(`/transactions?isFixed=true&month=${currentMonth}&year=${currentYear}`))}
                   >
                     <div className="flex items-center gap-2">
                       {expense.category && (
@@ -481,7 +499,7 @@ export default function Dashboard() {
                   <div
                     key={installment.id}
                     className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-lg p-1 -m-1 transition-all"
-                    onClick={() => router.push(`/transactions?isInstallment=true&month=${currentMonth}&year=${currentYear}`)}
+                    {...clickable(() => navigateTo(`/transactions?isInstallment=true&month=${currentMonth}&year=${currentYear}`))}
                   >
                     <div>
                       <span className="text-sm">{installment.description}</span>
