@@ -89,12 +89,12 @@ function TransactionsContent() {
     const year = searchParams.get("year");
 
     setFilterCategory(categoryId || "all");
-    if (type) setFilterType(type);
-    if (isFixed === "true") setFilterFixed(true);
-    if (isInstallment === "true") setFilterInstallment(true);
-    if (origin) setFilterOrigin(origin);
+    setFilterType(type || "all");
+    setFilterFixed(isFixed === "true");
+    setFilterInstallment(isInstallment === "true");
+    setFilterOrigin(origin || "all");
 
-    // Convert month/year to date range
+    // Convert month/year to date range, or reset to current month
     if (month && year) {
       const m = parseInt(month, 10);
       const y = parseInt(year, 10);
@@ -104,6 +104,9 @@ function TransactionsContent() {
         setFilterStartDate(toLocalDateString(start));
         setFilterEndDate(toLocalDateString(end));
       }
+    } else {
+      setFilterStartDate(toLocalDateString(currentMonthStart));
+      setFilterEndDate(toLocalDateString(currentMonthEnd));
     }
 
     if (categoryId || type || isFixed || isInstallment || origin) {
