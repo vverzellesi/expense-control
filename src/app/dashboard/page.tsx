@@ -490,6 +490,24 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex gap-4 mb-4 text-sm">
+              {installmentAlerts.ending.length > 0 && (
+                <div className="flex-1 rounded-lg bg-green-100 p-3 text-center">
+                  <div className="text-green-800 font-semibold">
+                    {formatCurrency(installmentAlerts.ending.reduce((s, a) => s + a.monthlyAmount, 0))}/mês
+                  </div>
+                  <div className="text-green-600 text-xs">{installmentAlerts.ending.length} parcela(s) terminando — libera</div>
+                </div>
+              )}
+              {installmentAlerts.starting.length > 0 && (
+                <div className="flex-1 rounded-lg bg-red-100 p-3 text-center">
+                  <div className="text-red-800 font-semibold">
+                    {formatCurrency(installmentAlerts.starting.reduce((s, a) => s + a.monthlyAmount, 0))}/mês
+                  </div>
+                  <div className="text-red-600 text-xs">{installmentAlerts.starting.length} parcela(s) nova(s) — compromete</div>
+                </div>
+              )}
+            </div>
             <div className="space-y-3">
               {installmentAlerts.ending.map((alert, idx) => (
                 <div
