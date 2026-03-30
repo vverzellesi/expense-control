@@ -3,18 +3,18 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 const defaultCategories = [
-  { name: "Moradia", color: "#3B82F6", icon: "home" },
-  { name: "Alimentação", color: "#F97316", icon: "utensils" },
-  { name: "Mercado", color: "#22C55E", icon: "shopping-cart" },
-  { name: "Transporte", color: "#8B5CF6", icon: "car" },
-  { name: "Saúde", color: "#EF4444", icon: "heart" },
-  { name: "Lazer", color: "#EC4899", icon: "gamepad" },
-  { name: "Educação", color: "#6366F1", icon: "book" },
-  { name: "Serviços", color: "#14B8A6", icon: "smartphone" },
-  { name: "Compras", color: "#F59E0B", icon: "shopping-bag" },
-  { name: "Salário", color: "#10B981", icon: "wallet" },
-  { name: "Investimentos", color: "#06B6D4", icon: "trending-up" },
-  { name: "Outros", color: "#6B7280", icon: "help-circle" },
+  { name: "Moradia", color: "#3B82F6", icon: "home", flexibilityType: "ESSENTIAL" as const },
+  { name: "Alimentação", color: "#F97316", icon: "utensils", flexibilityType: "VARIABLE" as const },
+  { name: "Mercado", color: "#22C55E", icon: "shopping-cart", flexibilityType: "VARIABLE" as const },
+  { name: "Transporte", color: "#8B5CF6", icon: "car", flexibilityType: "NEGOTIABLE" as const },
+  { name: "Saúde", color: "#EF4444", icon: "heart", flexibilityType: "ESSENTIAL" as const },
+  { name: "Lazer", color: "#EC4899", icon: "gamepad", flexibilityType: "VARIABLE" as const },
+  { name: "Educação", color: "#6366F1", icon: "book", flexibilityType: "NEGOTIABLE" as const },
+  { name: "Serviços", color: "#14B8A6", icon: "smartphone", flexibilityType: "NEGOTIABLE" as const },
+  { name: "Compras", color: "#F59E0B", icon: "shopping-bag", flexibilityType: "VARIABLE" as const },
+  { name: "Salário", color: "#10B981", icon: "wallet", flexibilityType: null },
+  { name: "Investimentos", color: "#06B6D4", icon: "trending-up", flexibilityType: null },
+  { name: "Outros", color: "#6B7280", icon: "help-circle", flexibilityType: "VARIABLE" as const },
 ];
 
 const defaultRules = [
@@ -143,6 +143,22 @@ async function main() {
       console.log(`Created category: ${cat.name}`);
     }
   }
+
+  // Update existing categories with flexibilityType if not set
+  const categoryDefaults: Record<string, string> = {
+    "Moradia": "ESSENTIAL", "Saúde": "ESSENTIAL",
+    "Transporte": "NEGOTIABLE", "Educação": "NEGOTIABLE", "Serviços": "NEGOTIABLE",
+    "Alimentação": "VARIABLE", "Mercado": "VARIABLE", "Lazer": "VARIABLE",
+    "Compras": "VARIABLE", "Outros": "VARIABLE",
+  };
+
+  for (const [name, type] of Object.entries(categoryDefaults)) {
+    await prisma.category.updateMany({
+      where: { name, flexibilityType: null },
+      data: { flexibilityType: type as "ESSENTIAL" | "NEGOTIABLE" | "VARIABLE" },
+    });
+  }
+  console.log("Updated existing categories with flexibilityType");
 
   // Create rules (without userId for seed data)
   for (const rule of defaultRules) {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
@@ -16,6 +16,7 @@ import { InvestmentDashboardCard } from "@/components/InvestmentDashboardCard";
 import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 import { FinancialHealthSection } from "@/components/FinancialHealthSection";
 import type { Transaction, Category, UnusualTransaction, WeeklySummary, WeeklyBreakdown } from "@/types";
+import type { ProjectionResult } from "@/lib/projection";
 
 interface BudgetAlert {
   categoryId: string;
@@ -76,11 +77,94 @@ interface SummaryData {
   weeklyBreakdown: WeeklyBreakdown | null;
 }
 
+function getProjectionColor(percentage: number): { text: string; bar: string; bg: string; border: string } {
+  if (percentage < 70) return { text: "text-emerald-600", bar: "[&>div]:bg-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" };
+  if (percentage <= 90) return { text: "text-amber-600", bar: "[&>div]:bg-amber-500", bg: "bg-amber-50", border: "border-amber-200" };
+  return { text: "text-red-600", bar: "[&>div]:bg-red-500", bg: "bg-red-50", border: "border-red-200" };
+}
+
+function ProjectionCard({ projection }: { projection: ProjectionResult }) {
+  const [expanded, setExpanded] = useState(false);
+  const colors = getProjectionColor(projection.projectedPercentage);
+
+  return (
+    <Card className={`border-2 ${colors.border} ${colors.bg}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Calculator className="h-5 w-5 text-blue-500" />
+          Projeção do Mês
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-600">Projeção vs Receita</span>
+              <span className={`text-sm font-semibold ${colors.text}`}>
+                {projection.projectedPercentage.toFixed(0)}%
+              </span>
+            </div>
+            <Progress
+              value={Math.min(projection.projectedPercentage, 100)}
+              className={`h-3 ${colors.bar}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-xs text-gray-500">Atual</div>
+              <div className="text-sm font-semibold">{formatCurrency(projection.currentExpenses)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Pendente</div>
+              <div className="text-sm font-semibold text-amber-600">{formatCurrency(projection.pendingTotal)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Projeção</div>
+              <div className={`text-sm font-semibold ${colors.text}`}>{formatCurrency(projection.projectedTotal)}</div>
+            </div>
+          </div>
+
+          {projection.pendingItems.length > 0 && (
+            <div>
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {projection.pendingItems.length} item(ns) pendente(s)
+              </button>
+              {expanded && (
+                <div className="mt-2 space-y-2">
+                  {projection.pendingItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between rounded-lg bg-white p-2 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {item.type === "recurring" ? "Fixo" : "Parcela"}
+                        </Badge>
+                        <span className="text-sm">{item.description}</span>
+                      </div>
+                      <span className="text-sm font-medium text-red-600">
+                        {formatCurrency(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const permissions = useSpacePermissions();
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
+  const [projection, setProjection] = useState<ProjectionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -109,14 +193,17 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [summaryRes, unusualRes] = await Promise.all([
+        const [summaryRes, unusualRes, projectionRes] = await Promise.all([
           fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/transactions/unusual?month=${currentMonth}&year=${currentYear}&threshold=2`),
+          fetch(`/api/insights/projection?month=${currentMonth}&year=${currentYear}`),
         ]);
         const summaryJson = await summaryRes.json();
         const unusualJson = await unusualRes.json();
+        const projectionJson = projectionRes.ok ? await projectionRes.json() : null;
         setData(summaryJson);
         setUnusualTransactions(unusualJson.transactions || []);
+        setProjection(projectionJson);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -230,6 +317,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Projection Card */}
+      {projection && projection.income > 0 && (
+        <ProjectionCard projection={projection} />
+      )}
 
       {/* 3. Alerts Section - High priority items need immediate attention */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (

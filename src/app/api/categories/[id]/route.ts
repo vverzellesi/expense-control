@@ -51,7 +51,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, color, icon } = body;
+    const { name, color, icon, flexibilityType } = body;
 
     const category = await prisma.category.update({
       where: { id, ...ctx.ownerFilter },
@@ -59,6 +59,7 @@ export async function PUT(
         name,
         color,
         icon,
+        flexibilityType: flexibilityType !== undefined ? flexibilityType : undefined,
       },
     });
 

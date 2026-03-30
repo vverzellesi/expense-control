@@ -181,11 +181,18 @@ model RecurringExpense {
   @@index([userId])
 }
 
+enum FlexibilityType {
+  ESSENTIAL
+  NEGOTIABLE
+  VARIABLE
+}
+
 model Category {
   id                String             @id @default(cuid())
   name              String
   color             String
   icon              String?
+  flexibilityType   FlexibilityType?
   transactions      Transaction[]
   budgets           Budget[]
   categoryRules     CategoryRule[]

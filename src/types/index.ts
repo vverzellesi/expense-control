@@ -56,11 +56,14 @@ export interface RecurringExpense {
   updatedAt: Date | string;
 }
 
+export type FlexibilityType = "ESSENTIAL" | "NEGOTIABLE" | "VARIABLE";
+
 export interface Category {
   id: string;
   name: string;
   color: string;
   icon: string | null;
+  flexibilityType?: FlexibilityType | null;
 }
 
 export interface Installment {
