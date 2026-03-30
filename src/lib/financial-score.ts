@@ -24,10 +24,10 @@ function scoreFixedCommitment(
 ): { value: number; score: number } {
   if (income <= 0) return { value: 0, score: 50 };
   const pct = (fixedTotal / income) * 100;
-  if (pct < 50) return { value: pct, score: 100 };
-  if (pct < 60) return { value: pct, score: 80 };
-  if (pct < 70) return { value: pct, score: 60 };
-  if (pct < 80) return { value: pct, score: 40 };
+  if (pct < 40) return { value: pct, score: 100 };
+  if (pct < 50) return { value: pct, score: 80 };
+  if (pct < 60) return { value: pct, score: 55 };
+  if (pct < 70) return { value: pct, score: 30 };
   return { value: pct, score: 10 };
 }
 
