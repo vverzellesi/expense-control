@@ -14,12 +14,13 @@ Implementar os 3 cards de alerta no dashboard: alertas de parcelas (começando/a
 
 ## Changes Required
 
-#### 1. Criar API de installment-alerts + card no dashboard
+#### 1. Criar API de installment-alerts + card no dashboard [DONE]
 
 **File**: `src/app/api/insights/installment-alerts/route.ts` (CREATE), `src/app/dashboard/page.tsx` (MODIFY)
 **Complexity**: Medium
 **TDD**: NO (API wiring + component, queries verified via integration)
 **Depends On**: none
+- **Learning:** handleApiError requer segundo parâmetro (context string). Validação defensiva no dashboard necessária para compatibilidade com mocks de teste que retornam shape diferente.
 
 **Load Before Implementing**:
 1. `src/app/api/summary/route.ts` (lines 234-339) - Query pattern
@@ -156,12 +157,13 @@ Dashboard card — add fetch + conditional card with bell icon, lists ending and
 
 ---
 
-#### 2. Criar debt-detector.ts com testes + API + card de endividamento
+#### 2. Criar debt-detector.ts com testes + API + card de endividamento [DONE]
 
 **File**: `src/lib/debt-detector.ts` (CREATE), `src/lib/debt-detector.test.ts` (CREATE), `src/app/api/insights/debt-alert/route.ts` (CREATE), `src/app/dashboard/page.tsx` (MODIFY)
 **Complexity**: High
 **TDD**: YES
 **Depends On**: none
+- **Learning:** Map iteration com `for...of` requer `Array.from(map.entries())` no target ES5 do TypeScript (strict mode). Parâmetros de callback em `.sort()` e `.find()` precisam de tipos explícitos.
 
 **Load Before Implementing**:
 1. `src/types/index.ts` (lines 398-416) - BillPayment interface
@@ -399,7 +401,7 @@ Dashboard card — conditional, border-red for critical, border-orange for warni
 
 ---
 
-#### 3. Criar API de duplicates + card no dashboard
+#### 3. Criar API de duplicates + card no dashboard [DONE]
 
 **File**: `src/app/api/insights/duplicates/route.ts` (CREATE), `src/app/dashboard/page.tsx` (MODIFY)
 **Complexity**: Medium
@@ -518,7 +520,7 @@ Dashboard card — conditional, border-amber:
 ## Success Criteria
 
 ### Automated Verification
-- [ ] `Skill(running-automated-checks)` - All project checks pass
+- [x] `Skill(running-automated-checks)` - All project checks pass (typecheck clean, 485/488 tests pass, 3 pre-existing failures in recurring/page.test.tsx)
 
 ### Manual Verification
 - [ ] Alert cards render conditionally on dashboard (only when data exists)

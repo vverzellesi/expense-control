@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp, Bell } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
@@ -17,6 +17,7 @@ import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 import { FinancialHealthSection } from "@/components/FinancialHealthSection";
 import type { Transaction, Category, UnusualTransaction, WeeklySummary, WeeklyBreakdown } from "@/types";
 import type { ProjectionResult } from "@/lib/projection";
+import type { DebtAlert } from "@/lib/debt-detector";
 
 interface BudgetAlert {
   categoryId: string;
@@ -75,6 +76,37 @@ interface SummaryData {
   upcomingInstallments: (Transaction & { category: Category | null })[];
   weeklySummary: WeeklySummary | null;
   weeklyBreakdown: WeeklyBreakdown | null;
+}
+
+interface InstallmentAlert {
+  ending: Array<{
+    description: string;
+    currentInstallment: number;
+    totalInstallments: number;
+    monthlyAmount: number;
+    categoryName: string | null;
+  }>;
+  starting: Array<{
+    description: string;
+    currentInstallment: number;
+    totalInstallments: number;
+    monthlyAmount: number;
+    totalCommitment: number;
+    endDate: string;
+    categoryName: string | null;
+  }>;
+}
+
+interface DuplicateGroup {
+  merchant: string;
+  amount: number;
+  count: number;
+  transactions: Array<{
+    id: string;
+    description: string;
+    date: string;
+    origin: string | null;
+  }>;
 }
 
 function getProjectionColor(percentage: number): { text: string; bar: string; bg: string; border: string } {
@@ -165,6 +197,9 @@ export default function Dashboard() {
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
   const [projection, setProjection] = useState<ProjectionResult | null>(null);
+  const [installmentAlerts, setInstallmentAlerts] = useState<InstallmentAlert | null>(null);
+  const [debtAlerts, setDebtAlerts] = useState<DebtAlert[]>([]);
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -193,17 +228,26 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [summaryRes, unusualRes, projectionRes] = await Promise.all([
+        const [summaryRes, unusualRes, projectionRes, installmentAlertsRes, debtAlertRes, duplicatesRes] = await Promise.all([
           fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/transactions/unusual?month=${currentMonth}&year=${currentYear}&threshold=2`),
           fetch(`/api/insights/projection?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/installment-alerts?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/debt-alert?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/duplicates?month=${currentMonth}&year=${currentYear}`),
         ]);
         const summaryJson = await summaryRes.json();
         const unusualJson = await unusualRes.json();
         const projectionJson = projectionRes.ok ? await projectionRes.json() : null;
+        const installmentAlertsJson = installmentAlertsRes.ok ? await installmentAlertsRes.json() : null;
+        const debtAlertJson = debtAlertRes.ok ? await debtAlertRes.json() : null;
+        const duplicatesJson = duplicatesRes.ok ? await duplicatesRes.json() : null;
         setData(summaryJson);
         setUnusualTransactions(unusualJson.transactions || []);
         setProjection(projectionJson);
+        setInstallmentAlerts(installmentAlertsJson?.ending ? installmentAlertsJson : null);
+        setDebtAlerts(debtAlertJson?.alerts || []);
+        setDuplicates(duplicatesJson?.duplicates || []);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -418,6 +462,146 @@ export default function Dashboard() {
                     <Badge variant="destructive" className="text-xs">
                       +{t.exceedsBy.toFixed(0)}%
                     </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Installment Alerts Card */}
+      {installmentAlerts && (installmentAlerts.ending?.length > 0 || installmentAlerts.starting?.length > 0) && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-blue-800">
+              <Bell className="h-5 w-5" />
+              Alertas de Parcelas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {installmentAlerts.ending.map((alert, idx) => (
+                <div
+                  key={`ending-${idx}`}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500 text-xs">Termina</Badge>
+                      <span className="text-sm font-medium">{alert.description}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {alert.currentInstallment}/{alert.totalInstallments}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-green-700">
+                    Libera {formatCurrency(alert.monthlyAmount)}/mes
+                    {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
+                  </p>
+                </div>
+              ))}
+              {installmentAlerts.starting.map((alert, idx) => (
+                <div
+                  key={`starting-${idx}`}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="destructive" className="text-xs">Nova</Badge>
+                      <span className="text-sm font-medium">{alert.description}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      1/{alert.totalInstallments}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-red-700">
+                    Compromete {formatCurrency(alert.monthlyAmount)}/mes ate{" "}
+                    {new Date(alert.endDate).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
+                    {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Debt Alert Card */}
+      {debtAlerts.length > 0 && (
+        <Card className={`border-2 ${debtAlerts.some(a => a.severity === "critical") ? "border-red-300 bg-red-50" : "border-orange-300 bg-orange-50"}`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${debtAlerts.some(a => a.severity === "critical") ? "text-red-800" : "text-orange-800"}`}>
+              <AlertTriangle className="h-5 w-5" />
+              Alerta de Endividamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {debtAlerts.map((alert, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{alert.origin}</span>
+                      <Badge
+                        variant={alert.severity === "critical" ? "destructive" : "secondary"}
+                        className={alert.severity === "critical" ? "" : "bg-orange-200 text-orange-800"}
+                      >
+                        {alert.severity === "critical" ? "Critico" : "Atenção"}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {alert.consecutiveMonths} meses seguidos
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Valor acumulado: {formatCurrency(alert.totalCarried)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {alert.recommendation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Duplicate Charges Card */}
+      {duplicates.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
+              <AlertCircle className="h-5 w-5" />
+              Possiveis Cobranças Duplicadas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {duplicates.map((group, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{group.merchant}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {group.count}x
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">
+                    Cobrado {group.count}x por {formatCurrency(group.amount)}
+                  </p>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {group.transactions.map((t, i) => (
+                      <span key={t.id}>
+                        {i > 0 && " | "}
+                        {new Date(t.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                      </span>
+                    ))}
                   </div>
                 </div>
               ))}
