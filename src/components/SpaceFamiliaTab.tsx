@@ -338,19 +338,19 @@ export function SpaceFamiliaTab() {
         <CardContent>
           <div className="space-y-3">
             {members.map((member) => (
-              <div key={member.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+              <div key={member.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
                     <span className="text-sm font-medium text-emerald-700">
                       {(member.user.name || member.user.email || '?')[0].toUpperCase()}
                     </span>
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{member.user.name || 'Sem nome'}</p>
-                    <p className="text-sm text-gray-500">{member.user.email}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{member.user.name || 'Sem nome'}</p>
+                    <p className="text-sm text-gray-500 truncate">{member.user.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Badge className={ROLE_COLORS[member.role]} variant="outline">
                     {ROLE_LABELS[member.role]}
                   </Badge>
@@ -358,7 +358,7 @@ export function SpaceFamiliaTab() {
                     value={member.role}
                     onValueChange={(value) => updateMemberRole(member.id, value)}
                   >
-                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <SelectTrigger className="w-full sm:w-[120px] h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -370,7 +370,7 @@ export function SpaceFamiliaTab() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-gray-400 hover:text-red-600"
+                    className="h-9 w-9 text-gray-400 hover:text-red-600"
                     onClick={() => setMemberToRemove(member)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -453,15 +453,15 @@ export function SpaceFamiliaTab() {
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-gray-700">Convites ativos</h4>
               {invites.map((invite) => (
-                <div key={invite.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <p className="text-sm font-medium">{invite.email || 'Link de convite'}</p>
+                <div key={invite.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{invite.email || 'Link de convite'}</p>
                     <p className="text-xs text-gray-500">
                       {ROLE_LABELS[invite.role]} — Expira em{' '}
                       {new Date(invite.expiresAt).toLocaleDateString('pt-BR')}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => copyInviteLink(invite.code)} className="gap-1">
+                  <Button variant="outline" size="sm" onClick={() => copyInviteLink(invite.code)} className="gap-1 shrink-0">
                     <Copy className="h-3 w-3" />
                     Copiar link
                   </Button>

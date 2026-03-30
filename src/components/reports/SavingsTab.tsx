@@ -167,7 +167,43 @@ export function SavingsTab() {
           <CardTitle>Detalhamento Mensal</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {data.map((entry) => (
+              <div key={entry.id} className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-sm">
+                    {MONTH_LABELS[entry.month - 1]}/{entry.year}
+                  </div>
+                  {entry.isAchieved ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-400" />
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <span className="text-muted-foreground">Meta:</span>
+                  <span className="text-right font-medium">
+                    {formatCurrency(entry.goal)}
+                  </span>
+                  <span className="text-muted-foreground">Economizado:</span>
+                  <span
+                    className={`text-right font-semibold ${
+                      entry.isAchieved ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {formatCurrency(entry.actual)}
+                  </span>
+                  <span className="text-muted-foreground">%:</span>
+                  <span className="text-right font-medium">
+                    {entry.percentage.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

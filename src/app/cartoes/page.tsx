@@ -147,13 +147,13 @@ export default function CartoesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Cartões</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl sm:text-2xl font-bold">Cartões</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={handlePrevMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[160px] text-center font-medium">
+          <span className="min-w-0 sm:min-w-[160px] text-center font-medium">
             {monthNames[month - 1]} {year}
           </span>
           <Button variant="outline" size="icon" onClick={handleNextMonth}>

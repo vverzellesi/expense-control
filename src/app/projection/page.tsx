@@ -88,9 +88,9 @@ export default function ProjectionPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projeção Financeira</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Projeção Financeira</h1>
           <p className="text-gray-500">Visualize seus compromissos futuros</p>
         </div>
         <div className="flex gap-2">
@@ -112,7 +112,7 @@ export default function ProjectionPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">

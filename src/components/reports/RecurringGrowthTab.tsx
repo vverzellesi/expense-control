@@ -169,7 +169,72 @@ export function RecurringGrowthTab({ filterYear }: Props) {
           <CardTitle>Detalhamento de Gastos Recorrentes</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {data.items
+              .filter((item) => item.firstAmount > 0)
+              .sort(
+                (a, b) =>
+                  Math.abs(b.changePercent) - Math.abs(a.changePercent)
+              )
+              .map((item) => (
+                <div key={item.description} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    {item.categoryColor && (
+                      <div
+                        className="h-3 w-3 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: item.categoryColor }}
+                      />
+                    )}
+                    <span className="font-medium text-sm">{item.description}</span>
+                    {!item.isActive && (
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                        inativo
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">Valor Atual:</span>
+                    <span className="text-right font-semibold">
+                      {formatCurrency(item.currentAmount)}
+                    </span>
+                    <span className="text-muted-foreground">Valor Inicial:</span>
+                    <span className="text-right text-muted-foreground">
+                      {formatCurrency(item.firstAmount)}
+                    </span>
+                    <span className="text-muted-foreground">Variação:</span>
+                    <span
+                      className={`text-right font-semibold ${
+                        item.changeAmount > 0
+                          ? "text-red-600"
+                          : item.changeAmount < 0
+                            ? "text-green-600"
+                            : "text-gray-500"
+                      }`}
+                    >
+                      {item.changeAmount > 0 ? "+" : ""}
+                      {formatCurrency(item.changeAmount)}
+                    </span>
+                    <span className="text-muted-foreground">Percentual:</span>
+                    <span
+                      className={`text-right font-semibold ${
+                        item.changePercent > 0
+                          ? "text-red-600"
+                          : item.changePercent < 0
+                            ? "text-green-600"
+                            : "text-gray-500"
+                      }`}
+                    >
+                      {item.changePercent > 0 ? "+" : ""}
+                      {item.changePercent.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

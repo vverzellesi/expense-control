@@ -140,9 +140,9 @@ export default function TrashPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lixeira</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lixeira</h1>
           <p className="text-gray-500">
             Transações excluídas podem ser restauradas ou removidas permanentemente
           </p>
