@@ -19,16 +19,27 @@ interface MonthlyData {
   variable: number;
 }
 
-interface Props {
-  data: MonthlyData[];
+interface FlexibilityMonthlyData {
+  monthLabel: string;
+  essential: number;
+  negotiable: number;
+  variable: number;
+  unclassified: number;
 }
 
-export function FixedVariableChart({ data }: Props) {
+interface Props {
+  data: MonthlyData[];
+  flexibilityData?: FlexibilityMonthlyData[];
+}
+
+export function FixedVariableChart({ data, flexibilityData }: Props) {
   const isMobile = useMediaQuery("(max-width: 768px)");
+
+  const chartData = flexibilityData || data;
 
   return (
     <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
-      <AreaChart data={data} margin={isMobile ? { left: -10, right: 5 } : undefined}>
+      <AreaChart data={chartData} margin={isMobile ? { left: -10, right: 5 } : undefined}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
           dataKey="monthLabel"
@@ -63,24 +74,67 @@ export function FixedVariableChart({ data }: Props) {
           align="center"
           wrapperStyle={isMobile ? { fontSize: "12px" } : undefined}
         />
-        <Area
-          type="monotone"
-          dataKey="fixed"
-          name="Fixas"
-          stackId="1"
-          stroke="#3b82f6"
-          fill="#3b82f6"
-          fillOpacity={0.6}
-        />
-        <Area
-          type="monotone"
-          dataKey="variable"
-          name="Variáveis"
-          stackId="1"
-          stroke="#f59e0b"
-          fill="#f59e0b"
-          fillOpacity={0.6}
-        />
+        {flexibilityData ? (
+          <>
+            <Area
+              type="monotone"
+              dataKey="essential"
+              name="Essenciais"
+              stackId="1"
+              stroke="#475569"
+              fill="#475569"
+              fillOpacity={0.6}
+            />
+            <Area
+              type="monotone"
+              dataKey="negotiable"
+              name="Negociaveis"
+              stackId="1"
+              stroke="#3b82f6"
+              fill="#3b82f6"
+              fillOpacity={0.6}
+            />
+            <Area
+              type="monotone"
+              dataKey="variable"
+              name="Variaveis"
+              stackId="1"
+              stroke="#f59e0b"
+              fill="#f59e0b"
+              fillOpacity={0.6}
+            />
+            <Area
+              type="monotone"
+              dataKey="unclassified"
+              name="Sem Classificacao"
+              stackId="1"
+              stroke="#9ca3af"
+              fill="#9ca3af"
+              fillOpacity={0.4}
+            />
+          </>
+        ) : (
+          <>
+            <Area
+              type="monotone"
+              dataKey="fixed"
+              name="Fixas"
+              stackId="1"
+              stroke="#3b82f6"
+              fill="#3b82f6"
+              fillOpacity={0.6}
+            />
+            <Area
+              type="monotone"
+              dataKey="variable"
+              name="Variaveis"
+              stackId="1"
+              stroke="#f59e0b"
+              fill="#f59e0b"
+              fillOpacity={0.6}
+            />
+          </>
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );

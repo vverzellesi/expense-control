@@ -22,9 +22,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { Category } from "@/types";
+
+const flexibilityOptions = [
+  { value: "none", label: "Não classificada" },
+  { value: "ESSENTIAL", label: "Essencial" },
+  { value: "NEGOTIABLE", label: "Negociável" },
+  { value: "VARIABLE", label: "Variável" },
+];
 
 const defaultColors = [
   // Blues
@@ -70,6 +84,7 @@ export default function CategoriesPage() {
   // Form state
   const [name, setName] = useState("");
   const [color, setColor] = useState(defaultColors[0]);
+  const [flexibilityType, setFlexibilityType] = useState<string>("none");
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
@@ -80,9 +95,11 @@ export default function CategoriesPage() {
     if (editingCategory) {
       setName(editingCategory.name);
       setColor(editingCategory.color);
+      setFlexibilityType(editingCategory.flexibilityType || "none");
     } else {
       setName("");
       setColor(defaultColors[0]);
+      setFlexibilityType("none");
     }
   }, [editingCategory]);
 
@@ -120,7 +137,11 @@ export default function CategoriesPage() {
       const res = await fetch(url, {
         method: editingCategory ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, color }),
+        body: JSON.stringify({
+          name,
+          color,
+          flexibilityType: flexibilityType === "none" ? null : flexibilityType,
+        }),
       });
 
       if (!res.ok) {
@@ -239,6 +260,25 @@ export default function CategoriesPage() {
                     />
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <Label>Tipo de Flexibilidade</Label>
+                <Select
+                  value={flexibilityType}
+                  onValueChange={setFlexibilityType}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Não classificada" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {flexibilityOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex gap-2 pt-4">

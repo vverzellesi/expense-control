@@ -51,7 +51,12 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, color, icon } = body;
+    const { name, color, icon, flexibilityType } = body;
+
+    const VALID_FLEXIBILITY = ['ESSENTIAL', 'NEGOTIABLE', 'VARIABLE', null];
+    if (flexibilityType !== undefined && flexibilityType !== null && !VALID_FLEXIBILITY.includes(flexibilityType)) {
+      return NextResponse.json({ error: "Tipo de flexibilidade inválido" }, { status: 400 });
+    }
 
     const category = await prisma.category.update({
       where: { id, ...ctx.ownerFilter },
@@ -59,6 +64,7 @@ export async function PUT(
         name,
         color,
         icon,
+        flexibilityType: flexibilityType !== undefined ? flexibilityType : undefined,
       },
     });
 

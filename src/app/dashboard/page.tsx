@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp, Bell, CreditCard, Activity } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
@@ -16,6 +16,10 @@ import { InvestmentDashboardCard } from "@/components/InvestmentDashboardCard";
 import { useSpacePermissions } from "@/lib/hooks/useSpacePermissions";
 import { FinancialHealthSection } from "@/components/FinancialHealthSection";
 import type { Transaction, Category, UnusualTransaction, WeeklySummary, WeeklyBreakdown } from "@/types";
+import type { ProjectionResult } from "@/lib/projection";
+import type { DebtAlert } from "@/lib/debt-detector";
+import type { CardScoreResult } from "@/lib/card-score";
+import type { FinancialScoreResult } from "@/lib/financial-score";
 
 interface BudgetAlert {
   categoryId: string;
@@ -76,11 +80,130 @@ interface SummaryData {
   weeklyBreakdown: WeeklyBreakdown | null;
 }
 
+interface InstallmentAlert {
+  ending: Array<{
+    description: string;
+    currentInstallment: number;
+    totalInstallments: number;
+    monthlyAmount: number;
+    categoryName: string | null;
+  }>;
+  starting: Array<{
+    description: string;
+    currentInstallment: number;
+    totalInstallments: number;
+    monthlyAmount: number;
+    totalCommitment: number;
+    endDate: string;
+    categoryName: string | null;
+  }>;
+}
+
+interface DuplicateGroup {
+  merchant: string;
+  amount: number;
+  count: number;
+  transactions: Array<{
+    id: string;
+    description: string;
+    date: string;
+    origin: string | null;
+  }>;
+}
+
+function getProjectionColor(percentage: number): { text: string; bar: string; bg: string; border: string } {
+  if (percentage < 70) return { text: "text-emerald-600", bar: "[&>div]:bg-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" };
+  if (percentage <= 90) return { text: "text-amber-600", bar: "[&>div]:bg-amber-500", bg: "bg-amber-50", border: "border-amber-200" };
+  return { text: "text-red-600", bar: "[&>div]:bg-red-500", bg: "bg-red-50", border: "border-red-200" };
+}
+
+function ProjectionCard({ projection }: { projection: ProjectionResult }) {
+  const [expanded, setExpanded] = useState(false);
+  const colors = getProjectionColor(projection.projectedPercentage);
+
+  return (
+    <Card className={`border-2 ${colors.border} ${colors.bg}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Calculator className="h-5 w-5 text-blue-500" />
+          Projeção do Mês
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-600">Projeção vs Receita</span>
+              <span className={`text-sm font-semibold ${colors.text}`}>
+                {projection.projectedPercentage.toFixed(0)}%
+              </span>
+            </div>
+            <Progress
+              value={Math.min(projection.projectedPercentage, 100)}
+              className={`h-3 ${colors.bar}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-xs text-gray-500">Atual</div>
+              <div className="text-sm font-semibold">{formatCurrency(projection.currentExpenses)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Pendente</div>
+              <div className="text-sm font-semibold text-amber-600">{formatCurrency(projection.pendingTotal)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Projeção</div>
+              <div className={`text-sm font-semibold ${colors.text}`}>{formatCurrency(projection.projectedTotal)}</div>
+            </div>
+          </div>
+
+          {projection.pendingItems.length > 0 && (
+            <div>
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {projection.pendingItems.length} item(ns) pendente(s)
+              </button>
+              {expanded && (
+                <div className="mt-2 space-y-2">
+                  {projection.pendingItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between rounded-lg bg-white p-2 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {item.type === "recurring" ? "Fixo" : "Parcela"}
+                        </Badge>
+                        <span className="text-sm">{item.description}</span>
+                      </div>
+                      <span className="text-sm font-medium text-red-600">
+                        {formatCurrency(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const permissions = useSpacePermissions();
   const [data, setData] = useState<SummaryData | null>(null);
   const [unusualTransactions, setUnusualTransactions] = useState<UnusualTransaction[]>([]);
+  const [projection, setProjection] = useState<ProjectionResult | null>(null);
+  const [installmentAlerts, setInstallmentAlerts] = useState<InstallmentAlert | null>(null);
+  const [debtAlerts, setDebtAlerts] = useState<DebtAlert[]>([]);
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [cardScores, setCardScores] = useState<CardScoreResult[]>([]);
+  const [financialScore, setFinancialScore] = useState<FinancialScoreResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -109,14 +232,32 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [summaryRes, unusualRes] = await Promise.all([
+        const [summaryRes, unusualRes, projectionRes, installmentAlertsRes, debtAlertRes, duplicatesRes, cardScoreRes, financialScoreRes] = await Promise.all([
           fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/transactions/unusual?month=${currentMonth}&year=${currentYear}&threshold=2`),
+          fetch(`/api/insights/projection?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/installment-alerts?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/debt-alert?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/duplicates?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/card-score?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/financial-score?month=${currentMonth}&year=${currentYear}`),
         ]);
         const summaryJson = await summaryRes.json();
         const unusualJson = await unusualRes.json();
+        const projectionJson = projectionRes.ok ? await projectionRes.json() : null;
+        const installmentAlertsJson = installmentAlertsRes.ok ? await installmentAlertsRes.json() : null;
+        const debtAlertJson = debtAlertRes.ok ? await debtAlertRes.json() : null;
+        const duplicatesJson = duplicatesRes.ok ? await duplicatesRes.json() : null;
+        const cardScoreJson = cardScoreRes.ok ? await cardScoreRes.json() : null;
+        const financialScoreJson = financialScoreRes.ok ? await financialScoreRes.json() : null;
         setData(summaryJson);
         setUnusualTransactions(unusualJson.transactions || []);
+        setProjection(projectionJson);
+        setInstallmentAlerts(installmentAlertsJson?.ending ? installmentAlertsJson : null);
+        setDebtAlerts(debtAlertJson?.alerts || []);
+        setDuplicates(duplicatesJson?.duplicates || []);
+        setCardScores(cardScoreJson?.scores || []);
+        setFinancialScore(financialScoreJson?.score !== undefined ? financialScoreJson : null);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -231,6 +372,11 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Projection Card */}
+      {projection && projection.income > 0 && (
+        <ProjectionCard projection={projection} />
+      )}
+
       {/* 3. Alerts Section - High priority items need immediate attention */}
       {data?.budgetAlerts && data.budgetAlerts.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
@@ -334,6 +480,146 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Installment Alerts Card */}
+      {installmentAlerts && (installmentAlerts.ending?.length > 0 || installmentAlerts.starting?.length > 0) && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-blue-800">
+              <Bell className="h-5 w-5" />
+              Alertas de Parcelas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {installmentAlerts.ending.map((alert, idx) => (
+                <div
+                  key={`ending-${idx}`}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500 text-xs">Termina</Badge>
+                      <span className="text-sm font-medium">{alert.description}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {alert.currentInstallment}/{alert.totalInstallments}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-green-700">
+                    Libera {formatCurrency(alert.monthlyAmount)}/mês
+                    {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
+                  </p>
+                </div>
+              ))}
+              {installmentAlerts.starting.map((alert, idx) => (
+                <div
+                  key={`starting-${idx}`}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="destructive" className="text-xs">Nova</Badge>
+                      <span className="text-sm font-medium">{alert.description}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      1/{alert.totalInstallments}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-red-700">
+                    Compromete {formatCurrency(alert.monthlyAmount)}/mês até{" "}
+                    {new Date(alert.endDate).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
+                    {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Debt Alert Card */}
+      {debtAlerts.length > 0 && (
+        <Card className={`border-2 ${debtAlerts.some(a => a.severity === "critical") ? "border-red-300 bg-red-50" : "border-orange-300 bg-orange-50"}`}>
+          <CardHeader className="pb-3">
+            <CardTitle className={`flex items-center gap-2 text-lg ${debtAlerts.some(a => a.severity === "critical") ? "text-red-800" : "text-orange-800"}`}>
+              <AlertTriangle className="h-5 w-5" />
+              Alerta de Endividamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {debtAlerts.map((alert, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{alert.origin}</span>
+                      <Badge
+                        variant={alert.severity === "critical" ? "destructive" : "secondary"}
+                        className={alert.severity === "critical" ? "" : "bg-orange-200 text-orange-800"}
+                      >
+                        {alert.severity === "critical" ? "Crítico" : "Atenção"}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {alert.consecutiveMonths} meses seguidos
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Valor acumulado: {formatCurrency(alert.totalCarried)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {alert.recommendation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Duplicate Charges Card */}
+      {duplicates.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
+              <AlertCircle className="h-5 w-5" />
+              Possíveis Cobranças Duplicadas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {duplicates.map((group, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{group.merchant}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {group.count}x
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">
+                    Cobrado {group.count}x por {formatCurrency(group.amount)}
+                  </p>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {group.transactions.map((t, i) => (
+                      <span key={t.id}>
+                        {i > 0 && " | "}
+                        {new Date(t.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 5. Category Variation - Relates to pie chart */}
       {data?.categoryBreakdown && data.categoryBreakdown.length > 0 && (
         <Card>
@@ -381,6 +667,109 @@ export default function Dashboard() {
                       Novo
                     </Badge>
                   )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 10. Card Score - Per-card health */}
+      {cardScores.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-blue-500" />
+              Saúde dos Cartões
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {cardScores.map((card) => {
+                const color =
+                  card.level === "healthy"
+                    ? "bg-emerald-500"
+                    : card.level === "warning"
+                    ? "bg-amber-500"
+                    : "bg-red-500";
+                return (
+                  <div
+                    key={card.origin}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`h-3 w-3 rounded-full ${color}`} />
+                      <div>
+                        <span className="text-sm font-medium">{card.origin}</span>
+                        <p className="text-xs text-gray-500">{card.recommendation}</p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold">{card.score}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 11. Financial Score - Overall health */}
+      {financialScore && (
+        <Card className={`border-2 ${
+          financialScore.level === "healthy"
+            ? "border-emerald-200 bg-emerald-50"
+            : financialScore.level === "warning"
+            ? "border-amber-200 bg-amber-50"
+            : "border-red-200 bg-red-50"
+        }`}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Saúde Financeira
+              <span className={`ml-2 text-2xl font-bold ${
+                financialScore.level === "healthy"
+                  ? "text-emerald-600"
+                  : financialScore.level === "warning"
+                  ? "text-amber-600"
+                  : "text-red-600"
+              }`}>
+                {financialScore.score}
+              </span>
+              <span className={`h-3 w-3 rounded-full ${
+                financialScore.level === "healthy"
+                  ? "bg-emerald-500"
+                  : financialScore.level === "warning"
+                  ? "bg-amber-500"
+                  : "bg-red-500"
+              }`} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Object.entries(financialScore.factors).map(([key, factor]) => (
+                <div key={key} className="rounded-lg bg-white p-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">{factor.description}</span>
+                    <span className={`text-sm font-semibold ${
+                      factor.score >= 70
+                        ? "text-emerald-600"
+                        : factor.score >= 40
+                        ? "text-amber-600"
+                        : "text-red-600"
+                    }`}>
+                      {factor.score}
+                    </span>
+                  </div>
+                  <Progress
+                    value={factor.score}
+                    className={`mt-2 h-2 ${
+                      factor.score >= 70
+                        ? "[&>div]:bg-emerald-500"
+                        : factor.score >= 40
+                        ? "[&>div]:bg-amber-500"
+                        : "[&>div]:bg-red-500"
+                    }`}
+                  />
                 </div>
               ))}
             </div>

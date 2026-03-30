@@ -25,6 +25,8 @@ import {
   Briefcase,
   Landmark,
   RotateCcw,
+  Store,
+  Repeat,
 } from "lucide-react";
 import { OverviewTab } from "@/components/reports/OverviewTab";
 import { AnnualEvolutionTab } from "@/components/reports/AnnualEvolutionTab";
@@ -37,6 +39,8 @@ import { CalendarHeatmapTab } from "@/components/reports/CalendarHeatmapTab";
 import { InvestmentsTab } from "@/components/reports/InvestmentsTab";
 import { NetWorthTab } from "@/components/reports/NetWorthTab";
 import { RecurringGrowthTab } from "@/components/reports/RecurringGrowthTab";
+import { TopMerchantsTab } from "@/components/reports/TopMerchantsTab";
+import { SubscriptionsTab } from "@/components/reports/SubscriptionsTab";
 
 export default function ReportsPage() {
   const currentDate = new Date();
@@ -182,6 +186,16 @@ export default function ReportsPage() {
             <span className="hidden sm:inline">Recorrentes</span>
             <span className="sm:hidden">Recorr.</span>
           </TabsTrigger>
+          <TabsTrigger value="top-merchants" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Store className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Maiores Gastos</span>
+            <span className="sm:hidden">Gastos</span>
+          </TabsTrigger>
+          <TabsTrigger value="subscriptions" className="min-h-[44px] flex-1 sm:flex-initial">
+            <Repeat className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Assinaturas</span>
+            <span className="sm:hidden">Assin.</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -226,6 +240,14 @@ export default function ReportsPage() {
 
         <TabsContent value="recurring">
           <RecurringGrowthTab filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="top-merchants">
+          <TopMerchantsTab filterMonth={filterMonth} filterYear={filterYear} />
+        </TabsContent>
+
+        <TabsContent value="subscriptions">
+          <SubscriptionsTab />
         </TabsContent>
       </Tabs>
     </div>
