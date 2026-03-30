@@ -13,32 +13,33 @@ export async function GET(request: NextRequest) {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
-    // Current month transactions
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        ...ctx.ownerFilter,
-        type: "EXPENSE",
-        deletedAt: null,
-        date: { gte: startDate, lte: endDate },
-        investmentTransaction: null,
-      },
-      select: { id: true, description: true, amount: true, date: true },
-    });
-
     // Previous month for comparison
     const prevStartDate = new Date(year, month - 2, 1);
     const prevEndDate = new Date(year, month - 1, 0, 23, 59, 59);
 
-    const prevTransactions = await prisma.transaction.findMany({
-      where: {
-        ...ctx.ownerFilter,
-        type: "EXPENSE",
-        deletedAt: null,
-        date: { gte: prevStartDate, lte: prevEndDate },
-        investmentTransaction: null,
-      },
-      select: { id: true, description: true, amount: true, date: true },
-    });
+    // Current and previous month transactions in parallel
+    const [transactions, prevTransactions] = await Promise.all([
+      prisma.transaction.findMany({
+        where: {
+          ...ctx.ownerFilter,
+          type: "EXPENSE",
+          deletedAt: null,
+          date: { gte: startDate, lte: endDate },
+          investmentTransaction: null,
+        },
+        select: { id: true, description: true, amount: true, date: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          ...ctx.ownerFilter,
+          type: "EXPENSE",
+          deletedAt: null,
+          date: { gte: prevStartDate, lte: prevEndDate },
+          investmentTransaction: null,
+        },
+        select: { id: true, description: true, amount: true, date: true },
+      }),
+    ]);
 
     const currentGroups = groupByMerchant(transactions);
     const prevGroups = groupByMerchant(prevTransactions);

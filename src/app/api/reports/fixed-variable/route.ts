@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import { getAuthContext, handleApiError } from "@/lib/auth-utils";
 import { toLocalDateString } from "@/lib/utils";
 import { MONTH_LABELS } from "@/lib/constants";
 
@@ -253,16 +253,6 @@ export async function GET(request: NextRequest) {
       flexibilityMonthly,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    if (error instanceof Error && error.message === "Forbidden") {
-      return forbiddenResponse();
-    }
-    console.error("Error fetching fixed/variable data:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar dados fixos/variáveis" },
-      { status: 500 }
-    );
+    return handleApiError(error, "buscar dados fixos/variáveis");
   }
 }

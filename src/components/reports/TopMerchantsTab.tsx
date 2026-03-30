@@ -70,7 +70,7 @@ export function TopMerchantsTab({ filterMonth, filterYear }: Props) {
   if (!data || data.topMerchants.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-gray-500">
-        Nenhum gasto encontrado para este periodo
+        Nenhum gasto encontrado para este período
       </div>
     );
   }
@@ -181,7 +181,7 @@ export function TopMerchantsTab({ filterMonth, filterYear }: Props) {
                   <th className="pb-2 font-medium text-gray-500">Estabelecimento</th>
                   <th className="pb-2 font-medium text-gray-500 text-right">Total</th>
                   <th className="pb-2 font-medium text-gray-500 text-right hidden sm:table-cell">Visitas</th>
-                  <th className="pb-2 font-medium text-gray-500 text-right hidden sm:table-cell">Ticket Medio</th>
+                  <th className="pb-2 font-medium text-gray-500 text-right hidden sm:table-cell">Ticket Médio</th>
                   <th className="pb-2 font-medium text-gray-500 text-right">vs Anterior</th>
                 </tr>
               </thead>

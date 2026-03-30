@@ -153,7 +153,7 @@ function FlexibilityView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Negociaveis</CardTitle>
+            <CardTitle className="text-sm font-medium">Negociáveis</CardTitle>
             <Scale className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
@@ -170,7 +170,7 @@ function FlexibilityView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Variaveis</CardTitle>
+            <CardTitle className="text-sm font-medium">Variáveis</CardTitle>
             <Zap className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -188,7 +188,7 @@ function FlexibilityView({
         {flexBreakdown.unclassified > 0 && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sem Classificacao</CardTitle>
+              <CardTitle className="text-sm font-medium">Sem Classificação</CardTitle>
               <HelpCircle className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
@@ -213,7 +213,7 @@ function FlexibilityView({
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
             <label htmlFor="reduction-slider" className="text-sm font-medium text-gray-700 whitespace-nowrap">
-              Reducao em variaveis:
+              Redução em variáveis:
             </label>
             <input
               id="reduction-slider"
@@ -231,8 +231,8 @@ function FlexibilityView({
           </div>
           <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
             <p className="text-sm text-emerald-800">
-              Se reduzir variaveis em <strong>{reductionPercent}%</strong>, economiza{" "}
-              <strong>{formatCurrency(savings)}/mes</strong>
+              Se reduzir variáveis em <strong>{reductionPercent}%</strong>, economiza{" "}
+              <strong>{formatCurrency(savings)}/mês</strong>
               {" "}({formatCurrency(savings * 12)}/ano)
             </p>
           </div>
@@ -242,7 +242,7 @@ function FlexibilityView({
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Evolucao por Flexibilidade (12 meses)</CardTitle>
+          <CardTitle>Evolução por Flexibilidade (12 meses)</CardTitle>
         </CardHeader>
         <CardContent>
           {flexMonthly.length > 0 ? (
@@ -259,7 +259,7 @@ function FlexibilityView({
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Despesas Fixas do Mes</CardTitle>
+            <CardTitle>Despesas Fixas do Mês</CardTitle>
           </CardHeader>
           <CardContent>
             {data.fixedExpenses.length > 0 ? (
@@ -278,7 +278,7 @@ function FlexibilityView({
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa fixa neste mes
+                Nenhuma despesa fixa neste mês
               </div>
             )}
           </CardContent>
@@ -286,7 +286,7 @@ function FlexibilityView({
 
         <Card>
           <CardHeader>
-            <CardTitle>Top 10 Despesas Variaveis</CardTitle>
+            <CardTitle>Top 10 Despesas Variáveis</CardTitle>
           </CardHeader>
           <CardContent>
             {data.topVariableExpenses.length > 0 ? (
@@ -307,7 +307,7 @@ function FlexibilityView({
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa variavel neste mes
+                Nenhuma despesa variável neste mês
               </div>
             )}
           </CardContent>
@@ -327,10 +327,10 @@ function BinaryView({ data }: { data: FixedVariableData }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-emerald-800">
-                Classifique suas categorias para ver analise detalhada
+                Classifique suas categorias para ver análise detalhada
               </p>
               <p className="text-sm text-emerald-600 mt-1">
-                Com a classificacao de flexibilidade, voce vera 3 camadas (essencial, negociavel, variavel) e um simulador de economia.
+                Com a classificação de flexibilidade, você verá 3 camadas (essencial, negociável, variável) e um simulador de economia.
               </p>
             </div>
             <Link
@@ -360,7 +360,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Despesas Variaveis</CardTitle>
+            <CardTitle className="text-sm font-medium">Despesas Variáveis</CardTitle>
             <Shuffle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -398,7 +398,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Evolucao Fixas vs Variaveis (12 meses)</CardTitle>
+          <CardTitle>Evolução Fixas vs Variáveis (12 meses)</CardTitle>
         </CardHeader>
         <CardContent>
           {data.monthlyBreakdown.length > 0 ? (
@@ -415,7 +415,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Despesas Fixas do Mes</CardTitle>
+            <CardTitle>Despesas Fixas do Mês</CardTitle>
           </CardHeader>
           <CardContent>
             {data.fixedExpenses.length > 0 ? (
@@ -434,7 +434,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa fixa neste mes
+                Nenhuma despesa fixa neste mês
               </div>
             )}
           </CardContent>
@@ -442,7 +442,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Top 10 Despesas Variaveis</CardTitle>
+            <CardTitle>Top 10 Despesas Variáveis</CardTitle>
           </CardHeader>
           <CardContent>
             {data.topVariableExpenses.length > 0 ? (
@@ -463,7 +463,7 @@ function BinaryView({ data }: { data: FixedVariableData }) {
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center text-gray-500 text-sm">
-                Nenhuma despesa variavel neste mes
+                Nenhuma despesa variável neste mês
               </div>
             )}
           </CardContent>

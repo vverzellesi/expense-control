@@ -6,7 +6,7 @@ describe("calculateFinancialScore", () => {
     const result = calculateFinancialScore({
       income: 10000,
       fixedExpensesTotal: 4000,
-      installmentsTotal: 0,
+
       monthlyExpenses: [5000, 5000, 5000],
       activeInstallments: 0,
       totalRemainingMonths: 0,
@@ -21,7 +21,7 @@ describe("calculateFinancialScore", () => {
     const result = calculateFinancialScore({
       income: 10000,
       fixedExpensesTotal: 9000,
-      installmentsTotal: 3000,
+
       monthlyExpenses: [7000, 8500, 10000],
       activeInstallments: 10,
       totalRemainingMonths: 60,
@@ -36,7 +36,7 @@ describe("calculateFinancialScore", () => {
     const result = calculateFinancialScore({
       income: 10000,
       fixedExpensesTotal: 7000,
-      installmentsTotal: 2000,
+
       monthlyExpenses: [6000, 6500, 7000],
       activeInstallments: 5,
       totalRemainingMonths: 25,
@@ -52,7 +52,7 @@ describe("calculateFinancialScore", () => {
     const result = calculateFinancialScore({
       income: 0,
       fixedExpensesTotal: 0,
-      installmentsTotal: 0,
+
       monthlyExpenses: [],
       activeInstallments: 0,
       totalRemainingMonths: 0,
@@ -66,7 +66,7 @@ describe("calculateFinancialScore", () => {
     const result = calculateFinancialScore({
       income: 10000,
       fixedExpensesTotal: 5000,
-      installmentsTotal: 0,
+
       monthlyExpenses: [5000],
       activeInstallments: 3,
       totalRemainingMonths: 15,

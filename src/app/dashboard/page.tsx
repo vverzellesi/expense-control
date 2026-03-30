@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp, Bell } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, PiggyBank, Target, Zap, Calculator, ChevronDown, ChevronUp, Bell, CreditCard, Activity } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryPieChart } from "@/components/Charts/CategoryPieChart";
@@ -18,6 +18,8 @@ import { FinancialHealthSection } from "@/components/FinancialHealthSection";
 import type { Transaction, Category, UnusualTransaction, WeeklySummary, WeeklyBreakdown } from "@/types";
 import type { ProjectionResult } from "@/lib/projection";
 import type { DebtAlert } from "@/lib/debt-detector";
+import type { CardScoreResult } from "@/lib/card-score";
+import type { FinancialScoreResult } from "@/lib/financial-score";
 
 interface BudgetAlert {
   categoryId: string;
@@ -200,6 +202,8 @@ export default function Dashboard() {
   const [installmentAlerts, setInstallmentAlerts] = useState<InstallmentAlert | null>(null);
   const [debtAlerts, setDebtAlerts] = useState<DebtAlert[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [cardScores, setCardScores] = useState<CardScoreResult[]>([]);
+  const [financialScore, setFinancialScore] = useState<FinancialScoreResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -228,13 +232,15 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [summaryRes, unusualRes, projectionRes, installmentAlertsRes, debtAlertRes, duplicatesRes] = await Promise.all([
+        const [summaryRes, unusualRes, projectionRes, installmentAlertsRes, debtAlertRes, duplicatesRes, cardScoreRes, financialScoreRes] = await Promise.all([
           fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/transactions/unusual?month=${currentMonth}&year=${currentYear}&threshold=2`),
           fetch(`/api/insights/projection?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/insights/installment-alerts?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/insights/debt-alert?month=${currentMonth}&year=${currentYear}`),
           fetch(`/api/insights/duplicates?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/card-score?month=${currentMonth}&year=${currentYear}`),
+          fetch(`/api/insights/financial-score?month=${currentMonth}&year=${currentYear}`),
         ]);
         const summaryJson = await summaryRes.json();
         const unusualJson = await unusualRes.json();
@@ -242,12 +248,16 @@ export default function Dashboard() {
         const installmentAlertsJson = installmentAlertsRes.ok ? await installmentAlertsRes.json() : null;
         const debtAlertJson = debtAlertRes.ok ? await debtAlertRes.json() : null;
         const duplicatesJson = duplicatesRes.ok ? await duplicatesRes.json() : null;
+        const cardScoreJson = cardScoreRes.ok ? await cardScoreRes.json() : null;
+        const financialScoreJson = financialScoreRes.ok ? await financialScoreRes.json() : null;
         setData(summaryJson);
         setUnusualTransactions(unusualJson.transactions || []);
         setProjection(projectionJson);
         setInstallmentAlerts(installmentAlertsJson?.ending ? installmentAlertsJson : null);
         setDebtAlerts(debtAlertJson?.alerts || []);
         setDuplicates(duplicatesJson?.duplicates || []);
+        setCardScores(cardScoreJson?.scores || []);
+        setFinancialScore(financialScoreJson?.score !== undefined ? financialScoreJson : null);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -496,7 +506,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-green-700">
-                    Libera {formatCurrency(alert.monthlyAmount)}/mes
+                    Libera {formatCurrency(alert.monthlyAmount)}/mês
                     {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
                   </p>
                 </div>
@@ -516,7 +526,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-red-700">
-                    Compromete {formatCurrency(alert.monthlyAmount)}/mes ate{" "}
+                    Compromete {formatCurrency(alert.monthlyAmount)}/mês até{" "}
                     {new Date(alert.endDate).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
                     {alert.categoryName && <span className="text-gray-500"> ({alert.categoryName})</span>}
                   </p>
@@ -550,7 +560,7 @@ export default function Dashboard() {
                         variant={alert.severity === "critical" ? "destructive" : "secondary"}
                         className={alert.severity === "critical" ? "" : "bg-orange-200 text-orange-800"}
                       >
-                        {alert.severity === "critical" ? "Critico" : "Atenção"}
+                        {alert.severity === "critical" ? "Crítico" : "Atenção"}
                       </Badge>
                     </div>
                     <span className="text-sm text-gray-500">
@@ -576,7 +586,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
               <AlertCircle className="h-5 w-5" />
-              Possiveis Cobranças Duplicadas
+              Possíveis Cobranças Duplicadas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -657,6 +667,109 @@ export default function Dashboard() {
                       Novo
                     </Badge>
                   )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 10. Card Score - Per-card health */}
+      {cardScores.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-blue-500" />
+              Saúde dos Cartões
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {cardScores.map((card) => {
+                const color =
+                  card.level === "healthy"
+                    ? "bg-emerald-500"
+                    : card.level === "warning"
+                    ? "bg-amber-500"
+                    : "bg-red-500";
+                return (
+                  <div
+                    key={card.origin}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`h-3 w-3 rounded-full ${color}`} />
+                      <div>
+                        <span className="text-sm font-medium">{card.origin}</span>
+                        <p className="text-xs text-gray-500">{card.recommendation}</p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold">{card.score}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 11. Financial Score - Overall health */}
+      {financialScore && (
+        <Card className={`border-2 ${
+          financialScore.level === "healthy"
+            ? "border-emerald-200 bg-emerald-50"
+            : financialScore.level === "warning"
+            ? "border-amber-200 bg-amber-50"
+            : "border-red-200 bg-red-50"
+        }`}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Saúde Financeira
+              <span className={`ml-2 text-2xl font-bold ${
+                financialScore.level === "healthy"
+                  ? "text-emerald-600"
+                  : financialScore.level === "warning"
+                  ? "text-amber-600"
+                  : "text-red-600"
+              }`}>
+                {financialScore.score}
+              </span>
+              <span className={`h-3 w-3 rounded-full ${
+                financialScore.level === "healthy"
+                  ? "bg-emerald-500"
+                  : financialScore.level === "warning"
+                  ? "bg-amber-500"
+                  : "bg-red-500"
+              }`} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Object.entries(financialScore.factors).map(([key, factor]) => (
+                <div key={key} className="rounded-lg bg-white p-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">{factor.description}</span>
+                    <span className={`text-sm font-semibold ${
+                      factor.score >= 70
+                        ? "text-emerald-600"
+                        : factor.score >= 40
+                        ? "text-amber-600"
+                        : "text-red-600"
+                    }`}>
+                      {factor.score}
+                    </span>
+                  </div>
+                  <Progress
+                    value={factor.score}
+                    className={`mt-2 h-2 ${
+                      factor.score >= 70
+                        ? "[&>div]:bg-emerald-500"
+                        : factor.score >= 40
+                        ? "[&>div]:bg-amber-500"
+                        : "[&>div]:bg-red-500"
+                    }`}
+                  />
                 </div>
               ))}
             </div>

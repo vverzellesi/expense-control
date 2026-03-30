@@ -105,20 +105,20 @@ function getRecommendation(
 ): string {
   // Check critical factors BEFORE overall score
   if (factors.financedHistory.score <= 40) {
-    return "Critico \u2014 fatura parcelada/financiada recentemente. Priorize o pagamento integral.";
+    return "Crítico \u2014 fatura parcelada/financiada recentemente. Priorize o pagamento integral.";
   }
   if (factors.limitUsage.score <= 20) {
-    return "Critico \u2014 uso do limite esta muito alto. Reduza gastos neste cartao urgentemente.";
+    return "Crítico \u2014 uso do limite está muito alto. Reduza gastos neste cartão urgentemente.";
   }
   if (score >= 80)
-    return "Saudavel \u2014 continue pagando integral.";
+    return "Saudável \u2014 continue pagando integral.";
   if (factors.limitUsage.score <= 50) {
-    return "Atencao \u2014 uso do limite esta alto. Considere reduzir gastos neste cartao.";
+    return "Atenção \u2014 uso do limite está alto. Considere reduzir gastos neste cartão.";
   }
   if (factors.installmentRatio.score <= 50) {
-    return "Atencao \u2014 parcelas representam grande parte da fatura. Evite novas compras parceladas.";
+    return "Atenção \u2014 parcelas representam grande parte da fatura. Evite novas compras parceladas.";
   }
-  return "Atencao \u2014 monitore o uso deste cartao para evitar endividamento.";
+  return "Atenção \u2014 monitore o uso deste cartão para evitar endividamento.";
 }
 
 export function calculateCardScore(

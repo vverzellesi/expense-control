@@ -38,14 +38,14 @@ function scoreExpenseTrend(
 
   const recent = monthlyExpenses[monthlyExpenses.length - 1];
   const previous = monthlyExpenses[monthlyExpenses.length - 2];
-  if (previous <= 0) return { value: "estavel", score: 70 };
+  if (previous <= 0) return { value: "estável", score: 70 };
 
   const change = ((recent - previous) / previous) * 100;
   if (change > 15) return { value: "subindo", score: 30 };
   if (change > 5) return { value: "subindo leve", score: 55 };
   if (change < -15) return { value: "descendo", score: 100 };
   if (change < -5) return { value: "descendo leve", score: 85 };
-  return { value: "estavel", score: 70 };
+  return { value: "estável", score: 70 };
 }
 
 function scoreInstallmentLoad(
@@ -86,7 +86,6 @@ export function calculateFinancialScore({
 }: {
   income: number;
   fixedExpensesTotal: number;
-  installmentsTotal: number;
   monthlyExpenses: number[];
   activeInstallments: number;
   totalRemainingMonths: number;
@@ -117,7 +116,7 @@ export function calculateFinancialScore({
         ...fc,
         description: `${fc.value.toFixed(0)}% da renda em fixos`,
       },
-      expenseTrend: { ...et, description: `Tendencia: ${et.value}` },
+      expenseTrend: { ...et, description: `Tendência: ${et.value}`},
       installmentLoad: {
         ...il,
         description: `${il.value} parcelas ativas`,
@@ -125,7 +124,7 @@ export function calculateFinancialScore({
       debtStatus: {
         ...ds,
         description:
-          ds.value > 0 ? `${ds.value} alerta(s) de divida` : "Sem dividas",
+          ds.value > 0 ? `${ds.value} alerta(s) de dívida` : "Sem dívidas",
       },
     },
   };

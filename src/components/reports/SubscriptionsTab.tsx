@@ -111,7 +111,7 @@ export function SubscriptionsTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="pb-2 font-medium text-gray-500">Descricao</th>
+                  <th className="pb-2 font-medium text-gray-500">Descrição</th>
                   <th className="pb-2 font-medium text-gray-500 text-right">Mensal</th>
                   <th className="pb-2 font-medium text-gray-500 text-right hidden sm:table-cell">Anual</th>
                   <th className="pb-2 font-medium text-gray-500 hidden md:table-cell">Categoria</th>

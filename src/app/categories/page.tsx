@@ -34,10 +34,10 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { Category } from "@/types";
 
 const flexibilityOptions = [
-  { value: "none", label: "Nao classificada" },
+  { value: "none", label: "Não classificada" },
   { value: "ESSENTIAL", label: "Essencial" },
-  { value: "NEGOTIABLE", label: "Negociavel" },
-  { value: "VARIABLE", label: "Variavel" },
+  { value: "NEGOTIABLE", label: "Negociável" },
+  { value: "VARIABLE", label: "Variável" },
 ];
 
 const defaultColors = [
@@ -269,7 +269,7 @@ export default function CategoriesPage() {
                   onValueChange={setFlexibilityType}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Nao classificada" />
+                    <SelectValue placeholder="Não classificada" />
                   </SelectTrigger>
                   <SelectContent>
                     {flexibilityOptions.map((opt) => (

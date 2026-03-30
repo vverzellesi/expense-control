@@ -105,9 +105,6 @@ export async function GET(request: NextRequest) {
       )
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    // Calculate installments total for current month
-    const installmentsTotal = 0; // Placeholder - could be derived from installment transactions
-
     // Calculate monthly expenses for trend (last 3 months, oldest first)
     const monthlyExpenses: number[] = [];
     for (let i = 2; i >= 0; i--) {
@@ -139,7 +136,6 @@ export async function GET(request: NextRequest) {
     const result = calculateFinancialScore({
       income,
       fixedExpensesTotal,
-      installmentsTotal,
       monthlyExpenses,
       activeInstallments,
       totalRemainingMonths,
