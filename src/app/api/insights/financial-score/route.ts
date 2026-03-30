@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
             totalInstallments: true,
             _count: {
               select: {
-                transactions: { where: { deletedAt: null } },
+                transactions: { where: { deletedAt: null, date: { lte: new Date() } } },
               },
             },
           },
