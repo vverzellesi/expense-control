@@ -80,10 +80,10 @@ Implementar o milestone "Cluster 6: Insights e Analytics" (issues #71, #56, #57,
 
 | # | Fase | Arquivo | Resumo | Status | Depende de |
 |---|------|---------|--------|--------|------------|
-| 1 | Fundação + Projeção | `phase-1-foundation-projection.md` | Schema FlexibilityType + merchant normalizer + projeção do mês | pending | — |
-| 2 | Alertas no Dashboard | `phase-2-alerts.md` | Installment alerts + debt alert + duplicate detection | pending | Phase 1 |
+| 1 | Fundação + Projeção | `phase-1-foundation-projection.md` | Schema FlexibilityType + merchant normalizer + projeção do mês | complete | — |
+| 2 | Alertas no Dashboard | `phase-2-alerts.md` | Installment alerts + debt alert + duplicate detection | complete | Phase 1 |
 | 3 | Scores + Classificação | `phase-3-scores.md` | Card score + financial score + category flexibility UI | pending | Phase 2 |
-| 4 | Tabs de Reports | `phase-4-report-tabs.md` | Top merchants + fixed/variable expandido + assinaturas | pending | Phase 1 |
+| 4 | Tabs de Reports | `phase-4-report-tabs.md` | Top merchants + fixed/variable expandido + assinaturas | complete | Phase 1 |
 
 ---
 
