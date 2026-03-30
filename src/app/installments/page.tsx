@@ -169,18 +169,22 @@ export default function InstallmentsPage() {
     });
   });
 
-  // Include standalone installments - project FUTURE installments
-  // If transaction is installment 3/10, project installments 4-10 in future months
+  // Include standalone installments - project remaining installments from current month
   standaloneInstallments.forEach((t) => {
     if (!t.currentInstallment || !t.totalInstallments) return;
 
     const transactionDate = new Date(t.date);
-    const remainingInstallments = t.totalInstallments - t.currentInstallment;
+    const monthsElapsed =
+      (now.getFullYear() - transactionDate.getFullYear()) * 12 +
+      (now.getMonth() - transactionDate.getMonth());
+    const effectiveCurrent = t.currentInstallment + monthsElapsed;
 
-    // Project future installments starting from next month after transaction date
-    for (let i = 1; i <= remainingInstallments; i++) {
-      const futureDate = new Date(transactionDate);
-      futureDate.setMonth(futureDate.getMonth() + i);
+    if (effectiveCurrent > t.totalInstallments) return;
+
+    const remaining = t.totalInstallments - effectiveCurrent;
+
+    for (let i = 0; i <= remaining; i++) {
+      const futureDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
 
       const key = `${futureDate.getFullYear()}-${String(
         futureDate.getMonth() + 1
@@ -191,10 +195,14 @@ export default function InstallmentsPage() {
 
   const sortedMonths = Object.keys(futureSummary).sort();
 
-  // Filter standalone installments that still have future installments (are "active")
+  // Filter standalone installments that still have remaining installments (are "active")
   const activeStandaloneInstallments = standaloneInstallments.filter((t) => {
     if (!t.currentInstallment || !t.totalInstallments) return false;
-    return t.currentInstallment < t.totalInstallments;
+    const transactionDate = new Date(t.date);
+    const monthsElapsed =
+      (now.getFullYear() - transactionDate.getFullYear()) * 12 +
+      (now.getMonth() - transactionDate.getMonth());
+    return t.currentInstallment + monthsElapsed <= t.totalInstallments;
   });
 
   if (loading) {
@@ -372,10 +380,19 @@ export default function InstallmentsPage() {
 
               {/* Standalone installments (shown as active) */}
               {activeStandaloneInstallments.map((t) => {
-                const paidCount = t.currentInstallment || 0;
+                const transactionDate = new Date(t.date);
+                const monthsElapsed =
+                  (now.getFullYear() - transactionDate.getFullYear()) * 12 +
+                  (now.getMonth() - transactionDate.getMonth());
+                const paidCount = Math.min(
+                  (t.currentInstallment || 0) + monthsElapsed,
+                  t.totalInstallments || 1
+                );
                 const total = t.totalInstallments || 1;
                 const progress = (paidCount / total) * 100;
                 const totalAmount = Math.abs(t.amount) * total;
+                const effectiveDate = new Date(transactionDate);
+                effectiveDate.setMonth(transactionDate.getMonth() + monthsElapsed);
 
                 return (
                   <div key={t.id} className="rounded-lg border p-4">
@@ -392,7 +409,7 @@ export default function InstallmentsPage() {
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                             <span>{t.origin}</span>
                             <span>-</span>
-                            <span>Parcela atual: {formatDate(t.date)}</span>
+                            <span>Parcela atual: {formatDate(effectiveDate)}</span>
                             {t.category && (
                               <>
                                 <span>-</span>
@@ -443,10 +460,10 @@ export default function InstallmentsPage() {
                       {Array.from({ length: total }, (_, i) => {
                         const installmentNum = i + 1;
                         const isPaid = installmentNum <= paidCount;
-                        // Calculate projected date for each installment
+                        // Calculate projected date for each installment relative to original
                         const baseDate = new Date(t.date);
                         const installmentDate = new Date(baseDate);
-                        installmentDate.setMonth(baseDate.getMonth() + (installmentNum - paidCount));
+                        installmentDate.setMonth(baseDate.getMonth() + (installmentNum - (t.currentInstallment || 0)));
 
                         return (
                           <div
