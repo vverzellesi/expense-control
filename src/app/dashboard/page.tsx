@@ -812,7 +812,7 @@ export default function Dashboard() {
                 }`}
                 {...clickable(() => navigateTo(`/transactions?categoryId=${budget.categoryId}&month=${currentMonth}&year=${currentYear}`))}
               >
-                <CardContent className="h-full flex flex-col justify-center p-4">
+                <CardContent className="!p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <div
                       className="h-3 w-3 rounded-full"
