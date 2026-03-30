@@ -128,6 +128,117 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
 
+    // Load categories with flexibilityType for the user
+    const categories = await prisma.category.findMany({
+      where: ctx.ownerFilter,
+      select: { id: true, name: true, flexibilityType: true },
+    });
+
+    const categoryFlexMap = new Map(categories.map((c) => [c.id, c.flexibilityType]));
+    const hasFlexibility = categories.some((c) => c.flexibilityType !== null);
+
+    let flexibilityBreakdown: {
+      essential: number;
+      negotiable: number;
+      variable: number;
+      unclassified: number;
+    } | null = null;
+
+    let flexibilityMonthly: {
+      monthLabel: string;
+      essential: number;
+      negotiable: number;
+      variable: number;
+      unclassified: number;
+    }[] | null = null;
+
+    if (hasFlexibility) {
+      // Current month flexibility breakdown
+      let essential = 0;
+      let negotiable = 0;
+      let flexVariable = 0;
+      let unclassified = 0;
+
+      for (const t of currentMonthTransactions) {
+        const absAmount = Math.abs(t.amount);
+        const flexType = t.categoryId ? categoryFlexMap.get(t.categoryId) : null;
+        switch (flexType) {
+          case "ESSENTIAL":
+            essential += absAmount;
+            break;
+          case "NEGOTIABLE":
+            negotiable += absAmount;
+            break;
+          case "VARIABLE":
+            flexVariable += absAmount;
+            break;
+          default:
+            unclassified += absAmount;
+            break;
+        }
+      }
+
+      flexibilityBreakdown = {
+        essential,
+        negotiable,
+        variable: flexVariable,
+        unclassified,
+      };
+
+      // Monthly breakdown with 4 series for chart
+      const flexMonthlyEntries: {
+        key: string;
+        label: string;
+        essential: number;
+        negotiable: number;
+        variable: number;
+        unclassified: number;
+      }[] = [];
+      const flexEntryMap = new Map<string, typeof flexMonthlyEntries[0]>();
+
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(startDate);
+        d.setMonth(d.getMonth() + i);
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        const label = `${MONTH_LABELS[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+        const entry = { key, label, essential: 0, negotiable: 0, variable: 0, unclassified: 0 };
+        flexMonthlyEntries.push(entry);
+        flexEntryMap.set(key, entry);
+      }
+
+      for (const t of transactions) {
+        const d = new Date(t.date);
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        const entry = flexEntryMap.get(key);
+        if (entry) {
+          const absAmount = Math.abs(t.amount);
+          const flexType = t.categoryId ? categoryFlexMap.get(t.categoryId) : null;
+          switch (flexType) {
+            case "ESSENTIAL":
+              entry.essential += absAmount;
+              break;
+            case "NEGOTIABLE":
+              entry.negotiable += absAmount;
+              break;
+            case "VARIABLE":
+              entry.variable += absAmount;
+              break;
+            default:
+              entry.unclassified += absAmount;
+              break;
+          }
+        }
+      }
+
+      flexibilityMonthly = flexMonthlyEntries.map((e) => ({
+        monthLabel: e.label,
+        essential: e.essential,
+        negotiable: e.negotiable,
+        variable: e.variable,
+        unclassified: e.unclassified,
+      }));
+    }
+
     return NextResponse.json({
       currentMonth: {
         fixed,
@@ -138,6 +249,8 @@ export async function GET(request: NextRequest) {
       monthlyBreakdown,
       fixedExpenses,
       topVariableExpenses,
+      flexibilityBreakdown,
+      flexibilityMonthly,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {

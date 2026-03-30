@@ -14,12 +14,13 @@ Implementar as 3 tabs de reports: "Maiores Gastos" (top merchants com normaliza�
 
 ## Changes Required
 
-#### 1. Criar API top-merchants + TopMerchantsTab com gráfico
+#### 1. [x] Criar API top-merchants + TopMerchantsTab com gráfico
 
 **File**: `src/app/api/reports/top-merchants/route.ts` (CREATE), `src/components/reports/TopMerchantsTab.tsx` (CREATE), `src/app/reports/page.tsx` (MODIFY)
 **Complexity**: Medium
 **TDD**: NO (API wiring uses tested merchant-normalizer, component is display)
 **Depends On**: Phase 1 Task 2 (merchant-normalizer)
+**Learning**: `handleApiError` requer segundo argumento `context: string` (diferente do plan code original que omitia). Reutilizou `groupByMerchant` direto sem problemas. Chart horizontal com `layout="vertical"` funciona bem para ranking de merchants.
 
 **Load Before Implementing**:
 1. `src/lib/merchant-normalizer.ts` - groupByMerchant (Phase 1)
@@ -158,12 +159,13 @@ Add tab to `src/app/reports/page.tsx`:
 
 ---
 
-#### 2. Expandir FixedVariableTab com 3 camadas + simulador
+#### 2. [x] Expandir FixedVariableTab com 3 camadas + simulador
 
 **File**: `src/app/api/reports/fixed-variable/route.ts` (MODIFY), `src/components/reports/FixedVariableTab.tsx` (MODIFY), `src/components/Charts/FixedVariableChart.tsx` (MODIFY)
 **Complexity**: High
 **TDD**: NO (expanding existing component, no pure logic to test separately)
 **Depends On**: Phase 1 Task 1 (FlexibilityType in schema), Phase 3 Task 3 (category UI)
+**Learning**: Sem @radix-ui/react-slider instalado, usou `<input type="range">` nativo com classe Tailwind `accent-emerald-600`. Componente refatorado em FlexibilityView e BinaryView para clareza. Chart aceita prop opcional `flexibilityData` sem quebrar uso existente.
 
 **Load Before Implementing**:
 1. `src/app/api/reports/fixed-variable/route.ts` (full file) - Current API implementation
@@ -258,12 +260,13 @@ Chart expansion — add support for 3-4 series:
 
 ---
 
-#### 3. Criar API subscriptions + SubscriptionsTab
+#### 3. [x] Criar API subscriptions + SubscriptionsTab
 
 **File**: `src/app/api/reports/subscriptions/route.ts` (CREATE), `src/components/reports/SubscriptionsTab.tsx` (CREATE), `src/app/reports/page.tsx` (MODIFY)
 **Complexity**: Medium
 **TDD**: NO (simple query + display, no decision logic)
 **Depends On**: none
+**Learning**: SubscriptionsTab sem filtro de mes/ano (lista todas ativas). RecurringExpense nao tem campo `origin` como relacao, e sim como string direta. Tabela responsiva com colunas hidden em mobile via `hidden sm:table-cell` e `hidden md:table-cell`.
 
 **Load Before Implementing**:
 1. `src/app/reports/page.tsx` (lines 129-229) - Tab infrastructure
@@ -378,7 +381,7 @@ Add tab to `src/app/reports/page.tsx`:
 ## Success Criteria
 
 ### Automated Verification
-- [ ] `Skill(running-automated-checks)` - All project checks pass
+- [x] `Skill(running-automated-checks)` - Build successful, 485/488 tests pass (3 pre-existing SpaceSwitcher failures), no type errors in phase 4 files
 
 ### Manual Verification
 - [ ] "Maiores Gastos" tab shows top merchants with horizontal bar chart
