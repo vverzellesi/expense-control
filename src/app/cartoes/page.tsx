@@ -147,13 +147,13 @@ export default function CartoesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Cartões</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl sm:text-2xl font-bold">Cartões</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={handlePrevMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[160px] text-center font-medium">
+          <span className="min-w-0 sm:min-w-[160px] text-center font-medium">
             {monthNames[month - 1]} {year}
           </span>
           <Button variant="outline" size="icon" onClick={handleNextMonth}>
@@ -309,7 +309,50 @@ export default function CartoesPage() {
                   <CardTitle className="text-base">Comparativo de Taxas</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-3">
+                    {data.cards.map((card) => (
+                      <div key={card.id} className="rounded-lg border bg-white p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-sm">{card.name}</div>
+                          {bestForParcelamento?.id === card.id && (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                              Parcelar
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Rotativo:</span>
+                            <span className="ml-1 font-medium">
+                              {card.rates.rotativoRateMonth !== null ? `${card.rates.rotativoRateMonth}%/m\u00EAs` : "\u2014"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Parcelamento:</span>
+                            <span className="ml-1 font-medium">
+                              {card.rates.parcelamentoRate !== null ? `${card.rates.parcelamentoRate}%` : "\u2014"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">CET Anual:</span>
+                            <span className="ml-1 font-medium">
+                              {card.rates.cetAnual !== null ? `${card.rates.cetAnual}%` : "\u2014"}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Melhor para:</span>
+                            <span className="ml-1">
+                              {bestForParcelamento?.id === card.id ? "Parcelar" : "\u2014"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">

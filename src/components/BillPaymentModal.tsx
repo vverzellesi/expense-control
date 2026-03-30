@@ -259,7 +259,7 @@ export function BillPaymentModal({
                 name="paymentMode"
                 checked={paymentMode === "full"}
                 onChange={() => setPaymentMode("full")}
-                className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                className="h-5 w-5 text-emerald-600 focus:ring-emerald-500"
               />
               <div>
                 <p className="font-medium">Pagar valor total</p>
@@ -282,7 +282,7 @@ export function BillPaymentModal({
                 name="paymentMode"
                 checked={paymentMode === "partial"}
                 onChange={() => setPaymentMode("partial")}
-                className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                className="h-5 w-5 text-emerald-600 focus:ring-emerald-500"
               />
               <div>
                 <p className="font-medium">Pagar parcialmente</p>
@@ -313,7 +313,7 @@ export function BillPaymentModal({
                     name="partialType"
                     checked={partialType === "rollover"}
                     onChange={() => setPartialType("rollover")}
-                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                    className="h-5 w-5 text-emerald-600 focus:ring-emerald-500"
                   />
                   <p className="font-medium">Rolar saldo para próxima fatura</p>
                 </div>
@@ -369,7 +369,7 @@ export function BillPaymentModal({
                     name="partialType"
                     checked={partialType === "finance"}
                     onChange={() => setPartialType("finance")}
-                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                    className="h-5 w-5 text-emerald-600 focus:ring-emerald-500"
                   />
                   <p className="font-medium">Parcelar o restante</p>
                 </div>
@@ -399,7 +399,7 @@ export function BillPaymentModal({
                           value={installments}
                           onValueChange={setInstallments}
                         >
-                          <SelectTrigger id="finance-installments" className="w-24">
+                          <SelectTrigger id="finance-installments" className="w-full sm:w-24">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

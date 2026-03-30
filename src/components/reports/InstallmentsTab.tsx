@@ -147,78 +147,129 @@ export function InstallmentsTab({ filterYear }: Props) {
         </CardHeader>
         <CardContent>
           {data.installments.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-gray-500">
-                      Descrição
-                    </th>
-                    <th className="pb-2 text-right font-medium text-gray-500">
-                      Valor
-                    </th>
-                    <th className="pb-2 text-right font-medium text-gray-500">
-                      Progresso
-                    </th>
-                    <th className="pb-2 text-right font-medium text-gray-500">
-                      Restante
-                    </th>
-                    <th className="pb-2 text-center font-medium text-gray-500">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.installments.map((inst) => {
-                    const progressPct =
-                      inst.totalInstallments > 0
-                        ? (inst.paidInstallments / inst.totalInstallments) * 100
-                        : 0;
+            <>
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {data.installments.map((inst) => {
+                  const progressPct =
+                    inst.totalInstallments > 0
+                      ? (inst.paidInstallments / inst.totalInstallments) * 100
+                      : 0;
 
-                    return (
-                      <tr
-                        key={inst.id}
-                        className="border-b last:border-0"
-                      >
-                        <td className="py-2 font-medium">
-                          {inst.description}
-                        </td>
-                        <td className="py-2 text-right">
+                  return (
+                    <div key={inst.id} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{inst.description}</span>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            inst.isActive
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {inst.isActive ? "Ativa" : "Concluída"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className="h-full rounded-full bg-emerald-500"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {inst.paidInstallments}/{inst.totalInstallments}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <span className="text-muted-foreground">Valor:</span>
+                        <span className="text-right font-medium">
                           {formatCurrency(inst.installmentAmount)}
-                        </td>
-                        <td className="py-2 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-200">
-                              <div
-                                className="h-full rounded-full bg-emerald-500"
-                                style={{ width: `${progressPct}%` }}
-                              />
-                            </div>
-                            <span className="min-w-[50px] text-xs text-gray-500">
-                              {inst.paidInstallments}/{inst.totalInstallments}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2 text-right">
+                        </span>
+                        <span className="text-muted-foreground">Restante:</span>
+                        <span className="text-right font-medium">
                           {formatCurrency(inst.remainingAmount)}
-                        </td>
-                        <td className="py-2 text-center">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                              inst.isActive
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {inst.isActive ? "Ativa" : "Concluída"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-2 font-medium text-gray-500">
+                        Descrição
+                      </th>
+                      <th className="pb-2 text-right font-medium text-gray-500">
+                        Valor
+                      </th>
+                      <th className="pb-2 text-right font-medium text-gray-500">
+                        Progresso
+                      </th>
+                      <th className="pb-2 text-right font-medium text-gray-500">
+                        Restante
+                      </th>
+                      <th className="pb-2 text-center font-medium text-gray-500">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.installments.map((inst) => {
+                      const progressPct =
+                        inst.totalInstallments > 0
+                          ? (inst.paidInstallments / inst.totalInstallments) * 100
+                          : 0;
+
+                      return (
+                        <tr
+                          key={inst.id}
+                          className="border-b last:border-0"
+                        >
+                          <td className="py-2 font-medium">
+                            {inst.description}
+                          </td>
+                          <td className="py-2 text-right">
+                            {formatCurrency(inst.installmentAmount)}
+                          </td>
+                          <td className="py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-200">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                              <span className="min-w-[50px] text-xs text-gray-500">
+                                {inst.paidInstallments}/{inst.totalInstallments}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-2 text-right">
+                            {formatCurrency(inst.remainingAmount)}
+                          </td>
+                          <td className="py-2 text-center">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                inst.isActive
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {inst.isActive ? "Ativa" : "Concluída"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="flex h-32 items-center justify-center text-gray-500">
               Nenhuma parcela encontrada

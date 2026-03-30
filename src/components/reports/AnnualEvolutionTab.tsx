@@ -179,7 +179,34 @@ export function AnnualEvolutionTab({ filterYear }: Props) {
           <CardTitle>Detalhamento Mensal</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {data.months.map((m) => (
+              <div key={m.month} className="rounded-lg border p-3 space-y-2">
+                <div className="font-medium text-sm">{m.monthLabel}</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <span className="text-muted-foreground">Receita:</span>
+                  <span className="text-right font-medium text-green-600">
+                    {formatCurrency(m.income)}
+                  </span>
+                  <span className="text-muted-foreground">Rec. Anterior:</span>
+                  <span className="text-right font-medium text-green-400">
+                    {formatCurrency(m.prevIncome)}
+                  </span>
+                  <span className="text-muted-foreground">Despesa:</span>
+                  <span className="text-right font-medium text-red-600">
+                    {formatCurrency(m.expense)}
+                  </span>
+                  <span className="text-muted-foreground">Desp. Anterior:</span>
+                  <span className="text-right font-medium text-red-400">
+                    {formatCurrency(m.prevExpense)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

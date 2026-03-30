@@ -95,12 +95,12 @@ export function DateRangePicker({
 
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[240px] justify-start">
-            <Calendar className="mr-2 h-4 w-4" />
-            {displayText}
+          <Button variant="outline" className="min-w-0 sm:min-w-[240px] justify-start">
+            <Calendar className="mr-2 h-4 w-4 shrink-0" />
+            <span className="truncate">{displayText}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-4" align="start">
+        <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 p-4" align="start">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">Atalhos</Label>

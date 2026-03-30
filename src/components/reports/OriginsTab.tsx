@@ -80,7 +80,39 @@ export function OriginsTab({ filterMonth, filterYear }: Props) {
           <CardTitle>Detalhamento por Origem</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {data.origins.map((origin) => (
+              <div key={origin.origin} className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-sm">{origin.origin}</div>
+                  <div className="text-sm font-semibold">{formatCurrency(origin.totalExpense)}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <span className="text-muted-foreground">Qtd:</span>
+                  <span className="text-right font-medium">{origin.transactionCount}</span>
+                  <span className="text-muted-foreground">Media:</span>
+                  <span className="text-right font-medium">{formatCurrency(origin.averageExpense)}</span>
+                  <span className="text-muted-foreground">%:</span>
+                  <span className="text-right font-medium">{origin.percentage.toFixed(1)}%</span>
+                </div>
+              </div>
+            ))}
+            <div className="rounded-lg border bg-muted/50 p-3">
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span>Total</span>
+                <span>{formatCurrency(data.totalExpense)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
+                <span className="text-muted-foreground">Qtd:</span>
+                <span className="text-right font-medium">
+                  {data.origins.reduce((sum, o) => sum + o.transactionCount, 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-gray-500">

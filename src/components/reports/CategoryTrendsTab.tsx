@@ -137,7 +137,42 @@ export function CategoryTrendsTab({ filterYear }: Props) {
           <CardTitle>Todas as Categorias</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {data.categories.map((cat) => (
+              <div key={cat.categoryId} className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: cat.categoryColor }}
+                  />
+                  <span className="font-medium text-sm">{cat.categoryName}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <span className="text-muted-foreground">Total:</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(cat.total)}
+                  </span>
+                  <span className="text-muted-foreground">Tendência:</span>
+                  <span
+                    className={`text-right font-medium ${
+                      cat.trend > 0
+                        ? "text-red-600"
+                        : cat.trend < 0
+                          ? "text-green-600"
+                          : "text-gray-500"
+                    }`}
+                  >
+                    {cat.trend > 0 ? "+" : ""}
+                    {cat.trend.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
