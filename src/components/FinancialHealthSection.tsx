@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
-import { Wallet, Receipt, Percent, PiggyBank } from "lucide-react";
+import { Wallet, TrendingDown, Percent, PiggyBank } from "lucide-react";
 
 interface FinancialHealthSectionProps {
   income: number;
@@ -108,17 +108,17 @@ export function FinancialHealthSection({
           {...(onNavigate ? {
             role: "button",
             tabIndex: 0,
-            onClick: () => onNavigate("isFixed=true"),
-            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate("isFixed=true"); } },
+            onClick: () => onNavigate("type=EXPENSE"),
+            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate("type=EXPENSE"); } },
           } : {})}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Despesas Fixas</CardTitle>
-            <Receipt className="h-4 w-4 text-gray-500" />
+            <CardTitle className="text-sm font-medium">Total Gasto</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-700">
-              {formatCurrency(fixedTotal)}
+            <div className="text-2xl font-bold text-red-600">
+              {formatCurrency(expense)}
             </div>
           </CardContent>
         </Card>

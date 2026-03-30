@@ -73,7 +73,7 @@ describe("FinancialHealthSection", () => {
   it("renders all four metric cards", () => {
     render(<FinancialHealthSection {...defaultProps} />);
     expect(screen.getByText("Renda do Mês")).toBeDefined();
-    expect(screen.getByText("Despesas Fixas")).toBeDefined();
+    expect(screen.getByText("Total Gasto")).toBeDefined();
     expect(screen.getByText("Comprometimento")).toBeDefined();
     expect(screen.getByText("Sobra Disponível")).toBeDefined();
   });
