@@ -49,6 +49,7 @@ export default function InstallmentsPage() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cancellingInstallment, setCancellingInstallment] = useState<InstallmentWithTransactions | null>(null);
+  const [cancellingStandalone, setCancellingStandalone] = useState<StandaloneInstallment | null>(null);
   const [editingStandalone, setEditingStandalone] = useState<StandaloneInstallment | null>(null);
   const [editCurrentInstallment, setEditCurrentInstallment] = useState("");
   const [editTotalInstallments, setEditTotalInstallments] = useState("");
@@ -113,6 +114,42 @@ export default function InstallmentsPage() {
       fetchData();
     } catch (error) {
       console.error("Error cancelling installment:", error);
+    }
+  }
+
+  async function handleCancelStandalone() {
+    if (!cancellingStandalone) return;
+
+    const transDate = new Date(cancellingStandalone.date);
+    const current = new Date();
+    const monthsElapsed =
+      (current.getFullYear() - transDate.getFullYear()) * 12 +
+      (current.getMonth() - transDate.getMonth());
+    const effectiveCurrent = Math.min(
+      (cancellingStandalone.currentInstallment || 0) + monthsElapsed,
+      cancellingStandalone.totalInstallments || 1
+    );
+
+    try {
+      await fetch(`/api/transactions/${cancellingStandalone.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: cancellingStandalone.description,
+          amount: Math.abs(cancellingStandalone.amount),
+          date: toLocalDateString(new Date(cancellingStandalone.date)),
+          type: cancellingStandalone.type,
+          origin: cancellingStandalone.origin,
+          categoryId: cancellingStandalone.categoryId,
+          isInstallment: true,
+          currentInstallment: cancellingStandalone.currentInstallment,
+          totalInstallments: effectiveCurrent,
+        }),
+      });
+      setCancellingStandalone(null);
+      fetchData();
+    } catch (error) {
+      console.error("Error cancelling standalone installment:", error);
     }
   }
 
@@ -428,6 +465,17 @@ export default function InstallmentsPage() {
                             Total: {formatCurrency(totalAmount)}
                           </div>
                         </div>
+                        {paidCount < total && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="min-h-[44px] min-w-[44px]"
+                            title="Cancelar parcelas futuras"
+                            onClick={() => setCancellingStandalone(t)}
+                          >
+                            <Ban className="h-4 w-4 text-orange-500" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -536,6 +584,46 @@ export default function InstallmentsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar</AlertDialogCancel>
             <AlertDialogAction onClick={handleCancel} className="bg-orange-600 hover:bg-orange-700">
+              Cancelar Parcelas
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Standalone Confirmation */}
+      <AlertDialog open={!!cancellingStandalone} onOpenChange={() => setCancellingStandalone(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar parcelas futuras</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {cancellingStandalone && (() => {
+                  const transDate = new Date(cancellingStandalone.date);
+                  const monthsElapsed =
+                    (now.getFullYear() - transDate.getFullYear()) * 12 +
+                    (now.getMonth() - transDate.getMonth());
+                  const effectiveCurrent = Math.min(
+                    (cancellingStandalone.currentInstallment || 0) + monthsElapsed,
+                    cancellingStandalone.totalInstallments || 1
+                  );
+                  const futureCount = (cancellingStandalone.totalInstallments || 1) - effectiveCurrent;
+                  return (
+                    <>
+                      <strong>{cancellingStandalone.description}</strong>
+                      <br /><br />
+                      {futureCount} parcela{futureCount !== 1 ? "s" : ""} futura{futureCount !== 1 ? "s" : ""} ser{futureCount !== 1 ? "ão" : "á"} cancelada{futureCount !== 1 ? "s" : ""}.
+                      {effectiveCurrent > 0 && (
+                        <> As {effectiveCurrent} parcela{effectiveCurrent !== 1 ? "s" : ""} já paga{effectiveCurrent !== 1 ? "s" : ""} ser{effectiveCurrent !== 1 ? "ão" : "á"} mantida{effectiveCurrent !== 1 ? "s" : ""} no histórico.</>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelStandalone} className="bg-orange-600 hover:bg-orange-700">
               Cancelar Parcelas
             </AlertDialogAction>
           </AlertDialogFooter>
