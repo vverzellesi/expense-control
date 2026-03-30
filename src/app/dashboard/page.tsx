@@ -781,11 +781,11 @@ export default function Dashboard() {
       {data?.allBudgets && data.allBudgets.length > 0 && (
         <div>
           <h2 className="mb-3 text-lg font-semibold text-gray-900">Metas por Categoria</h2>
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {data.allBudgets.map((budget) => (
               <Card
                 key={budget.categoryId}
-                className={`w-full sm:w-[calc(50%-0.375rem)] md:w-[calc(33.333%-0.5rem)] lg:w-[calc(25%-0.5625rem)] cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all ${
+                className={`cursor-pointer hover:ring-2 hover:ring-emerald-500/20 transition-all ${
                   budget.isOver
                     ? "border-red-200 bg-red-50"
                     : budget.percentage >= 80
@@ -794,7 +794,7 @@ export default function Dashboard() {
                 }`}
                 {...clickable(() => navigateTo(`/transactions?categoryId=${budget.categoryId}&month=${currentMonth}&year=${currentYear}`))}
               >
-                <CardContent className="p-4">
+                <CardContent className="h-full flex flex-col justify-center p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <div
                       className="h-3 w-3 rounded-full"
