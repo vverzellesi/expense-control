@@ -38,7 +38,36 @@ export async function GET(request: NextRequest) {
     const prevStart = new Date(year, month - 2, 1);
     const prevEnd = new Date(year, month - 1, 0, 23, 59, 59);
 
+    // Fetch bill payment records to exclude synthetic transactions
+    // (same pattern as cards-summary.ts)
+    const billPaymentRecords = await prisma.billPayment.findMany({
+      where: {
+        ...ctx.ownerFilter,
+        origin: { in: originNames },
+      },
+      select: {
+        entryTransactionId: true,
+        carryoverTransactionId: true,
+        installmentId: true,
+        billMonth: true,
+        billYear: true,
+        origin: true,
+        paymentType: true,
+        amountCarried: true,
+        totalBillAmount: true,
+      },
+    });
+
+    const excludeTransactionIds = billPaymentRecords
+      .flatMap((bp) => [bp.entryTransactionId, bp.carryoverTransactionId])
+      .filter((id): id is string => id !== null);
+
+    const excludeInstallmentIds = billPaymentRecords
+      .map((bp) => bp.installmentId)
+      .filter((id): id is string => id !== null);
+
     // Query transactions for current and previous month in parallel
+    // Exclude bill payment synthetic transactions (entries, carryovers, financing installments)
     const [currentTransactions, previousTransactions, billPayments] =
       await Promise.all([
         prisma.transaction.findMany({
@@ -48,6 +77,8 @@ export async function GET(request: NextRequest) {
             origin: { in: originNames },
             date: { gte: startDate, lte: endDate },
             deletedAt: null,
+            id: excludeTransactionIds.length > 0 ? { notIn: excludeTransactionIds } : undefined,
+            installmentId: excludeInstallmentIds.length > 0 ? { notIn: excludeInstallmentIds } : undefined,
           },
           select: {
             origin: true,
@@ -62,30 +93,25 @@ export async function GET(request: NextRequest) {
             origin: { in: originNames },
             date: { gte: prevStart, lte: prevEnd },
             deletedAt: null,
+            id: excludeTransactionIds.length > 0 ? { notIn: excludeTransactionIds } : undefined,
+            installmentId: excludeInstallmentIds.length > 0 ? { notIn: excludeInstallmentIds } : undefined,
           },
           select: {
             origin: true,
             amount: true,
           },
         }),
-        prisma.billPayment.findMany({
-          where: {
-            userId: ctx.userId,
-            origin: { in: originNames },
-            billYear: {
-              gte: year - 1,
-              lte: year,
-            },
-          },
-          select: {
-            billMonth: true,
-            billYear: true,
-            origin: true,
-            paymentType: true,
-            amountCarried: true,
-            totalBillAmount: true,
-          },
-        }),
+        // Bill payments for score calculation (reuse already-fetched records)
+        Promise.resolve(
+          billPaymentRecords.map((bp) => ({
+            billMonth: bp.billMonth,
+            billYear: bp.billYear,
+            origin: bp.origin,
+            paymentType: bp.paymentType,
+            amountCarried: bp.amountCarried,
+            totalBillAmount: bp.totalBillAmount,
+          }))
+        ),
       ]);
 
     // Group data by origin

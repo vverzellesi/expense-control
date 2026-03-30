@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
             isFixed: true,
           },
         }),
-        // Active installments
+        // Active installments (with future transactions remaining)
         prisma.installment.findMany({
           where: {
             ...ctx.ownerFilter,
@@ -52,11 +52,10 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             totalInstallments: true,
-            transactions: {
-              where: { date: { lte: new Date() }, deletedAt: null },
-              select: { id: true },
-              orderBy: { date: "desc" },
-              take: 1,
+            _count: {
+              select: {
+                transactions: { where: { deletedAt: null } },
+              },
             },
           },
         }),
@@ -76,7 +75,7 @@ export async function GET(request: NextRequest) {
             paymentType: true,
           },
         }),
-        // Income for current month
+        // Income for current month (exclude investment withdrawals)
         prisma.transaction.findMany({
           where: {
             ...ctx.ownerFilter,
@@ -86,6 +85,7 @@ export async function GET(request: NextRequest) {
               lte: endDate,
             },
             deletedAt: null,
+            investmentTransaction: null,
           },
           select: { amount: true },
         }),
@@ -122,8 +122,7 @@ export async function GET(request: NextRequest) {
     // Calculate active installments and remaining months
     const activeInstallments = installments.length;
     const totalRemainingMonths = installments.reduce((sum, inst) => {
-      // Approximate paid installments from the count of past transactions
-      const paidCount = inst.transactions.length;
+      const paidCount = inst._count.transactions;
       const remaining = inst.totalInstallments - paidCount;
       return sum + Math.max(remaining, 0);
     }, 0);

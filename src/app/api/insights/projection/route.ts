@@ -13,15 +13,18 @@ export async function GET(request: NextRequest) {
 
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
+    const todayEnd = new Date(year, month - 1, today, 23, 59, 59);
 
     const [expenses, recurringExpenses, installments, incomeTransactions] = await Promise.all([
-      // Current month EXPENSE transactions (excl investment, transfer)
+      // Current month EXPENSE transactions up to today (excl investment, transfer)
+      // Future-dated transactions (incl pre-generated installments) are excluded
+      // to avoid double-counting with pendingInstallments below
       prisma.transaction.findMany({
         where: {
           ...ctx.ownerFilter,
           type: "EXPENSE",
           deletedAt: null,
-          date: { gte: startDate, lte: endDate },
+          date: { gte: startDate, lte: todayEnd },
           investmentTransaction: null,
         },
         include: { category: true },
