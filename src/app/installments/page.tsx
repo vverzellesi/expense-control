@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
-import { Trash2, Calendar, CreditCard, Receipt, Pencil } from "lucide-react";
+import { Trash2, Calendar, CreditCard, Receipt, Pencil, Ban } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,7 @@ export default function InstallmentsPage() {
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [cancellingInstallment, setCancellingInstallment] = useState<InstallmentWithTransactions | null>(null);
   const [editingStandalone, setEditingStandalone] = useState<StandaloneInstallment | null>(null);
   const [editCurrentInstallment, setEditCurrentInstallment] = useState("");
   const [editTotalInstallments, setEditTotalInstallments] = useState("");
@@ -98,6 +99,20 @@ export default function InstallmentsPage() {
       fetchData();
     } catch (error) {
       console.error("Error deleting installment:", error);
+    }
+  }
+
+  async function handleCancel() {
+    if (!cancellingInstallment) return;
+
+    try {
+      await fetch(`/api/installments/${cancellingInstallment.id}/cancel`, {
+        method: "POST",
+      });
+      setCancellingInstallment(null);
+      fetchData();
+    } catch (error) {
+      console.error("Error cancelling installment:", error);
     }
   }
 
@@ -299,6 +314,16 @@ export default function InstallmentsPage() {
                           variant="ghost"
                           size="icon"
                           className="min-h-[44px] min-w-[44px]"
+                          title="Cancelar parcelas futuras"
+                          onClick={() => setCancellingInstallment(inst)}
+                        >
+                          <Ban className="h-4 w-4 text-orange-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-[44px] min-w-[44px]"
+                          title="Excluir tudo"
                           onClick={() => setDeletingId(inst.id)}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
@@ -460,6 +485,41 @@ export default function InstallmentsPage() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600">
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Confirmation */}
+      <AlertDialog open={!!cancellingInstallment} onOpenChange={() => setCancellingInstallment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar parcelas futuras</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {cancellingInstallment && (() => {
+                  const futureCount = cancellingInstallment.transactions.filter(
+                    (t) => new Date(t.date) >= now
+                  ).length;
+                  const paidCount = cancellingInstallment.transactions.length - futureCount;
+                  return (
+                    <>
+                      <strong>{cancellingInstallment.description}</strong>
+                      <br /><br />
+                      {futureCount} parcela{futureCount !== 1 ? "s" : ""} futura{futureCount !== 1 ? "s" : ""} ser{futureCount !== 1 ? "ão" : "á"} cancelada{futureCount !== 1 ? "s" : ""}.
+                      {paidCount > 0 && (
+                        <> As {paidCount} parcela{paidCount !== 1 ? "s" : ""} já paga{paidCount !== 1 ? "s" : ""} ser{paidCount !== 1 ? "ão" : "á"} mantida{paidCount !== 1 ? "s" : ""} no histórico.</>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancel} className="bg-orange-600 hover:bg-orange-700">
+              Cancelar Parcelas
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
