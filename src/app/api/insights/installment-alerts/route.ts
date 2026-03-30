@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
       if (current === 1) {
         const remainingMonths = total - 1;
-        const endMonth = new Date(year, month - 1 + remainingMonths, 1);
+        const endMonth = new Date(year, month - 1 + remainingMonths, 15);
         starting.push({
           description: tx.description,
           currentInstallment: current,
