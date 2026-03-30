@@ -35,10 +35,10 @@ describe("calculateFinancialScore", () => {
   it("warning score for moderate situation", () => {
     const result = calculateFinancialScore({
       income: 10000,
-      fixedExpensesTotal: 7000,
+      fixedExpensesTotal: 6500,
 
       monthlyExpenses: [6000, 6500, 7000],
-      activeInstallments: 5,
+      activeInstallments: 6,
       totalRemainingMonths: 25,
       debtAlertCount: 0,
       hasCriticalDebt: false,
@@ -46,6 +46,20 @@ describe("calculateFinancialScore", () => {
     expect(result.score).toBeGreaterThanOrEqual(40);
     expect(result.score).toBeLessThan(70);
     expect(result.level).toBe("warning");
+  });
+
+  it("many installments lower debt score even without bill payment alerts", () => {
+    const result = calculateFinancialScore({
+      income: 10000,
+      fixedExpensesTotal: 5000,
+      monthlyExpenses: [5000, 5000, 5000],
+      activeInstallments: 40,
+      totalRemainingMonths: 200,
+      debtAlertCount: 0,
+      hasCriticalDebt: false,
+    });
+    expect(result.factors.debtStatus.score).toBeLessThanOrEqual(40);
+    expect(result.factors.debtStatus.description).toContain("parcelas");
   });
 
   it("handles zero income gracefully", () => {

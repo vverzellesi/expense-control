@@ -38,25 +38,21 @@ export async function GET(request: NextRequest) {
             isFixed: true,
           },
         }),
-        // Active installments (with future transactions remaining)
-        prisma.installment.findMany({
+        // Count ALL active installment transactions (individual parcels, not groups)
+        prisma.transaction.findMany({
           where: {
             ...ctx.ownerFilter,
-            transactions: {
-              some: {
-                date: { gte: new Date() },
-                deletedAt: null,
-              },
-            },
+            isInstallment: true,
+            type: "EXPENSE",
+            deletedAt: null,
+            date: { gte: new Date() },
+            investmentTransaction: null,
           },
           select: {
             id: true,
             totalInstallments: true,
-            _count: {
-              select: {
-                transactions: { where: { deletedAt: null, date: { lte: new Date() } } },
-              },
-            },
+            currentInstallment: true,
+            installmentId: true,
           },
         }),
         // Bill payments for last 6 months (for debt analysis)
@@ -119,12 +115,13 @@ export async function GET(request: NextRequest) {
       monthlyExpenses.push(total);
     }
 
-    // Calculate active installments and remaining months
+    // Count individual future parcels (not groups)
     const activeInstallments = installments.length;
-    const totalRemainingMonths = installments.reduce((sum, inst) => {
-      const paidCount = inst._count.transactions;
-      const remaining = inst.totalInstallments - paidCount;
-      return sum + Math.max(remaining, 0);
+    // Sum remaining months: for each future parcel, how many months until it's done
+    const totalRemainingMonths = installments.reduce((sum, tx) => {
+      const total = tx.totalInstallments || 0;
+      const current = tx.currentInstallment || total;
+      return sum + Math.max(total - current, 0);
     }, 0);
 
     // Analyze debt pattern

@@ -68,11 +68,17 @@ function scoreInstallmentLoad(
 
 function scoreDebtStatus(
   debtAlertCount: number,
-  hasCriticalDebt: boolean
+  hasCriticalDebt: boolean,
+  activeInstallments: number
 ): { value: number; score: number } {
-  if (debtAlertCount === 0) return { value: 0, score: 100 };
+  // Bill payment debt (financing/partial) is the most severe
   if (hasCriticalDebt) return { value: debtAlertCount, score: 10 };
-  return { value: debtAlertCount, score: 40 };
+  if (debtAlertCount > 0) return { value: debtAlertCount, score: 40 };
+  // Installments are also debt — many active installments reduce score
+  if (activeInstallments > 15) return { value: 0, score: 40 };
+  if (activeInstallments > 8) return { value: 0, score: 60 };
+  if (activeInstallments > 3) return { value: 0, score: 80 };
+  return { value: 0, score: 100 };
 }
 
 export function calculateFinancialScore({
@@ -95,7 +101,7 @@ export function calculateFinancialScore({
   const fc = scoreFixedCommitment(fixedExpensesTotal, income);
   const et = scoreExpenseTrend(monthlyExpenses);
   const il = scoreInstallmentLoad(activeInstallments, totalRemainingMonths);
-  const ds = scoreDebtStatus(debtAlertCount, hasCriticalDebt);
+  const ds = scoreDebtStatus(debtAlertCount, hasCriticalDebt, activeInstallments);
 
   const score = Math.round(
     (fc.score * WEIGHTS.fixedCommitment +
@@ -114,7 +120,7 @@ export function calculateFinancialScore({
     factors: {
       fixedCommitment: {
         ...fc,
-        description: `${fc.value.toFixed(0)}% da renda em fixos`,
+        description: `${fc.value.toFixed(0)}% da renda comprometida com fixos`,
       },
       expenseTrend: { ...et, description: `Tendência: ${et.value}`},
       installmentLoad: {
@@ -124,7 +130,11 @@ export function calculateFinancialScore({
       debtStatus: {
         ...ds,
         description:
-          ds.value > 0 ? `${ds.value} alerta(s) de dívida` : "Sem dívidas",
+          ds.value > 0
+            ? `${ds.value} alerta(s) de dívida`
+            : activeInstallments > 3
+              ? `${activeInstallments} parcelas comprometem orçamento`
+              : "Sem dívidas",
       },
     },
   };
