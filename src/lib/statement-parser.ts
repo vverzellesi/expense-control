@@ -52,16 +52,18 @@ const MONTH_FULL: Record<string, number> = {
 };
 
 // Bank detection patterns
+// Order matters: specific brands first (Nubank, C6, BTG) before generic ones
+// that commonly appear in transfer details (Itaú, Santander, Bradesco)
 const BANK_PATTERNS: Record<string, RegExp[]> = {
+  "Extrato Nubank": [/NUBANK/i, /NU\s*PAGAMENTOS/i, /Nu\s+Financeira/i],
   "Extrato C6": [/C6\s*BANK/i, /BANCO\s*C6/i, /C6\s*S\.?A/i],
+  "Extrato BTG": [/BTG\s*PACTUAL/i, /BANCO\s*BTG/i, /BTG\s*BANK/i],
   "Extrato Itaú": [
     /ITAU/i,
     /ITAÚ/i,
     /BANCO\s*ITAU/i,
     /ITAUUNIBANCO/i,
   ],
-  "Extrato BTG": [/BTG\s*PACTUAL/i, /BANCO\s*BTG/i, /BTG\s*BANK/i],
-  "Extrato Nubank": [/NUBANK/i, /NU\s*PAGAMENTOS/i],
   "Extrato Bradesco": [/BRADESCO/i, /BCO\s*BRADESCO/i],
   "Extrato Santander": [/SANTANDER/i, /BCO\s*SANTANDER/i],
   "Extrato BB": [/BANCO\s*DO\s*BRASIL/i, /BB\s*S\.?A/i],
@@ -483,6 +485,198 @@ function isC6Statement(text: string): boolean {
   return hasC6Header || hasC6Format || hasC6Lines;
 }
 
+// ===== Nubank bank statement format =====
+
+// Nubank statements use "DD MMM YYYY" date format (e.g., "01 MAR 2026")
+const NUBANK_DATE_PATTERN = /(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{4})/i;
+
+// Known Nubank transaction type prefixes
+const NUBANK_TRANSACTION_STARTERS = [
+  /^Transfer[eê]ncia\s+(?:recebida|enviada)/i,
+  /^Compra\s+no\s+(?:d[eé]bito|cr[eé]dito)/i,
+  /^Resgate\s+(?:RDB|de\s+empr[eé]stimo)/i,
+  /^Aplica[cç][aã]o\s+RDB/i,
+  /^Pagamento\s+(?:de\s+(?:fatura|boleto)|efetuado)/i,
+  /^D[eé]bito\s+em\s+conta/i,
+];
+
+// Lines to skip in Nubank statements
+const NUBANK_SKIP_PATTERNS = [
+  /Total\s+de\s+(?:entradas|sa[ií]das)/i,
+  /^Saldo\s+(?:inicial|final)/i,
+  /^Rendimento\s+l[ií]quido/i,
+  /^Movimenta[cç][oõ]es\s*$/i,
+  /^VALORES\s+EM\s+R\$/i,
+  /^\d{1,2}\s+DE\s+\w+\s+DE\s+\d{4}\s+a\s+/i,
+  /^Tem\s+alguma\s+d[uú]vida/i,
+  /^Caso\s+a\s+solu[cç][aã]o/i,
+  /^Extrato\s+gerado\s+dia/i,
+  /^N[aã]o\s+nos\s+responsabilizamos/i,
+  /^Asseguramos/i,
+  /^Nu\s+(?:Financeira|Pagamentos)/i,
+  /^CNPJ:/i,
+  /^CPF\s+[•\*]{3}/i,
+  /^\d+\s+de\s+\d+\s*$/i,
+];
+
+/**
+ * Detect if this is a Nubank bank statement with DD MMM YYYY format
+ */
+function isNubankStatement(text: string): boolean {
+  const hasNubankHeader =
+    /NUBANK/i.test(text) ||
+    /NU\s*PAGAMENTOS/i.test(text) ||
+    /Nu\s+Financeira/i.test(text);
+  const hasNubankDates = NUBANK_DATE_PATTERN.test(text);
+  return hasNubankHeader && hasNubankDates;
+}
+
+// Nubank transaction type classification rules (order matters: specific before generic)
+const NUBANK_TYPE_RULES: Array<{ pattern: RegExp; type: TransactionType; kind?: string }> = [
+  { pattern: /transfer[eê]ncia\s+recebida\s+(?:pelo\s+)?pix/i, type: "INCOME", kind: "PIX RECEBIDO" },
+  { pattern: /transfer[eê]ncia\s+recebida/i, type: "INCOME", kind: "TRANSFERENCIA" },
+  { pattern: /transfer[eê]ncia\s+enviada\s+(?:pelo\s+)?pix/i, type: "EXPENSE", kind: "PIX ENVIADO" },
+  { pattern: /transfer[eê]ncia\s+enviada/i, type: "EXPENSE", kind: "TRANSFERENCIA" },
+  { pattern: /compra\s+no\s+d[eé]bito/i, type: "EXPENSE", kind: "COMPRA DEBITO" },
+  { pattern: /compra\s+no\s+cr[eé]dito/i, type: "EXPENSE", kind: "COMPRA CREDITO" },
+  { pattern: /resgate\s+RDB/i, type: "INCOME" },
+  { pattern: /aplica[cç][aã]o\s+RDB/i, type: "EXPENSE" },
+  { pattern: /pagamento\s+(?:de\s+(?:fatura|boleto)|efetuado)/i, type: "EXPENSE", kind: "BOLETO" },
+  { pattern: /resgate\s+de\s+empr[eé]stimo/i, type: "INCOME" },
+  { pattern: /d[eé]bito\s+em\s+conta/i, type: "EXPENSE", kind: "DEBITO AUTO" },
+];
+
+/**
+ * Determine transaction type and kind for Nubank transactions
+ */
+function getNubankTransactionType(description: string): { type: TransactionType; kind?: string } {
+  for (const rule of NUBANK_TYPE_RULES) {
+    if (rule.pattern.test(description)) {
+      return { type: rule.type, kind: rule.kind };
+    }
+  }
+  return { type: "EXPENSE" };
+}
+
+/**
+ * Clean Nubank transaction description: remove bank details, CPF/CNPJ, amounts
+ */
+function cleanNubankDescription(firstLine: string): string {
+  let desc = firstLine;
+
+  // Remove amounts
+  desc = desc.replace(new RegExp(AMOUNT_PATTERN.source, "g"), "").trim();
+
+  // Truncate at masked CPF (- •••.XXX... or - ***.XXX...)
+  desc = desc.replace(/\s*-?\s*[•\*]{2,}[\.\d].*$/, "").trim();
+
+  // Truncate at CNPJ (- XX.XXX.XXX/XXXX-XX)
+  desc = desc.replace(/\s*-?\s*\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}.*$/, "").trim();
+
+  // Remove trailing dash/spaces
+  desc = desc.replace(/\s*-\s*$/, "").trim();
+
+  // Clean up whitespace
+  desc = desc.replace(/\s+/g, " ").trim();
+
+  return desc || "Transação";
+}
+
+/**
+ * Extract transactions from a Nubank bank statement
+ * Uses state tracking for dates since transactions don't have inline dates
+ */
+function extractNubankTransactions(
+  text: string,
+  confidence: number
+): StatementTransaction[] {
+  const transactions: StatementTransaction[] = [];
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  let currentDate: Date | null = null;
+  let pendingTransaction: { firstLine: string; allLines: string[] } | null = null;
+
+  function flushTransaction() {
+    if (!pendingTransaction || !currentDate) return;
+
+    const allText = pendingTransaction.allLines.join(" ");
+
+    // Extract amounts from all collected text
+    const amountRegex = new RegExp(AMOUNT_PATTERN.source, "g");
+    const amounts: number[] = [];
+    let match;
+    while ((match = amountRegex.exec(allText)) !== null) {
+      const amt = parseAmount(match[0]);
+      if (amt !== 0) {
+        amounts.push(amt);
+      }
+    }
+
+    if (amounts.length === 0) return;
+
+    // Use the last amount as the transaction value
+    const rawAmount = amounts[amounts.length - 1];
+
+    // Build description from first line, cleaned
+    const description = cleanNubankDescription(pendingTransaction.firstLine);
+    if (description.length < 3) return;
+
+    const { type, kind } = getNubankTransactionType(description);
+
+    transactions.push({
+      date: new Date(currentDate),
+      description,
+      amount: type === "EXPENSE" ? -Math.abs(rawAmount) : Math.abs(rawAmount),
+      type,
+      transactionKind: kind,
+      confidence,
+    });
+  }
+
+  for (const line of lines) {
+    // Check for date line (DD MMM YYYY) at start
+    const dateMatch = line.match(NUBANK_DATE_PATTERN);
+    if (dateMatch) {
+      flushTransaction();
+      pendingTransaction = null;
+      const day = parseInt(dateMatch[1], 10);
+      const monthAbbrev = dateMatch[2].toLowerCase();
+      const month = MONTH_ABBREV[monthAbbrev];
+      const year = parseInt(dateMatch[3], 10);
+      if (month !== undefined) {
+        currentDate = new Date(year, month, day);
+      }
+      // Date lines contain "Total de entradas/saídas" - skip content
+      continue;
+    }
+
+    // Skip known noise lines
+    if (NUBANK_SKIP_PATTERNS.some((p) => p.test(line))) {
+      continue;
+    }
+
+    // Check if this line starts a new transaction
+    if (NUBANK_TRANSACTION_STARTERS.some((p) => p.test(line))) {
+      flushTransaction();
+      pendingTransaction = { firstLine: line, allLines: [line] };
+      continue;
+    }
+
+    // Continuation line for current transaction
+    if (pendingTransaction) {
+      pendingTransaction.allLines.push(line);
+    }
+  }
+
+  // Flush last pending transaction
+  flushTransaction();
+
+  return transactions;
+}
+
 /**
  * Extract transactions from a single line
  */
@@ -605,6 +799,39 @@ function extractFromLine(
 }
 
 /**
+ * Deduplicate, sort, and build final parse result
+ */
+function buildParseResult(
+  bank: string,
+  transactions: StatementTransaction[]
+): StatementParseResult {
+  const uniqueTransactions = transactions.filter(
+    (t, index, self) =>
+      index ===
+      self.findIndex(
+        (other) =>
+          other.date.getTime() === t.date.getTime() &&
+          other.description === t.description &&
+          other.amount === t.amount
+      )
+  );
+
+  uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const averageConfidence =
+    uniqueTransactions.length > 0
+      ? uniqueTransactions.reduce((sum, t) => sum + t.confidence, 0) /
+        uniqueTransactions.length
+      : 0;
+
+  return {
+    bank,
+    transactions: uniqueTransactions,
+    averageConfidence,
+  };
+}
+
+/**
  * Main function to parse statement text from OCR
  */
 export function parseStatementText(
@@ -619,6 +846,15 @@ export function parseStatementText(
 
   // Detect if this is a C6 Bank statement
   const isC6 = isC6Statement(text);
+
+  // Detect if this is a Nubank bank statement (DD MMM YYYY format)
+  const isNubank = isNubankStatement(text);
+
+  // For Nubank statements, use dedicated parser with state tracking
+  if (isNubank) {
+    const nubankTransactions = extractNubankTransactions(text, ocrConfidence);
+    return buildParseResult("Extrato Nubank", nubankTransactions);
+  }
 
   // For credit card invoices, try to extract the due date as reference
   const invoiceDueDate = isCreditCard ? extractInvoiceDueDate(text) : null;
@@ -657,32 +893,7 @@ export function parseStatementText(
     }
   }
 
-  // Remove duplicates (same date, description, amount)
-  const uniqueTransactions = transactions.filter(
-    (t, index, self) =>
-      index ===
-      self.findIndex(
-        (other) =>
-          other.date.getTime() === t.date.getTime() &&
-          other.description === t.description &&
-          other.amount === t.amount
-      )
-  );
-
-  // Sort by date
-  uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const averageConfidence =
-    uniqueTransactions.length > 0
-      ? uniqueTransactions.reduce((sum, t) => sum + t.confidence, 0) /
-        uniqueTransactions.length
-      : 0;
-
-  return {
-    bank,
-    transactions: uniqueTransactions,
-    averageConfidence,
-  };
+  return buildParseResult(bank, transactions);
 }
 
 /**
@@ -705,6 +916,7 @@ export function suggestCategoryForStatement(
     DEPOSITO: "Outros",
     RENDIMENTO: "Investimentos",
     "COMPRA DEBITO": "Compras",
+    "COMPRA CREDITO": "Compras",
   };
 
   return categoryMap[transactionKind.toUpperCase()] || null;
