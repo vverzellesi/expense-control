@@ -14,16 +14,17 @@ Criar endpoint dedicado para gerenciamento de senha salva (`GET` hasSavedPasswor
 
 ## Changes Required
 
-#### 1. Criar endpoint de gerenciamento de senha salva
+#### 1. Criar endpoint de gerenciamento de senha salva -- DONE
 
 **File**: `src/app/api/user/pdf-password/route.ts` (CREATE)
 **Complexity**: Low
-**TDD**: NO (simple CRUD — underlying crypto tested in Phase 1)
+**TDD**: NO (simple CRUD -- underlying crypto tested in Phase 1)
 **Depends On**: Phase 1
 
 **Pre-conditions**:
-- [ ] Phase 1 complete (crypto.ts exists, Settings used for pdfPassword)
-- [ ] Directory `src/app/api/user/` exists (create `pdf-password/` inside)
+- [x] Phase 1 complete (crypto.ts exists, Settings used for pdfPassword)
+- [x] Directory `src/app/api/user/` exists (create `pdf-password/` inside)
+  - **Learning:** Diretorio `src/app/api/user/` nao existia, criado com `mkdir -p`
 
 **Why**: O frontend precisa saber se existe uma senha salva (para mostrar indicador e botão "esquecer") sem ter acesso ao valor criptografado. Endpoint dedicado retorna apenas boolean e permite exclusão.
 
@@ -93,25 +94,26 @@ export async function DELETE() {
 
 ---
 
-#### 2. Implementar UI de input de senha na tela de importação
+#### 2. Implementar UI de input de senha na tela de importacao -- DONE
 
 **File**: `src/app/import/page.tsx` (MODIFY)
 **Complexity**: High
-**TDD**: NO (UI component — verified manually and by E2E in future)
+**TDD**: NO (UI component -- verified manually and by E2E in future)
 **Depends On**: Phase 1, Task 2.1
 
 **Load Before Implementing**:
-1. `src/app/import/page.tsx` (lines 1-60) — Imports e tipos
-2. `src/app/import/page.tsx` (lines 170-190) — State declarations
-3. `src/app/import/page.tsx` (lines 358-400) — processFile, handleFileUpload
-4. `src/app/import/page.tsx` (lines 645-704) — processOCR function
-5. `src/app/import/page.tsx` (lines 1009-1081) — Upload UI section
-6. `src/components/ui/checkbox.tsx` — Checkbox component to import
+1. `src/app/import/page.tsx` (lines 1-60) -- Imports e tipos
+2. `src/app/import/page.tsx` (lines 170-190) -- State declarations
+3. `src/app/import/page.tsx` (lines 358-400) -- processFile, handleFileUpload
+4. `src/app/import/page.tsx` (lines 645-704) -- processOCR function
+5. `src/app/import/page.tsx` (lines 1009-1081) -- Upload UI section
+6. `src/components/ui/checkbox.tsx` -- Checkbox component to import
 
 **Pre-conditions**:
-- [ ] Phase 1 complete (API returns `needsPassword`)
-- [ ] Task 2.1 complete (pdf-password endpoint exists)
-- [ ] Checkbox component available at `@/components/ui/checkbox`
+- [x] Phase 1 complete (API returns `needsPassword`)
+- [x] Task 2.1 complete (pdf-password endpoint exists)
+- [x] Checkbox component available at `@/components/ui/checkbox`
+  - **Learning:** Checkbox component ja existia em `src/components/ui/checkbox.tsx`, importacao direta funcionou sem problemas
 
 **Why**: O usuário precisa de uma interface para fornecer a senha do PDF quando o backend detecta proteção. A UI deve ser fluida: tentar senha salva silenciosamente, mostrar input apenas quando necessário, e permitir salvar para uso futuro.
 
@@ -445,9 +447,10 @@ Insert after the `{loading && fileType === "ocr" && (...)}` block, still inside 
 ## Success Criteria
 
 ### Automated Verification
-- [ ] `Skill(running-automated-checks)` — All project checks pass
+- [x] `npm run build` -- Compilacao bem-sucedida (ambas as tasks)
+- [x] `npm run test:unit` -- 537 testes passando (3 falhas pre-existentes em SpaceSwitcher, nao relacionadas)
 
 ### Manual Verification (only if automation impossible)
-- [ ] Upload PDF com senha no browser → card de senha aparece → digitar senha correta → transações exibidas
-- [ ] Marcar "Lembrar senha" → próximo upload usa senha automaticamente
+- [ ] Upload PDF com senha no browser -> card de senha aparece -> digitar senha correta -> transacoes exibidas
+- [ ] Marcar "Lembrar senha" -> proximo upload usa senha automaticamente
 - [ ] "Esquecer" remove a senha salva

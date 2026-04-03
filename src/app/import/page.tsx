@@ -46,7 +46,9 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
+  Lock,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import { detectOriginFromCSV, isC6ExchangeRateRow, type StatementType } from "@/lib/csv-parser";
@@ -185,6 +187,12 @@ export default function ImportPage() {
   const [origins, setOrigins] = useState<{ id: string; name: string }[]>([]);
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
   const [lastImportBatchId, setLastImportBatchId] = useState<string | null>(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [hasSavedPassword, setHasSavedPassword] = useState(false);
+  const [savePassword, setSavePassword] = useState(true);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -226,6 +234,13 @@ export default function ImportPage() {
       return t;
     }));
   }, [invoiceMonth]);
+
+  useEffect(() => {
+    fetch("/api/user/pdf-password")
+      .then((res) => res.json())
+      .then((data) => setHasSavedPassword(data.hasSavedPassword))
+      .catch(() => {});
+  }, []);
 
   async function fetchCategories() {
     const res = await fetch("/api/categories");
@@ -423,6 +438,112 @@ export default function ImportPage() {
     }
 
     await processFile(file);
+  }
+
+  async function handlePasswordSubmit() {
+    if (!pendingFile || !pdfPassword) return;
+
+    setLoading(true);
+    setPasswordError(null);
+    setOcrProgress(0);
+
+    const progressInterval = setInterval(() => {
+      setOcrProgress((prev) => Math.min(prev + 5, 90));
+    }, 500);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", pendingFile);
+      formData.append("password", pdfPassword);
+      if (savePassword) {
+        formData.append("savePassword", "true");
+      }
+
+      const res = await fetch("/api/ocr", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setOcrProgress(100);
+
+      const data = await res.json();
+
+      if (data.needsPassword) {
+        setPasswordError(data.error || "Senha incorreta. Tente novamente.");
+        setPdfPassword("");
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao processar arquivo");
+      }
+
+      // Success — clear password state
+      setNeedsPassword(false);
+      setPendingFile(null);
+      setPdfPassword("");
+      if (savePassword) {
+        setHasSavedPassword(true);
+      }
+
+      // Process transactions (same logic as processOCR success path)
+      setOrigin(data.origin);
+      setOcrConfidence(data.confidence);
+      const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
+        let normalizedDate: Date;
+        if (typeof t.date === "string") {
+          const match = (t.date as string).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          normalizedDate = match
+            ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0)
+            : new Date(t.date);
+        } else {
+          normalizedDate = new Date(t.date);
+        }
+        return { ...t, date: normalizedDate, selected: true };
+      });
+
+      const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
+      setTransactions(transactionsWithDuplicates);
+
+      const ocrValidDates = transactionsWithDuplicates
+        .map((t) => (t.date instanceof Date ? t.date : new Date(t.date)))
+        .filter((d) => !isNaN(d.getTime()));
+      if (ocrValidDates.length > 0) {
+        const latestDate = new Date(Math.max(...ocrValidDates.map((d) => d.getTime())));
+        const suggestedMonth = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+        setInvoiceMonth(suggestedMonth);
+      }
+
+      setStep("preview");
+    } catch (error) {
+      toast({
+        title: "Erro ao processar arquivo",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      clearInterval(progressInterval);
+      setLoading(false);
+      setOcrProgress(0);
+    }
+  }
+
+  async function handleForgetPassword() {
+    try {
+      await fetch("/api/user/pdf-password", { method: "DELETE" });
+      setHasSavedPassword(false);
+      toast({
+        title: "Senha removida",
+        description: "A senha salva de PDF foi removida.",
+      });
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Nao foi possivel remover a senha.",
+        variant: "destructive",
+      });
+    }
   }
 
   async function processCSV(file: File) {
@@ -643,7 +764,6 @@ export default function ImportPage() {
   }
 
   async function processOCR(file: File) {
-    // Simulate progress while waiting for OCR
     const progressInterval = setInterval(() => {
       setOcrProgress((prev) => Math.min(prev + 5, 90));
     }, 500);
@@ -662,6 +782,18 @@ export default function ImportPage() {
 
       const data = await res.json();
 
+      // Handle password-protected PDF
+      if (data.needsPassword) {
+        setPendingFile(file);
+        setNeedsPassword(true);
+        setPasswordError(
+          data.savedPasswordFailed
+            ? "Senha salva não funcionou para este PDF."
+            : null
+        );
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Erro ao processar arquivo");
       }
@@ -669,9 +801,6 @@ export default function ImportPage() {
       setOrigin(data.origin);
       setOcrConfidence(data.confidence);
       const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
-        // Normalize OCR dates: JSON serialization produces UTC strings like
-        // "2026-03-01T00:00:00Z" which, when parsed with new Date(), shift
-        // the day backwards in BRT. Extract YYYY-MM-DD and build at noon local.
         let normalizedDate: Date;
         if (typeof t.date === "string") {
           const match = (t.date as string).match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -683,16 +812,14 @@ export default function ImportPage() {
         }
         return { ...t, date: normalizedDate, selected: true };
       });
-      // Check for duplicates
       const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
       setTransactions(transactionsWithDuplicates);
 
-      // Auto-fill billing month based on the most recent transaction date
       const ocrValidDates = transactionsWithDuplicates
-        .map(t => t.date instanceof Date ? t.date : new Date(t.date))
-        .filter(d => !isNaN(d.getTime()));
+        .map((t) => (t.date instanceof Date ? t.date : new Date(t.date)))
+        .filter((d) => !isNaN(d.getTime()));
       if (ocrValidDates.length > 0) {
-        const latestDate = new Date(Math.max(...ocrValidDates.map(d => d.getTime())));
+        const latestDate = new Date(Math.max(...ocrValidDates.map((d) => d.getTime())));
         const suggestedMonth = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
         setInvoiceMonth(suggestedMonth);
       }
@@ -1073,6 +1200,68 @@ export default function ImportPage() {
                   <p className="text-xs text-gray-400">
                     O processamento de imagens pode levar alguns segundos
                   </p>
+                </div>
+              )}
+
+              {needsPassword && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <Lock className="h-4 w-4" />
+                    <span className="font-medium text-sm">PDF protegido por senha</span>
+                  </div>
+
+                  {passwordError && (
+                    <p className="text-sm text-red-600">{passwordError}</p>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      placeholder="Senha do PDF"
+                      value={pdfPassword}
+                      onChange={(e) => setPdfPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handlePasswordSubmit();
+                      }}
+                      disabled={loading}
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handlePasswordSubmit}
+                      disabled={loading || !pdfPassword}
+                      size="sm"
+                    >
+                      {loading ? "Processando..." : "Desbloquear"}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="savePassword"
+                      checked={savePassword}
+                      onCheckedChange={(checked) => setSavePassword(checked === true)}
+                    />
+                    <Label htmlFor="savePassword" className="text-sm text-gray-600 cursor-pointer">
+                      {hasSavedPassword
+                        ? "Substituir senha salva"
+                        : "Lembrar senha para próximos PDFs"}
+                    </Label>
+                  </div>
+                </div>
+              )}
+
+              {hasSavedPassword && !needsPassword && !loading && (
+                <div className="flex items-center justify-between text-xs text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <Lock className="h-3 w-3" />
+                    Senha de PDF salva
+                  </span>
+                  <button
+                    onClick={handleForgetPassword}
+                    className="text-red-400 hover:text-red-600 underline"
+                  >
+                    Esquecer
+                  </button>
                 </div>
               )}
             </div>
