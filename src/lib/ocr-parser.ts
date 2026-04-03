@@ -1,7 +1,23 @@
 import Tesseract from "tesseract.js";
 import sharp from "sharp";
-import { extractText } from "unpdf";
+import { extractText, getDocumentProxy } from "unpdf";
 import type { OCRResult } from "@/types";
+
+/**
+ * Error thrown when a PDF requires a password or when the provided password is incorrect.
+ * - needsPassword=true: PDF is encrypted and no password was provided
+ * - needsPassword=false: A password was provided but it was incorrect
+ */
+export class PdfPasswordError extends Error {
+  constructor(public readonly needsPassword: boolean) {
+    super(
+      needsPassword
+        ? "PDF protegido por senha"
+        : "Senha incorreta para o PDF"
+    );
+    this.name = "PdfPasswordError";
+  }
+}
 
 /**
  * Pre-process image for better OCR accuracy
@@ -61,11 +77,20 @@ async function processBufferOCR(buffer: Buffer): Promise<OCRResult> {
 
 /**
  * Extract text from PDF using unpdf
+ * Optionally accepts a password for encrypted PDFs
  */
-async function extractPDFText(buffer: Buffer): Promise<OCRResult> {
+async function extractPDFText(
+  buffer: Buffer,
+  password?: string
+): Promise<OCRResult> {
   try {
     const uint8Array = new Uint8Array(buffer);
-    const { text: pages } = await extractText(uint8Array);
+    // If password is provided, use getDocumentProxy to decrypt first,
+    // then pass the proxy to extractText. Otherwise, pass raw data directly.
+    const source = password
+      ? await getDocumentProxy(uint8Array, { password })
+      : uint8Array;
+    const { text: pages } = await extractText(source);
     const text = pages.join("\n");
 
     return {
@@ -73,6 +98,15 @@ async function extractPDFText(buffer: Buffer): Promise<OCRResult> {
       confidence: text.trim().length > 0 ? 95 : 0,
     };
   } catch (error) {
+    // Detect password-protected PDF errors from pdf.js (propagated through unpdf)
+    if (error && typeof error === "object" && "name" in error) {
+      const pdfError = error as { name: string; code?: number };
+      if (pdfError.name === "PasswordException") {
+        // code 1 = NEED_PASSWORD (no password provided)
+        // code 2 = INCORRECT_PASSWORD (wrong password)
+        throw new PdfPasswordError(pdfError.code !== 2);
+      }
+    }
     console.error("PDF text extraction failed:", error);
     throw new Error("Não foi possível extrair texto do PDF");
   }
@@ -82,12 +116,15 @@ async function extractPDFText(buffer: Buffer): Promise<OCRResult> {
  * Process a PDF file
  * First tries text extraction, then falls back to OCR if needed
  */
-export async function processPDFOCR(file: File): Promise<OCRResult> {
+export async function processPDFOCR(
+  file: File,
+  password?: string
+): Promise<OCRResult> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
   // First try direct text extraction (faster and more accurate for digital PDFs)
-  const textResult = await extractPDFText(buffer);
+  const textResult = await extractPDFText(buffer, password);
 
   // If we got meaningful text, return it
   if (textResult.text.trim().length > 50) {
@@ -95,7 +132,6 @@ export async function processPDFOCR(file: File): Promise<OCRResult> {
   }
 
   // For scanned PDFs, we would need canvas support
-  // For now, return an error message if text extraction didn't work
   throw new Error(
     "PDF parece ser uma imagem escaneada. Por favor, exporte como imagem (PNG/JPG) e tente novamente."
   );
@@ -103,14 +139,18 @@ export async function processPDFOCR(file: File): Promise<OCRResult> {
 
 /**
  * Process any supported file (image or PDF)
+ * Password is only used for PDF files and ignored for images
  */
-export async function processFile(file: File): Promise<OCRResult> {
+export async function processFile(
+  file: File,
+  password?: string
+): Promise<OCRResult> {
   const fileName = file.name.toLowerCase();
 
   if (fileName.endsWith(".pdf")) {
-    return processPDFOCR(file);
+    return processPDFOCR(file, password);
   }
 
-  // Assume it's an image
+  // Assume it's an image — password is ignored
   return processImageOCR(file);
 }
