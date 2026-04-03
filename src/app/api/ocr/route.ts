@@ -100,9 +100,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save password if requested and a password was explicitly provided
+    // Save password if requested and a password was explicitly provided (best-effort)
     if (savePasswordFlag && password) {
-      await savePdfPassword(ctx.userId, password);
+      try {
+        await savePdfPassword(ctx.userId, password);
+      } catch (saveError) {
+        console.error("Failed to save PDF password:", saveError);
+      }
     }
 
     if (!ocrResult.text || ocrResult.text.trim().length === 0) {

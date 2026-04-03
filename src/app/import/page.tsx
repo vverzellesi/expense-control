@@ -531,7 +531,10 @@ export default function ImportPage() {
 
   async function handleForgetPassword() {
     try {
-      await fetch("/api/user/pdf-password", { method: "DELETE" });
+      const res = await fetch("/api/user/pdf-password", { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error("Server returned " + res.status);
+      }
       setHasSavedPassword(false);
       toast({
         title: "Senha removida",
@@ -1095,6 +1098,11 @@ export default function ImportPage() {
     setDetectedStatementType(null);
     setOcrConfidence(null);
     setFileType(null);
+    setNeedsPassword(false);
+    setPendingFile(null);
+    setPdfPassword("");
+    setPasswordError(null);
+    setSavePassword(true);
   }
 
   const selectedCount = transactions.filter((t) => t.selected).length;
