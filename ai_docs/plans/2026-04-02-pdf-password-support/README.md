@@ -63,7 +63,7 @@ Adicionar suporte a PDFs protegidos por senha no fluxo de importação OCR. Elim
 | # | Phase | File | Summary | Status | Depends On |
 |---|-------|------|---------|--------|------------|
 | 1 | Backend: Decrypt + API | `phase-1-backend-decrypt-api.md` | Módulo crypto, detecção de senha em OCR, API aceitando senha | complete | — |
-| 2 | Persistência + Frontend | `phase-2-persistence-frontend.md` | API de gerenciamento de senha salva, UI de input de senha | pending | Phase 1 |
+| 2 | Persistência + Frontend | `phase-2-persistence-frontend.md` | API de gerenciamento de senha salva, UI de input de senha | complete | Phase 1 |
 
 ---
 
