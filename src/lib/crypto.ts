@@ -9,7 +9,13 @@ function getEncryptionKey(): Buffer {
       "PDF_ENCRYPTION_KEY environment variable is not set. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
     );
   }
-  return Buffer.from(key, "hex");
+  const buf = Buffer.from(key, "hex");
+  if (buf.length !== 32) {
+    throw new Error(
+      `PDF_ENCRYPTION_KEY must be 64 hex characters (32 bytes). Got ${key.length} hex characters.`
+    );
+  }
+  return buf;
 }
 
 export function encrypt(text: string): { encrypted: string; iv: string } {
