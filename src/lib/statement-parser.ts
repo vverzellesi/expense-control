@@ -531,39 +531,29 @@ function isNubankStatement(text: string): boolean {
   return hasNubankHeader && hasNubankDates;
 }
 
+// Nubank transaction type classification rules (order matters: specific before generic)
+const NUBANK_TYPE_RULES: Array<{ pattern: RegExp; type: TransactionType; kind?: string }> = [
+  { pattern: /transfer[eê]ncia\s+recebida\s+(?:pelo\s+)?pix/i, type: "INCOME", kind: "PIX RECEBIDO" },
+  { pattern: /transfer[eê]ncia\s+recebida/i, type: "INCOME", kind: "TRANSFERENCIA" },
+  { pattern: /transfer[eê]ncia\s+enviada\s+(?:pelo\s+)?pix/i, type: "EXPENSE", kind: "PIX ENVIADO" },
+  { pattern: /transfer[eê]ncia\s+enviada/i, type: "EXPENSE", kind: "TRANSFERENCIA" },
+  { pattern: /compra\s+no\s+d[eé]bito/i, type: "EXPENSE", kind: "COMPRA DEBITO" },
+  { pattern: /compra\s+no\s+cr[eé]dito/i, type: "EXPENSE", kind: "COMPRA CREDITO" },
+  { pattern: /resgate\s+RDB/i, type: "INCOME" },
+  { pattern: /aplica[cç][aã]o\s+RDB/i, type: "EXPENSE" },
+  { pattern: /pagamento\s+(?:de\s+(?:fatura|boleto)|efetuado)/i, type: "EXPENSE", kind: "BOLETO" },
+  { pattern: /resgate\s+de\s+empr[eé]stimo/i, type: "INCOME" },
+  { pattern: /d[eé]bito\s+em\s+conta/i, type: "EXPENSE", kind: "DEBITO AUTO" },
+];
+
 /**
  * Determine transaction type and kind for Nubank transactions
  */
 function getNubankTransactionType(description: string): { type: TransactionType; kind?: string } {
-  if (/transfer[eê]ncia\s+recebida\s+(?:pelo\s+)?pix/i.test(description)) {
-    return { type: "INCOME", kind: "PIX RECEBIDO" };
-  }
-  if (/transfer[eê]ncia\s+recebida/i.test(description)) {
-    return { type: "INCOME", kind: "TRANSFERENCIA" };
-  }
-  if (/transfer[eê]ncia\s+enviada\s+(?:pelo\s+)?pix/i.test(description)) {
-    return { type: "EXPENSE", kind: "PIX ENVIADO" };
-  }
-  if (/compra\s+no\s+d[eé]bito/i.test(description)) {
-    return { type: "EXPENSE", kind: "COMPRA DEBITO" };
-  }
-  if (/compra\s+no\s+cr[eé]dito/i.test(description)) {
-    return { type: "EXPENSE", kind: "COMPRA DEBITO" };
-  }
-  if (/resgate\s+RDB/i.test(description)) {
-    return { type: "INCOME" };
-  }
-  if (/aplica[cç][aã]o\s+RDB/i.test(description)) {
-    return { type: "EXPENSE" };
-  }
-  if (/pagamento\s+de\s+(?:fatura|boleto)/i.test(description)) {
-    return { type: "EXPENSE", kind: "BOLETO" };
-  }
-  if (/resgate\s+de\s+empr[eé]stimo/i.test(description)) {
-    return { type: "INCOME" };
-  }
-  if (/d[eé]bito\s+em\s+conta/i.test(description)) {
-    return { type: "EXPENSE", kind: "DEBITO AUTO" };
+  for (const rule of NUBANK_TYPE_RULES) {
+    if (rule.pattern.test(description)) {
+      return { type: rule.type, kind: rule.kind };
+    }
   }
   return { type: "EXPENSE" };
 }
@@ -809,6 +799,39 @@ function extractFromLine(
 }
 
 /**
+ * Deduplicate, sort, and build final parse result
+ */
+function buildParseResult(
+  bank: string,
+  transactions: StatementTransaction[]
+): StatementParseResult {
+  const uniqueTransactions = transactions.filter(
+    (t, index, self) =>
+      index ===
+      self.findIndex(
+        (other) =>
+          other.date.getTime() === t.date.getTime() &&
+          other.description === t.description &&
+          other.amount === t.amount
+      )
+  );
+
+  uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const averageConfidence =
+    uniqueTransactions.length > 0
+      ? uniqueTransactions.reduce((sum, t) => sum + t.confidence, 0) /
+        uniqueTransactions.length
+      : 0;
+
+  return {
+    bank,
+    transactions: uniqueTransactions,
+    averageConfidence,
+  };
+}
+
+/**
  * Main function to parse statement text from OCR
  */
 export function parseStatementText(
@@ -830,31 +853,7 @@ export function parseStatementText(
   // For Nubank statements, use dedicated parser with state tracking
   if (isNubank) {
     const nubankTransactions = extractNubankTransactions(text, ocrConfidence);
-
-    // Remove duplicates and sort
-    const uniqueTransactions = nubankTransactions.filter(
-      (t, index, self) =>
-        index ===
-        self.findIndex(
-          (other) =>
-            other.date.getTime() === t.date.getTime() &&
-            other.description === t.description &&
-            other.amount === t.amount
-        )
-    );
-    uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const averageConfidence =
-      uniqueTransactions.length > 0
-        ? uniqueTransactions.reduce((sum, t) => sum + t.confidence, 0) /
-          uniqueTransactions.length
-        : 0;
-
-    return {
-      bank: "Extrato Nubank",
-      transactions: uniqueTransactions,
-      averageConfidence,
-    };
+    return buildParseResult("Extrato Nubank", nubankTransactions);
   }
 
   // For credit card invoices, try to extract the due date as reference
@@ -894,32 +893,7 @@ export function parseStatementText(
     }
   }
 
-  // Remove duplicates (same date, description, amount)
-  const uniqueTransactions = transactions.filter(
-    (t, index, self) =>
-      index ===
-      self.findIndex(
-        (other) =>
-          other.date.getTime() === t.date.getTime() &&
-          other.description === t.description &&
-          other.amount === t.amount
-      )
-  );
-
-  // Sort by date
-  uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const averageConfidence =
-    uniqueTransactions.length > 0
-      ? uniqueTransactions.reduce((sum, t) => sum + t.confidence, 0) /
-        uniqueTransactions.length
-      : 0;
-
-  return {
-    bank,
-    transactions: uniqueTransactions,
-    averageConfidence,
-  };
+  return buildParseResult(bank, transactions);
 }
 
 /**
@@ -942,6 +916,7 @@ export function suggestCategoryForStatement(
     DEPOSITO: "Outros",
     RENDIMENTO: "Investimentos",
     "COMPRA DEBITO": "Compras",
+    "COMPRA CREDITO": "Compras",
   };
 
   return categoryMap[transactionKind.toUpperCase()] || null;

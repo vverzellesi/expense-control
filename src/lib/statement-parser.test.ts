@@ -176,4 +176,67 @@ Resgate RDB
     expect(result.transactions[1].amount).toBe(500);
     expect(result.transactions[1].type).toBe("INCOME");
   });
+
+  it("classifies Compra no crédito with correct kind", () => {
+    const text = `
+Nu Financeira
+10 MAR 2026 Total de saídas - 150,00
+Compra no crédito LOJA ONLINE
+150,00
+`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(1);
+    expect(result.transactions[0].type).toBe("EXPENSE");
+    expect(result.transactions[0].transactionKind).toBe("COMPRA CREDITO");
+  });
+
+  it("classifies Transferência enviada (without Pix) as EXPENSE", () => {
+    const text = `
+Nu Financeira
+10 MAR 2026 Total de saídas - 500,00
+Transferência enviada EMPRESA XYZ
+500,00
+`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(1);
+    expect(result.transactions[0].type).toBe("EXPENSE");
+    expect(result.transactions[0].transactionKind).toBe("TRANSFERENCIA");
+  });
+
+  it("classifies Pagamento efetuado with BOLETO kind", () => {
+    const text = `
+Nu Financeira
+10 MAR 2026 Total de saídas - 200,00
+Pagamento efetuado CONTA LUZ
+200,00
+`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(1);
+    expect(result.transactions[0].type).toBe("EXPENSE");
+    expect(result.transactions[0].transactionKind).toBe("BOLETO");
+  });
+
+  it("returns 0 transactions for empty Nubank statement", () => {
+    const text = `
+Nu Financeira
+01 MAR 2026 Total de entradas + 0,00
+Total de saídas - 0,00
+`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(0);
+  });
+
+  it("skips transaction starters without amounts", () => {
+    const text = `
+Nu Financeira
+10 MAR 2026 Total de saídas - 100,00
+Transferência enviada pelo Pix PESSOA TESTE
+Resgate RDB
+100,00
+`;
+    const result = parseStatementText(text, 95);
+    // First transaction has no amount, gets skipped. Resgate RDB has 100,00.
+    expect(result.transactions.length).toBe(1);
+    expect(result.transactions[0].description).toMatch(/Resgate RDB/);
+  });
 });
