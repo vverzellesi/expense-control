@@ -831,6 +831,231 @@ function buildParseResult(
   };
 }
 
+// ===== Credit Card Invoice Screenshots (multi-bank OCR) =====
+
+// Noise patterns to skip in credit card invoice screenshots
+const CARD_SCREENSHOT_NOISE_PATTERNS = [
+  /^\d{2}:\d{2}/,                           // Status bar time (08:51)
+  /Fatura\s*(?:do\s*)?cart/i,               // Header title (any bank)
+  /^[<>←→]/,                                // Navigation arrows
+  /^(Janeiro|Fevereiro|Mar[cç]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)/i,
+  /^(larço|Mai:|lar[cç]o)/i,                // OCR-garbled month tab names
+  /^Valor\s*(?:total)?$/i,                   // Total section label
+  /^Valor\s*(?:da\s*)?fatura/i,             // Invoice total label
+  /^Vence\s*em/i,                            // Due date
+  /^Vencimento/i,                            // Due date variant
+  /^Antecipar$/i,                            // Button text
+  /Em\s*processamento/i,                     // Processing status
+  /^DADO$/i,                                 // OCR-garbled date
+  /^Cart[aã]o\s*final/i,                    // Card info line (C6)
+  /^Pagamento\s*m[ií]nimo/i,                // Minimum payment
+  /^Limite\s*dispon[ií]vel/i,               // Available limit
+  /^Melhor\s*dia/i,                          // Best payment day
+  /^Fechar\s*fatura/i,                       // Close invoice
+  /^Pagar$/i,                                // Pay button
+  /^Copiar$/i,                               // Copy button
+  /^Compartilhar$/i,                         // Share button
+  /^[A-Z]{2,4}\s*$/,                         // Short garbled text (SED, TER, etc.)
+  /^[□●○•\-\*\s]+$/,                        // Bullet/marker only lines
+];
+
+// Date-only line: DD/MM
+const DATE_SLASH_ONLY = /^(\d{1,2})\/(\d{1,2})$/;
+// Date-only line: DD MMM (e.g., "14 MAR", "03 ABR")
+const DATE_ABBREV_ONLY = /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)$/i;
+
+/**
+ * Detect if OCR text is from a credit card invoice screenshot (any bank).
+ * Uses multiple signals:
+ *   - "Fatura do cartão" / "Fatura" header
+ *   - "Cartão final XXXX" lines (C6)
+ *   - Credit card layout: date-only lines + R$ amounts
+ */
+export function isCreditCardScreenshot(text: string): boolean {
+  const hasFaturaHeader = /Fatura\s*(?:do\s*)?cart[aã]o/i.test(text);
+  const cartaoFinalCount = (text.match(/Cart[aã]o\s*final\s*\d{4}/gi) || []).length;
+
+  // C6 specific: header + card line, or 2+ card lines
+  if ((hasFaturaHeader && cartaoFinalCount >= 1) || cartaoFinalCount >= 2) {
+    return true;
+  }
+
+  // Generic: "Fatura" header + date-only lines + R$ amounts
+  if (hasFaturaHeader || /^Fatura$/im.test(text)) {
+    const lines = text.split("\n").map((l) => l.trim());
+    const hasDateOnlyLines = lines.some(
+      (l) => DATE_SLASH_ONLY.test(l) || DATE_ABBREV_ONLY.test(l)
+    );
+    const hasAmounts = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/.test(text);
+    if (hasDateOnlyLines && hasAmounts) return true;
+  }
+
+  return false;
+}
+
+// Keep old name as alias for backwards compatibility in tests
+export const isC6CreditCardInvoice = isCreditCardScreenshot;
+
+/**
+ * Detect which bank a credit card screenshot belongs to.
+ */
+function detectCardScreenshotBank(text: string): string {
+  if (/Cart[aã]o\s*final/i.test(text) || /C6/i.test(text)) return "Fatura C6";
+  if (/NUBANK/i.test(text) || /NU\b/i.test(text)) return "Fatura Nubank";
+  if (/BTG/i.test(text)) return "Fatura BTG";
+  if (/ITA[UÚ]/i.test(text)) return "Fatura Itaú";
+  if (/BRADESCO/i.test(text)) return "Fatura Bradesco";
+  if (/SANTANDER/i.test(text)) return "Fatura Santander";
+  if (/INTER/i.test(text)) return "Fatura Inter";
+  return "Fatura Cartão";
+}
+
+/**
+ * Parse a date-only line in either DD/MM or DD MMM format.
+ * Returns null if the line is not a date-only line.
+ */
+function parseDateOnlyLine(line: string): Date | null {
+  const currentYear = new Date().getFullYear();
+
+  // DD/MM
+  const slashMatch = line.match(DATE_SLASH_ONLY);
+  if (slashMatch) {
+    const day = parseInt(slashMatch[1], 10);
+    const month = parseInt(slashMatch[2], 10) - 1;
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      return new Date(currentYear, month, day);
+    }
+  }
+
+  // DD MMM
+  const abbrevMatch = line.match(DATE_ABBREV_ONLY);
+  if (abbrevMatch) {
+    const day = parseInt(abbrevMatch[1], 10);
+    const monthStr = abbrevMatch[2].toLowerCase();
+    const month = MONTH_ABBREV[monthStr];
+    if (month !== undefined && day >= 1 && day <= 31) {
+      return new Date(currentYear, month, day);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract transactions from credit card invoice screenshots (OCR text).
+ * Works for any bank. Handles two common layouts:
+ *
+ * Layout A (C6): amount on the SAME line as description
+ *   DD/MM
+ *   DESCRIPTION R$ XX,XX
+ *   Cartão final 6604
+ *
+ * Layout B (Nubank, Inter, etc.): amount on a SEPARATE line
+ *   DD MMM
+ *   DESCRIPTION
+ *   R$ XX,XX
+ */
+export function extractCreditCardScreenshotTransactions(
+  text: string,
+  confidence: number
+): StatementTransaction[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const transactions: StatementTransaction[] = [];
+  let currentDate: Date | null = null;
+  let pendingDescription: string | null = null;
+
+  // Strict amount pattern: requires "R$" prefix
+  const amountPattern = /R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+
+  function flushPending() {
+    pendingDescription = null;
+  }
+
+  for (const line of lines) {
+    // Skip noise lines
+    if (CARD_SCREENSHOT_NOISE_PATTERNS.some((p) => p.test(line))) {
+      // Noise after date+desc but before amount → discard pending
+      if (pendingDescription && /^Cart[aã]o\s*final/i.test(line)) {
+        // Card info line — don't discard pending, amount may follow
+        continue;
+      }
+      flushPending();
+      continue;
+    }
+
+    // Date-only line
+    const dateFromLine = parseDateOnlyLine(line);
+    if (dateFromLine) {
+      flushPending();
+      currentDate = dateFromLine;
+      continue;
+    }
+
+    if (!currentDate) continue;
+
+    // Check if line has an amount
+    const amountMatch = line.match(amountPattern);
+
+    if (amountMatch) {
+      const amountStr = amountMatch[1];
+      const amount = parseFloat(
+        amountStr.replace(/\./g, "").replace(",", ".")
+      );
+      if (amount <= 0) continue;
+
+      // Layout A: DESCRIPTION R$ XX,XX (amount on same line as description)
+      const amountIndex = line.indexOf(amountMatch[0]);
+      const inlineDesc = line
+        .substring(0, amountIndex)
+        .replace(/\s+/g, " ")
+        .replace(/^[□●○•\-\*\s]+/, "")
+        .trim();
+
+      let description: string;
+      if (inlineDesc.length >= 2) {
+        // Amount was on same line as description (Layout A)
+        description = inlineDesc;
+      } else if (pendingDescription) {
+        // Amount was on separate line (Layout B) — use pending description
+        description = pendingDescription;
+      } else {
+        // Standalone amount with no date+description context — skip (likely a total)
+        continue;
+      }
+
+      transactions.push({
+        date: new Date(currentDate),
+        description,
+        amount: -Math.abs(amount), // Credit card purchases are expenses
+        type: "EXPENSE",
+        confidence,
+      });
+
+      currentDate = null;
+      flushPending();
+    } else {
+      // No amount — this might be a description line (Layout B)
+      const cleanLine = line
+        .replace(/\s+/g, " ")
+        .replace(/^[□●○•\-\*\s]+/, "")
+        .trim();
+
+      if (cleanLine.length >= 2) {
+        pendingDescription = cleanLine;
+      }
+    }
+  }
+
+  return transactions;
+}
+
+// Keep old name as alias for backwards compatibility in tests
+export const extractC6CreditCardTransactions = extractCreditCardScreenshotTransactions;
+
 /**
  * Main function to parse statement text from OCR
  */
@@ -843,6 +1068,14 @@ export function parseStatementText(
 
   // Detect if this is a credit card invoice
   const isCreditCard = isCreditCardInvoice(text);
+
+  // Detect credit card invoice screenshots (any bank) before checking bank statements
+  if (isCreditCardScreenshot(text)) {
+    const cardTransactions = extractCreditCardScreenshotTransactions(text, ocrConfidence);
+    if (cardTransactions.length > 0) {
+      return buildParseResult(detectCardScreenshotBank(text), cardTransactions);
+    }
+  }
 
   // Detect if this is a C6 Bank statement
   const isC6 = isC6Statement(text);

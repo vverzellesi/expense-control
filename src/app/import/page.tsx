@@ -179,6 +179,7 @@ export default function ImportPage() {
   const [transactions, setTransactions] = useState<ExtendedTransaction[]>([]);
   const [origin, setOrigin] = useState("");
   const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrProgressLabel, setOcrProgressLabel] = useState("");
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null);
   const [fileType, setFileType] = useState<"csv" | "ocr" | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState<string>("");
@@ -402,9 +403,33 @@ export default function ImportPage() {
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await processFile(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Multiple OCR files: process them all and merge
+    const ocrFiles: File[] = [];
+    let csvFile: File | null = null;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (getFileType(f) === "csv") {
+        csvFile = f;
+      } else {
+        ocrFiles.push(f);
+      }
+    }
+
+    // If there's a CSV, process it alone (CSVs already contain all transactions)
+    if (csvFile) {
+      await processFile(csvFile);
+      return;
+    }
+
+    // Multiple OCR images: process each and merge results
+    if (ocrFiles.length > 1) {
+      await processMultipleOCR(ocrFiles);
+    } else if (ocrFiles.length === 1) {
+      await processFile(ocrFiles[0]);
+    }
   }
 
   function handleDragOver(e: React.DragEvent) {
@@ -421,14 +446,20 @@ export default function ImportPage() {
     e.preventDefault();
     setIsDragging(false);
 
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
+    const droppedFiles = e.dataTransfer.files;
+    if (!droppedFiles || droppedFiles.length === 0) return;
 
-    // Validate file type
+    // Validate file types
     const validExtensions = [".csv", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
-    const isValid = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    const validFiles: File[] = [];
+    for (let i = 0; i < droppedFiles.length; i++) {
+      const f = droppedFiles[i];
+      if (validExtensions.some(ext => f.name.toLowerCase().endsWith(ext))) {
+        validFiles.push(f);
+      }
+    }
 
-    if (!isValid) {
+    if (validFiles.length === 0) {
       toast({
         title: "Formato não suportado",
         description: "Use arquivos CSV, PDF ou imagens (PNG, JPG)",
@@ -437,7 +468,17 @@ export default function ImportPage() {
       return;
     }
 
-    await processFile(file);
+    // Separate CSV and OCR files
+    const ocrFiles = validFiles.filter(f => getFileType(f) !== "csv");
+    const csvFile = validFiles.find(f => getFileType(f) === "csv");
+
+    if (csvFile) {
+      await processFile(csvFile);
+    } else if (ocrFiles.length > 1) {
+      await processMultipleOCR(ocrFiles);
+    } else if (ocrFiles.length === 1) {
+      await processFile(ocrFiles[0]);
+    }
   }
 
   async function handlePasswordSubmit() {
@@ -467,7 +508,12 @@ export default function ImportPage() {
       clearInterval(progressInterval);
       setOcrProgress(100);
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Erro do servidor (${res.status}). Tente novamente.`);
+      }
 
       if (data.needsPassword) {
         setPasswordError(data.error || "Senha incorreta. Tente novamente.");
@@ -766,56 +812,94 @@ export default function ImportPage() {
     setStep("preview");
   }
 
+  function normalizeTransactionDates(
+    rawTransactions: ExtendedTransaction[]
+  ): ExtendedTransaction[] {
+    return rawTransactions.map((t) => {
+      let normalizedDate: Date;
+      if (typeof t.date === "string") {
+        const match = (t.date as string).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        normalizedDate = match
+          ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0)
+          : new Date(t.date);
+      } else {
+        normalizedDate = new Date(t.date);
+      }
+      return { ...t, date: normalizedDate, selected: true };
+    });
+  }
+
+  async function callOCRApi(file: File): Promise<{
+    transactions: ExtendedTransaction[];
+    origin: string;
+    confidence: number;
+  }> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/ocr", {
+      method: "POST",
+      body: formData,
+    });
+
+    // Handle non-JSON responses (e.g., 504 gateway timeout)
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(
+        res.status === 504
+          ? "O servidor demorou demais para processar. Tente com menos arquivos ou imagens menores."
+          : `Erro do servidor (${res.status}). Tente novamente.`
+      );
+    }
+
+    if (data.needsPassword) {
+      throw Object.assign(new Error("needsPassword"), { data });
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || "Erro ao processar arquivo");
+    }
+
+    return {
+      transactions: normalizeTransactionDates(data.transactions),
+      origin: data.origin,
+      confidence: data.confidence,
+    };
+  }
+
   async function processOCR(file: File) {
     const progressInterval = setInterval(() => {
       setOcrProgress((prev) => Math.min(prev + 5, 90));
     }, 500);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/ocr", {
-        method: "POST",
-        body: formData,
-      });
+      let result;
+      try {
+        result = await callOCRApi(file);
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message === "needsPassword") {
+          clearInterval(progressInterval);
+          const errData = (error as Error & { data: { savedPasswordFailed?: boolean } }).data;
+          setPendingFile(file);
+          setNeedsPassword(true);
+          setPasswordError(
+            errData.savedPasswordFailed
+              ? "Senha salva não funcionou para este PDF."
+              : null
+          );
+          return;
+        }
+        throw error;
+      }
 
       clearInterval(progressInterval);
       setOcrProgress(100);
 
-      const data = await res.json();
-
-      // Handle password-protected PDF
-      if (data.needsPassword) {
-        setPendingFile(file);
-        setNeedsPassword(true);
-        setPasswordError(
-          data.savedPasswordFailed
-            ? "Senha salva não funcionou para este PDF."
-            : null
-        );
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Erro ao processar arquivo");
-      }
-
-      setOrigin(data.origin);
-      setOcrConfidence(data.confidence);
-      const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
-        let normalizedDate: Date;
-        if (typeof t.date === "string") {
-          const match = (t.date as string).match(/^(\d{4})-(\d{2})-(\d{2})/);
-          normalizedDate = match
-            ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0)
-            : new Date(t.date);
-        } else {
-          normalizedDate = new Date(t.date);
-        }
-        return { ...t, date: normalizedDate, selected: true };
-      });
-      const transactionsWithDuplicates = await checkDuplicates(parsedTransactions);
+      setOrigin(result.origin);
+      setOcrConfidence(result.confidence);
+      const transactionsWithDuplicates = await checkDuplicates(result.transactions);
       setTransactions(transactionsWithDuplicates);
 
       const ocrValidDates = transactionsWithDuplicates
@@ -830,6 +914,93 @@ export default function ImportPage() {
       setStep("preview");
     } finally {
       clearInterval(progressInterval);
+    }
+  }
+
+  async function processMultipleOCR(files: File[]) {
+    setFileType("ocr");
+    setLoading(true);
+    setOcrProgress(0);
+    setOcrProgressLabel("");
+
+    try {
+      const allTransactions: ExtendedTransaction[] = [];
+      let lastOrigin = "";
+      let totalConfidence = 0;
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        setOcrProgressLabel(`Processando imagem ${i + 1} de ${files.length}...`);
+        setOcrProgress(Math.round((i / files.length) * 90));
+
+        try {
+          const result = await callOCRApi(files[i]);
+          allTransactions.push(...result.transactions);
+          lastOrigin = result.origin || lastOrigin;
+          totalConfidence += result.confidence;
+          successCount++;
+        } catch (error) {
+          errors.push(`${files[i].name}: ${error instanceof Error ? error.message : "Erro"}`);
+        }
+      }
+
+      setOcrProgress(100);
+      setOcrProgressLabel("");
+
+      if (allTransactions.length === 0) {
+        throw new Error(
+          errors.length > 0
+            ? `Nenhuma transação encontrada. Erros:\n${errors.join("\n")}`
+            : "Nenhuma transação encontrada nos arquivos."
+        );
+      }
+
+      if (errors.length > 0) {
+        toast({
+          title: `${errors.length} arquivo(s) com erro`,
+          description: errors.join("; "),
+          variant: "destructive",
+        });
+      }
+
+      // Deduplicate across images (same date + description + amount)
+      const uniqueTransactions = allTransactions.filter(
+        (t, index, self) =>
+          index ===
+          self.findIndex(
+            (other) =>
+              new Date(other.date).getTime() === new Date(t.date).getTime() &&
+              other.description === t.description &&
+              other.amount === t.amount
+          )
+      );
+
+      setOrigin(lastOrigin);
+      setOcrConfidence(successCount > 0 ? totalConfidence / successCount : null);
+      const transactionsWithDuplicates = await checkDuplicates(uniqueTransactions);
+      setTransactions(transactionsWithDuplicates);
+
+      const ocrValidDates = transactionsWithDuplicates
+        .map((t) => (t.date instanceof Date ? t.date : new Date(t.date)))
+        .filter((d) => !isNaN(d.getTime()));
+      if (ocrValidDates.length > 0) {
+        const latestDate = new Date(Math.max(...ocrValidDates.map((d) => d.getTime())));
+        const suggestedMonth = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+        setInvoiceMonth(suggestedMonth);
+      }
+
+      setStep("preview");
+    } catch (error) {
+      toast({
+        title: "Erro ao processar arquivos",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setOcrProgress(0);
+      setOcrProgressLabel("");
     }
   }
 
@@ -1176,12 +1347,13 @@ export default function ImportPage() {
                           htmlFor="file"
                           className="cursor-pointer rounded-md bg-primary px-6 py-3 text-base sm:px-4 sm:py-2 sm:text-sm font-medium text-white hover:bg-primary/90"
                         >
-                          {loading ? "Processando..." : "Selecionar arquivo"}
+                          {loading ? "Processando..." : "Selecionar arquivos"}
                         </Label>
                         <Input
                           id="file"
                           type="file"
                           accept=".csv,.pdf,.png,.jpg,.jpeg,.gif,.webp"
+                          multiple
                           onChange={handleFileUpload}
                           disabled={loading}
                           className="hidden"
@@ -1190,7 +1362,7 @@ export default function ImportPage() {
                     )}
                   </div>
                   <p className="mt-2 text-sm text-gray-500">
-                    {isDragging ? "Arquivos suportados: CSV, PDF, PNG, JPG" : "Arraste um arquivo ou clique para selecionar"}
+                    {isDragging ? "Arquivos suportados: CSV, PDF, PNG, JPG" : "Arraste arquivos ou clique para selecionar (múltiplas imagens aceitas)"}
                   </p>
                   <p className="mt-1 text-xs text-gray-400">
                     Bancos: C6, Itaú, BTG, Nubank, Bradesco, Santander, BB, Caixa
@@ -1201,7 +1373,9 @@ export default function ImportPage() {
               {loading && fileType === "ocr" && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Processando OCR...</span>
+                    <span className="text-gray-500">
+                      {ocrProgressLabel || "Processando OCR..."}
+                    </span>
                     <span className="text-gray-500">{ocrProgress}%</span>
                   </div>
                   <Progress value={ocrProgress} className="h-2" />
