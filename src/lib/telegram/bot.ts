@@ -54,6 +54,12 @@ export async function handleUpdate(update: TelegramUpdate) {
     return handleExpenseMessage(update.message, userId)
   }
 
+  // Route photo messages (credit card statement screenshots)
+  if (update.message?.photo) {
+    const { handlePhotoMessage } = await import("./commands")
+    return handlePhotoMessage(update.message, userId)
+  }
+
   // Route document messages (CSV files)
   if (update.message?.document) {
     const { handleDocumentMessage } = await import("./commands")

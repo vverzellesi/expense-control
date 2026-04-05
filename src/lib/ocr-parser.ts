@@ -62,7 +62,7 @@ export async function processImageOCR(file: File): Promise<OCRResult> {
 /**
  * Process a buffer with OCR (for PDF pages)
  */
-async function processBufferOCR(buffer: Buffer): Promise<OCRResult> {
+export async function processBufferOCR(buffer: Buffer): Promise<OCRResult> {
   const processedBuffer = await preprocessImage(buffer);
 
   const result = await Tesseract.recognize(processedBuffer, "por", {

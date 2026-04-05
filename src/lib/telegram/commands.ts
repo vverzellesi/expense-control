@@ -5,15 +5,19 @@ import {
   editMessageText,
   getFile,
   downloadFile,
+  downloadFileBuffer,
   type TelegramMessage,
   type TelegramCallbackQuery,
   type InlineKeyboardButton,
 } from "./client"
 import { parseExpenseMessage } from "./parser"
 import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
-import { suggestCategory } from "@/lib/categorizer"
+import { suggestCategory, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
+import { processBufferOCR } from "@/lib/ocr-parser"
+import { parseStatementText } from "@/lib/statement-parser"
+import { parseNotificationText } from "@/lib/notification-parser"
 import { formatCurrency } from "@/lib/utils"
 import {
   handleSummaryQuery,
@@ -161,6 +165,16 @@ export async function handleCallbackQuery(
 
   if (data.startsWith("csv_cancel:")) {
     return editMessageText(chatId, messageId, "Importação cancelada.")
+  }
+
+  if (data.startsWith("phcf:")) {
+    const importId = data.replace("phcf:", "")
+    return handlePhotoConfirm(chatId, messageId, userId, importId)
+  }
+
+  if (data.startsWith("phcc:")) {
+    const importId = data.replace("phcc:", "")
+    return handlePhotoCancel(chatId, messageId, userId, importId)
   }
 
   if (data.startsWith("summary:")) {
@@ -620,4 +634,194 @@ export async function handleCsvConfirm(
     messageId,
     parts.join("\n")
   )
+}
+
+export async function handlePhotoMessage(
+  message: TelegramMessage,
+  userId: string
+) {
+  const chatId = message.chat.id
+  const photo = message.photo
+  if (!photo || photo.length === 0) return
+
+  // Use largest resolution (last element in Telegram's photo array)
+  const largestPhoto = photo[photo.length - 1]
+
+  try {
+    await sendMessage(chatId, "📸 Processando imagem...")
+
+    // Download photo as Buffer
+    const filePath = await getFile(largestPhoto.file_id)
+    if (!filePath) {
+      return sendMessage(chatId, "Erro ao acessar a imagem. Tente novamente.")
+    }
+    const buffer = await downloadFileBuffer(filePath)
+
+    // OCR
+    const ocrResult = await processBufferOCR(buffer)
+    if (!ocrResult.text || ocrResult.text.trim().length === 0) {
+      return sendMessage(chatId, "Não foi possível extrair texto da imagem. Verifique se a foto está legível.")
+    }
+
+    // Parse statement text
+    let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence)
+    if (parseResult.transactions.length === 0) {
+      const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence)
+      if (notificationResult) {
+        parseResult = notificationResult
+      }
+    }
+
+    if (parseResult.transactions.length === 0) {
+      return sendMessage(chatId, "Nenhuma transação encontrada na imagem. Certifique-se de que a foto do extrato está clara e legível.")
+    }
+
+    // Categorize and detect installments/recurring
+    const categorizedTransactions = []
+    for (const t of parseResult.transactions) {
+      const suggested = await suggestCategory(t.description, userId)
+      const installment = detectInstallment(t.description)
+      const recurring = detectRecurringTransaction(t.description)
+
+      categorizedTransactions.push({
+        description: t.description,
+        amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
+        date: t.date,
+        categoryId: suggested?.id || null,
+        type: t.type || "EXPENSE",
+        selected: true,
+        isInstallment: installment.isInstallment,
+        currentInstallment: installment.currentInstallment || null,
+        totalInstallments: installment.totalInstallments || null,
+        isRecurring: recurring.isRecurring,
+        recurringName: recurring.recurringName || null,
+      })
+    }
+
+    // Filter duplicates
+    const transactionsForDedup = categorizedTransactions.map(t => ({
+      ...t,
+      date: t.date instanceof Date ? t.date : new Date(t.date),
+    }))
+    const { unique, duplicateCount } = await filterDuplicates(userId, transactionsForDedup)
+
+    if (unique.length === 0) {
+      return sendMessage(chatId, `Todas as ${categorizedTransactions.length} transações já existem no sistema.`)
+    }
+
+    // Calculate total
+    const total = unique.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+    // Store in TelegramPendingImport
+    await prisma.telegramPendingImport.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+
+    const payload = {
+      transactions: unique.map(t => ({ ...t, selected: true })),
+      bank: parseResult.bank,
+      confidence: parseResult.averageConfidence,
+    }
+
+    const pendingImport = await prisma.telegramPendingImport.create({
+      data: {
+        userId,
+        chatId: String(chatId),
+        payload: JSON.stringify(payload),
+        origin: parseResult.bank,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    })
+
+    // Build summary message
+    const lines = [
+      `📊 ${parseResult.bank} — ${categorizedTransactions.length} transações encontradas`,
+      `💰 Total: R$ ${total.toFixed(2).replace(".", ",")}`,
+    ]
+    if (duplicateCount > 0) {
+      lines.push(`⚠️ ${duplicateCount} duplicata(s) removida(s)`)
+    }
+    lines.push(`✅ ${unique.length} pronta(s) para importar`)
+
+    return sendMessage(chatId, lines.join("\n"), {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "✅ Importar", callback_data: `phcf:${pendingImport.id}` },
+          { text: "❌ Cancelar", callback_data: `phcc:${pendingImport.id}` },
+        ]],
+      },
+    })
+  } catch (error) {
+    console.error("Photo import error:", error)
+    return sendMessage(chatId, "Erro ao processar a imagem. Tente novamente.")
+  }
+}
+
+export async function handlePhotoConfirm(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date()) {
+    if (pending) await prisma.telegramPendingImport.delete({ where: { id: importId } })
+    return editMessageText(chatId, messageId, "Importação expirada. Envie a(s) imagem(ns) novamente.")
+  }
+  if (pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Erro: importação não encontrada.")
+  }
+
+  await prisma.telegramPendingImport.delete({ where: { id: importId } })
+
+  const { transactions: allTransactions } = JSON.parse(pending.payload) as {
+    transactions: Array<{
+      description: string
+      amount: number
+      date: string | Date
+      categoryId: string | null
+      type: string
+      selected: boolean
+      isInstallment: boolean
+      currentInstallment: number | null
+      totalInstallments: number | null
+    }>
+  }
+
+  // Only import selected transactions
+  const selectedTransactions = allTransactions.filter(t => t.selected)
+
+  if (selectedTransactions.length === 0) {
+    return editMessageText(chatId, messageId, "Nenhuma transação selecionada para importar.")
+  }
+
+  const result = await importTransactions(
+    userId,
+    selectedTransactions.map(t => ({
+      ...t,
+      categoryId: t.categoryId,
+      origin: pending.origin,
+    })),
+    pending.origin
+  )
+
+  const parts = [`✅ ${result.created.length} transações importadas`]
+  if (result.skippedCount > 0) parts.push(`⚠️ ${result.skippedCount} duplicatas ignoradas`)
+  if (result.linkedCount > 0) parts.push(`🔗 ${result.linkedCount} vinculadas a recorrentes`)
+
+  return editMessageText(chatId, messageId, parts.join("\n"))
+}
+
+export async function handlePhotoCancel(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string
+) {
+  await prisma.telegramPendingImport.deleteMany({
+    where: { id: importId, userId },
+  })
+  return editMessageText(chatId, messageId, "Importação cancelada.")
 }

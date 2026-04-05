@@ -15,6 +15,8 @@ export interface TelegramMessage {
   date: number
   text?: string
   document?: TelegramDocument
+  photo?: TelegramPhotoSize[]
+  media_group_id?: string
 }
 
 export interface TelegramCallbackQuery {
@@ -22,6 +24,14 @@ export interface TelegramCallbackQuery {
   from: { id: number; first_name: string }
   message?: TelegramMessage
   data?: string
+}
+
+export interface TelegramPhotoSize {
+  file_id: string
+  file_unique_id: string
+  width: number
+  height: number
+  file_size?: number
 }
 
 export interface TelegramDocument {
@@ -114,6 +124,16 @@ export async function downloadFile(filePath: string): Promise<string> {
     throw new Error(`Failed to download file: ${res.status} ${res.statusText}`)
   }
   return res.text()
+}
+
+export async function downloadFileBuffer(filePath: string): Promise<Buffer> {
+  const url = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to download file: ${res.status} ${res.statusText}`)
+  }
+  const arrayBuffer = await res.arrayBuffer()
+  return Buffer.from(arrayBuffer)
 }
 
 export async function setWebhook(url: string, secretToken: string) {
