@@ -177,6 +177,40 @@ export async function handleCallbackQuery(
     return handlePhotoCancel(chatId, messageId, userId, importId)
   }
 
+  if (data.startsWith("phrv:")) {
+    const parts = data.replace("phrv:", "").split(":")
+    const importId = parts[0]
+    const page = parseInt(parts[1]) || 0
+    return handlePhotoReview(chatId, messageId, userId, importId, page)
+  }
+
+  if (data.startsWith("phtg:")) {
+    const parts = data.replace("phtg:", "").split(":")
+    const importId = parts[0]
+    const index = parseInt(parts[1])
+    return handlePhotoToggle(chatId, messageId, userId, importId, index)
+  }
+
+  if (data.startsWith("phct:")) {
+    const parts = data.replace("phct:", "").split(":")
+    const importId = parts[0]
+    const index = parseInt(parts[1])
+    return handlePhotoCategoryPicker(chatId, messageId, userId, importId, index)
+  }
+
+  if (data.startsWith("phsc:")) {
+    const parts = data.replace("phsc:", "").split(":")
+    const importId = parts[0]
+    const index = parseInt(parts[1])
+    const categoryId = parts[2]
+    return handlePhotoSetCategory(chatId, messageId, userId, importId, index, categoryId)
+  }
+
+  if (data.startsWith("phbk:")) {
+    const importId = data.replace("phbk:", "")
+    return handlePhotoBackToSummary(chatId, messageId, userId, importId)
+  }
+
   if (data.startsWith("summary:")) {
     return handleSummaryQuery(chatId, userId)
   }
@@ -648,6 +682,11 @@ export async function handlePhotoMessage(
   const photo = message.photo
   if (!photo || photo.length === 0) return
 
+  // Cleanup stale queue entries (> 5 minutes old)
+  await prisma.telegramPhotoQueue.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
+  }).catch(() => {}) // Best-effort cleanup
+
   const largestPhoto = photo[photo.length - 1]
   const mediaGroupId = message.media_group_id || `single_${message.message_id}`
 
@@ -831,6 +870,7 @@ export async function handlePhotoMessage(
       reply_markup: {
         inline_keyboard: [[
           { text: "✅ Importar", callback_data: `phcf:${pendingImport.id}` },
+          { text: "📋 Revisar", callback_data: `phrv:${pendingImport.id}:0` },
           { text: "❌ Cancelar", callback_data: `phcc:${pendingImport.id}` },
         ]],
       },
@@ -916,4 +956,263 @@ export async function handlePhotoCancel(
     where: { id: importId, userId },
   })
   return editMessageText(chatId, messageId, "Importação cancelada.")
+}
+
+// --- Photo review UI ---
+
+const REVIEW_PAGE_SIZE = 5
+
+function buildReviewPage(
+  importId: string,
+  transactions: Array<{
+    description: string
+    amount: number
+    date: string | Date
+    selected: boolean
+    categoryId: string | null
+  }>,
+  categories: Array<{ id: string; name: string }>,
+  page: number
+): { text: string; keyboard: InlineKeyboardButton[][] } {
+  const start = page * REVIEW_PAGE_SIZE
+  const end = Math.min(start + REVIEW_PAGE_SIZE, transactions.length)
+  const totalPages = Math.ceil(transactions.length / REVIEW_PAGE_SIZE)
+  const pageItems = transactions.slice(start, end)
+
+  const lines = [`Página ${page + 1}/${totalPages}\n`]
+
+  for (let i = 0; i < pageItems.length; i++) {
+    const t = pageItems[i]
+    const globalIndex = start + i
+    const status = t.selected ? "✅" : "❌"
+    const dateStr = new Date(t.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+    const amountStr = `R$ ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`
+    const catName = categories.find(c => c.id === t.categoryId)?.name || "Sem categoria"
+    lines.push(`${globalIndex + 1}. ${status} ${dateStr} ${t.description}  ${amountStr}`)
+    lines.push(`   └ ${catName}`)
+  }
+
+  const keyboard: InlineKeyboardButton[][] = []
+
+  // Toggle buttons row
+  const toggleRow: InlineKeyboardButton[] = pageItems.map((t, i) => ({
+    text: t.selected ? `✗${start + i + 1}` : `✓${start + i + 1}`,
+    callback_data: `phtg:${importId}:${start + i}`,
+  }))
+  keyboard.push(toggleRow)
+
+  // Category buttons row
+  const catRow: InlineKeyboardButton[] = pageItems.map((_, i) => ({
+    text: `📁${start + i + 1}`,
+    callback_data: `phct:${importId}:${start + i}`,
+  }))
+  keyboard.push(catRow)
+
+  // Pagination row
+  const navRow: InlineKeyboardButton[] = []
+  if (page > 0) {
+    navRow.push({ text: "← Ant", callback_data: `phrv:${importId}:${page - 1}` })
+  }
+  if (page < totalPages - 1) {
+    navRow.push({ text: "Próx →", callback_data: `phrv:${importId}:${page + 1}` })
+  }
+  if (navRow.length > 0) keyboard.push(navRow)
+
+  // Back to summary
+  keyboard.push([{ text: "↩ Voltar ao resumo", callback_data: `phbk:${importId}` }])
+
+  return { text: lines.join("\n"), keyboard }
+}
+
+export async function handlePhotoReview(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string,
+  page: number
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date() || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Importação expirada. Envie as imagens novamente.")
+  }
+
+  const { transactions } = JSON.parse(pending.payload) as {
+    transactions: Array<{
+      description: string; amount: number; date: string | Date;
+      selected: boolean; categoryId: string | null;
+    }>
+  }
+
+  const categories = await prisma.category.findMany({
+    where: { userId },
+    orderBy: { name: "asc" },
+  })
+
+  const { text, keyboard } = buildReviewPage(importId, transactions, categories, page)
+
+  return editMessageText(chatId, messageId, text, {
+    reply_markup: { inline_keyboard: keyboard },
+  })
+}
+
+export async function handlePhotoToggle(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string,
+  transactionIndex: number
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date() || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Importação expirada.")
+  }
+
+  const payload = JSON.parse(pending.payload) as {
+    transactions: Array<{ selected: boolean; [key: string]: unknown }>
+    [key: string]: unknown
+  }
+
+  if (transactionIndex < 0 || transactionIndex >= payload.transactions.length) return
+
+  payload.transactions[transactionIndex].selected = !payload.transactions[transactionIndex].selected
+
+  await prisma.telegramPendingImport.update({
+    where: { id: importId },
+    data: { payload: JSON.stringify(payload) },
+  })
+
+  // Re-render the current page
+  const page = Math.floor(transactionIndex / REVIEW_PAGE_SIZE)
+  return handlePhotoReview(chatId, messageId, userId, importId, page)
+}
+
+export async function handlePhotoSetCategory(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string,
+  transactionIndex: number,
+  categoryId: string
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date() || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Importação expirada.")
+  }
+
+  const payload = JSON.parse(pending.payload) as {
+    transactions: Array<{ categoryId: string | null; [key: string]: unknown }>
+    [key: string]: unknown
+  }
+
+  if (transactionIndex < 0 || transactionIndex >= payload.transactions.length) return
+
+  payload.transactions[transactionIndex].categoryId = categoryId
+
+  await prisma.telegramPendingImport.update({
+    where: { id: importId },
+    data: { payload: JSON.stringify(payload) },
+  })
+
+  // Re-render the current page
+  const page = Math.floor(transactionIndex / REVIEW_PAGE_SIZE)
+  return handlePhotoReview(chatId, messageId, userId, importId, page)
+}
+
+export async function handlePhotoCategoryPicker(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string,
+  transactionIndex: number
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date() || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Importação expirada.")
+  }
+
+  const { transactions } = JSON.parse(pending.payload) as {
+    transactions: Array<{ description: string; amount: number }>
+  }
+  const t = transactions[transactionIndex]
+  if (!t) return
+
+  const categories = await prisma.category.findMany({
+    where: { userId },
+    orderBy: { name: "asc" },
+  })
+
+  const keyboard: InlineKeyboardButton[][] = []
+  for (let i = 0; i < categories.length; i += 2) {
+    const row: InlineKeyboardButton[] = [
+      { text: categories[i].name, callback_data: `phsc:${importId}:${transactionIndex}:${categories[i].id}` },
+    ]
+    if (i + 1 < categories.length) {
+      row.push({
+        text: categories[i + 1].name,
+        callback_data: `phsc:${importId}:${transactionIndex}:${categories[i + 1].id}`,
+      })
+    }
+    keyboard.push(row)
+  }
+
+  const page = Math.floor(transactionIndex / REVIEW_PAGE_SIZE)
+  keyboard.push([{ text: "↩ Voltar", callback_data: `phrv:${importId}:${page}` }])
+
+  const amountStr = `R$ ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`
+  return editMessageText(
+    chatId,
+    messageId,
+    `Selecione a categoria:\n\n📝 ${t.description}\n💰 ${amountStr}`,
+    { reply_markup: { inline_keyboard: keyboard } }
+  )
+}
+
+export async function handlePhotoBackToSummary(
+  chatId: number,
+  messageId: number,
+  userId: string,
+  importId: string
+) {
+  const pending = await prisma.telegramPendingImport.findUnique({
+    where: { id: importId },
+  })
+  if (!pending || pending.expiresAt < new Date() || pending.userId !== userId) {
+    return editMessageText(chatId, messageId, "Importação expirada.")
+  }
+
+  const { transactions, bank } = JSON.parse(pending.payload) as {
+    transactions: Array<{ amount: number; selected: boolean }>
+    bank: string
+  }
+
+  const selected = transactions.filter(t => t.selected)
+  const deselected = transactions.length - selected.length
+  const total = selected.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+  const lines = [
+    `📊 ${bank || "Extrato"} — ${transactions.length} transações`,
+    `💰 Total selecionado: R$ ${total.toFixed(2).replace(".", ",")}`,
+  ]
+  if (deselected > 0) {
+    lines.push(`❌ ${deselected} desmarcada(s)`)
+  }
+  lines.push(`✅ ${selected.length} pronta(s) para importar`)
+
+  return editMessageText(chatId, messageId, lines.join("\n"), {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: "✅ Importar", callback_data: `phcf:${importId}` },
+        { text: "📋 Revisar", callback_data: `phrv:${importId}:0` },
+        { text: "❌ Cancelar", callback_data: `phcc:${importId}` },
+      ]],
+    },
+  })
 }

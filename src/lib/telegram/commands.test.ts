@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
     telegramPendingImport: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
     },
@@ -23,6 +24,9 @@ vi.mock("@/lib/db", () => ({
       updateMany: vi.fn(),
       findMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    category: {
+      findMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -70,6 +74,11 @@ import {
   handlePhotoMessage,
   handlePhotoConfirm,
   handlePhotoCancel,
+  handlePhotoReview,
+  handlePhotoToggle,
+  handlePhotoCategoryPicker,
+  handlePhotoSetCategory,
+  handlePhotoBackToSummary,
 } from "./commands"
 import type { TelegramMessage } from "./client"
 import { processBufferOCR } from "@/lib/ocr-parser"
@@ -655,5 +664,150 @@ describe("handlePhotoMessage - media group batching", () => {
     expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-err" } })
     // Should send error message
     expect(mockSendMessage).toHaveBeenCalledWith(12345, expect.stringContaining("Erro ao processar"))
+  })
+})
+
+describe("Photo review UI", () => {
+  const makePayload = (count: number) => ({
+    transactions: Array.from({ length: count }, (_, i) => ({
+      description: `COMPRA ${i + 1}`,
+      amount: -(10 + i),
+      date: new Date(2026, 2, 14).toISOString(),
+      categoryId: "cat-1",
+      type: "EXPENSE",
+      selected: true,
+      isInstallment: false,
+      currentInstallment: null,
+      totalInstallments: null,
+    })),
+    bank: "Fatura C6",
+    confidence: 85,
+  })
+
+  const makePending = (id: string, payload: object) => ({
+    id,
+    userId: "user-1",
+    chatId: "12345",
+    payload: JSON.stringify(payload),
+    origin: "Fatura C6",
+    expiresAt: new Date(Date.now() + 60000),
+    createdAt: new Date(),
+  })
+
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it("shows paginated review with 5 transactions per page", async () => {
+    const payload = makePayload(12)
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
+    vi.mocked(prisma.category.findMany).mockResolvedValue([
+      { id: "cat-1", name: "Alimentacao" },
+    ] as never)
+
+    await handlePhotoReview(12345, 1, "user-1", "p1", 0)
+
+    expect(vi.mocked(editMessageText)).toHaveBeenCalledWith(
+      12345, 1,
+      expect.stringContaining("gina 1/3"),
+      expect.objectContaining({ reply_markup: expect.any(Object) })
+    )
+  })
+
+  it("toggles transaction selection", async () => {
+    const payload = makePayload(3)
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
+    vi.mocked(prisma.telegramPendingImport.update).mockResolvedValue({} as never)
+    vi.mocked(prisma.category.findMany).mockResolvedValue([
+      { id: "cat-1", name: "Alimentacao" },
+    ] as never)
+
+    await handlePhotoToggle(12345, 1, "user-1", "p1", 1)
+
+    // Verify the payload was updated with toggled selection
+    expect(prisma.telegramPendingImport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p1" },
+        data: expect.objectContaining({
+          payload: expect.stringContaining('"selected":false'),
+        }),
+      })
+    )
+  })
+
+  it("shows category picker for a transaction", async () => {
+    const payload = makePayload(3)
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
+    vi.mocked(prisma.category.findMany).mockResolvedValue([
+      { id: "cat-1", name: "Alimentacao" },
+      { id: "cat-2", name: "Transporte" },
+    ] as never)
+
+    await handlePhotoCategoryPicker(12345, 1, "user-1", "p1", 0)
+
+    expect(vi.mocked(editMessageText)).toHaveBeenCalledWith(
+      12345, 1,
+      expect.stringContaining("Selecione a categoria"),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            expect.arrayContaining([
+              expect.objectContaining({ text: "Alimentacao" }),
+              expect.objectContaining({ text: "Transporte" }),
+            ]),
+          ]),
+        }),
+      })
+    )
+  })
+
+  it("shows updated summary when going back", async () => {
+    const payload = makePayload(5)
+    payload.transactions[0].selected = false
+    payload.transactions[2].selected = false
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
+
+    await handlePhotoBackToSummary(12345, 1, "user-1", "p1")
+
+    expect(vi.mocked(editMessageText)).toHaveBeenCalledWith(
+      12345, 1,
+      expect.stringContaining("3 pronta(s) para importar"),
+      expect.any(Object)
+    )
+    expect(vi.mocked(editMessageText)).toHaveBeenCalledWith(
+      12345, 1,
+      expect.stringContaining("2 desmarcada(s)"),
+      expect.any(Object)
+    )
+  })
+
+  it("shows expired message for invalid import", async () => {
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(null)
+
+    await handlePhotoReview(12345, 1, "user-1", "nonexistent", 0)
+
+    expect(vi.mocked(editMessageText)).toHaveBeenCalledWith(
+      12345, 1,
+      expect.stringContaining("expirada")
+    )
+  })
+
+  it("sets category on a transaction", async () => {
+    const payload = makePayload(3)
+    vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
+    vi.mocked(prisma.telegramPendingImport.update).mockResolvedValue({} as never)
+    vi.mocked(prisma.category.findMany).mockResolvedValue([
+      { id: "cat-1", name: "Alimentacao" },
+      { id: "cat-2", name: "Transporte" },
+    ] as never)
+
+    await handlePhotoSetCategory(12345, 1, "user-1", "p1", 0, "cat-2")
+
+    expect(prisma.telegramPendingImport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p1" },
+        data: expect.objectContaining({
+          payload: expect.stringContaining('"categoryId":"cat-2"'),
+        }),
+      })
+    )
   })
 })
