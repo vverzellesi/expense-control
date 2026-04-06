@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { deduplicateTransactions } from "@/lib/dedup";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import { detectOriginFromCSV, isC6ExchangeRateRow, type StatementType } from "@/lib/csv-parser";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
@@ -965,16 +966,7 @@ export default function ImportPage() {
       }
 
       // Deduplicate across images (same date + description + amount)
-      const uniqueTransactions = allTransactions.filter(
-        (t, index, self) =>
-          index ===
-          self.findIndex(
-            (other) =>
-              new Date(other.date).getTime() === new Date(t.date).getTime() &&
-              other.description === t.description &&
-              other.amount === t.amount
-          )
-      );
+      const uniqueTransactions = deduplicateTransactions(allTransactions);
 
       setOrigin(lastOrigin);
       setOcrConfidence(successCount > 0 ? totalConfidence / successCount : null);

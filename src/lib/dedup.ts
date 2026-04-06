@@ -14,6 +14,24 @@ export function normalizeDescription(description: string): string {
     .trim()
 }
 
+/**
+ * Deduplicate transactions within a batch by exact match on date + description + amount.
+ */
+export function deduplicateTransactions<T extends { description: string; amount: number; date: Date | string }>(
+  transactions: T[]
+): T[] {
+  return transactions.filter(
+    (t, index, self) =>
+      index ===
+      self.findIndex(
+        (other) =>
+          new Date(other.date).getTime() === new Date(t.date).getTime() &&
+          other.description === t.description &&
+          other.amount === t.amount
+      )
+  )
+}
+
 export interface DuplicateCheckParams {
   userId: string
   description: string

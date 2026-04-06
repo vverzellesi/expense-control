@@ -6,8 +6,11 @@ import type { TelegramUpdate } from "@/lib/telegram/client"
 export async function POST(request: NextRequest) {
   try {
     // Validate webhook secret (timing-safe to prevent brute-force)
+    const expected = process.env.TELEGRAM_WEBHOOK_SECRET
+    if (!expected) {
+      return NextResponse.json({ error: "Not configured" }, { status: 503 })
+    }
     const secret = request.headers.get("x-telegram-bot-api-secret-token") || ""
-    const expected = process.env.TELEGRAM_WEBHOOK_SECRET || ""
     const secretBuf = Buffer.from(secret)
     const expectedBuf = Buffer.from(expected)
     if (secretBuf.length !== expectedBuf.length || !timingSafeEqual(secretBuf, expectedBuf)) {

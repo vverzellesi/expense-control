@@ -27,6 +27,7 @@ vi.mock("@/lib/db", () => ({
     },
     category: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -51,10 +52,14 @@ vi.mock("@/lib/notification-parser", () => ({
   parseNotificationText: vi.fn(),
 }))
 
-vi.mock("@/lib/dedup", () => ({
-  findDuplicate: vi.fn(),
-  filterDuplicates: vi.fn(),
-}))
+vi.mock("@/lib/dedup", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/dedup")>()
+  return {
+    ...actual,
+    findDuplicate: vi.fn(),
+    filterDuplicates: vi.fn(),
+  }
+})
 
 vi.mock("@/lib/categorizer", () => ({
   suggestCategory: vi.fn(),
@@ -794,6 +799,7 @@ describe("Photo review UI", () => {
     const payload = makePayload(3)
     vi.mocked(prisma.telegramPendingImport.findUnique).mockResolvedValue(makePending("p1", payload) as never)
     vi.mocked(prisma.telegramPendingImport.update).mockResolvedValue({} as never)
+    vi.mocked(prisma.category.findFirst).mockResolvedValue({ id: "cat-2", name: "Transporte" } as never)
     vi.mocked(prisma.category.findMany).mockResolvedValue([
       { id: "cat-1", name: "Alimentacao" },
       { id: "cat-2", name: "Transporte" },

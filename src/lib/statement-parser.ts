@@ -1,4 +1,5 @@
 import type { StatementTransaction, StatementParseResult, TransactionType } from "@/types";
+import { deduplicateTransactions } from "@/lib/dedup";
 
 // Transaction kind patterns
 const TRANSACTION_PATTERNS = {
@@ -805,16 +806,7 @@ function buildParseResult(
   bank: string,
   transactions: StatementTransaction[]
 ): StatementParseResult {
-  const uniqueTransactions = transactions.filter(
-    (t, index, self) =>
-      index ===
-      self.findIndex(
-        (other) =>
-          other.date.getTime() === t.date.getTime() &&
-          other.description === t.description &&
-          other.amount === t.amount
-      )
-  );
+  const uniqueTransactions = deduplicateTransactions(transactions);
 
   uniqueTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
 

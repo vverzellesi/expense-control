@@ -13,7 +13,7 @@ import {
 import { parseExpenseMessage } from "./parser"
 import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
 import { suggestCategory, detectInstallment } from "@/lib/categorizer"
-import { findDuplicate, filterDuplicates } from "@/lib/dedup"
+import { findDuplicate, filterDuplicates, deduplicateTransactions } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
 import { processBufferOCR } from "@/lib/ocr-parser"
 import { parseStatementText } from "@/lib/statement-parser"
@@ -188,6 +188,7 @@ export async function handleCallbackQuery(
     const parts = data.replace("phtg:", "").split(":")
     const importId = parts[0]
     const index = parseInt(parts[1])
+    if (isNaN(index)) return
     return handlePhotoToggle(chatId, messageId, userId, importId, index)
   }
 
@@ -195,6 +196,7 @@ export async function handleCallbackQuery(
     const parts = data.replace("phct:", "").split(":")
     const importId = parts[0]
     const index = parseInt(parts[1])
+    if (isNaN(index)) return
     return handlePhotoCategoryPicker(chatId, messageId, userId, importId, index)
   }
 
@@ -202,6 +204,7 @@ export async function handleCallbackQuery(
     const parts = data.replace("phsc:", "").split(":")
     const importId = parts[0]
     const index = parseInt(parts[1])
+    if (isNaN(index)) return
     const categoryId = parts[2]
     return handlePhotoSetCategory(chatId, messageId, userId, importId, index, categoryId)
   }
@@ -808,16 +811,7 @@ export async function handlePhotoMessage(
     }
 
     // Deduplicate within batch (same date + description + amount)
-    const uniqueInBatch = allTransactions.filter(
-      (t, index, self) =>
-        index ===
-        self.findIndex(
-          (other) =>
-            other.date.getTime() === t.date.getTime() &&
-            other.description === t.description &&
-            other.amount === t.amount
-        )
-    )
+    const uniqueInBatch = deduplicateTransactions(allTransactions)
 
     // Deduplicate against database
     const { unique, duplicateCount } = await filterDuplicates(userId, uniqueInBatch)
@@ -858,7 +852,7 @@ export async function handlePhotoMessage(
     const totalDupes = duplicateCount + inBatchDupes
     const lines = [
       `📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`,
-      `💰 Total: R$ ${total.toFixed(2).replace(".", ",")}`,
+      `💰 Total: ${formatCurrency(total)}`,
     ]
     if (totalDupes > 0) {
       lines.push(`⚠️ ${totalDupes} duplicata(s) removida(s)`)
@@ -986,7 +980,7 @@ function buildReviewPage(
     const globalIndex = start + i
     const status = t.selected ? "✅" : "❌"
     const dateStr = new Date(t.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
-    const amountStr = `R$ ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`
+    const amountStr = formatCurrency(Math.abs(t.amount))
     const catName = categories.find(c => c.id === t.categoryId)?.name || "Sem categoria"
     lines.push(`${globalIndex + 1}. ${status} ${dateStr} ${t.description}  ${amountStr}`)
     lines.push(`   └ ${catName}`)
@@ -1112,7 +1106,12 @@ export async function handlePhotoSetCategory(
 
   if (transactionIndex < 0 || transactionIndex >= payload.transactions.length) return
 
-  payload.transactions[transactionIndex].categoryId = categoryId
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, userId },
+  })
+  if (!category) return
+
+  payload.transactions[transactionIndex].categoryId = category.id
 
   await prisma.telegramPendingImport.update({
     where: { id: importId },
@@ -1166,7 +1165,7 @@ export async function handlePhotoCategoryPicker(
   const page = Math.floor(transactionIndex / REVIEW_PAGE_SIZE)
   keyboard.push([{ text: "↩ Voltar", callback_data: `phrv:${importId}:${page}` }])
 
-  const amountStr = `R$ ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`
+  const amountStr = formatCurrency(Math.abs(t.amount))
   return editMessageText(
     chatId,
     messageId,
@@ -1199,7 +1198,7 @@ export async function handlePhotoBackToSummary(
 
   const lines = [
     `📊 ${bank || "Extrato"} — ${transactions.length} transações`,
-    `💰 Total selecionado: R$ ${total.toFixed(2).replace(".", ",")}`,
+    `💰 Total selecionado: ${formatCurrency(total)}`,
   ]
   if (deselected > 0) {
     lines.push(`❌ ${deselected} desmarcada(s)`)
