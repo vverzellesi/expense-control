@@ -12,7 +12,7 @@ import {
 } from "./client"
 import { parseExpenseMessage } from "./parser"
 import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
-import { suggestCategory, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer"
+import { suggestCategory, detectInstallment } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
 import { processBufferOCR } from "@/lib/ocr-parser"
@@ -636,6 +636,10 @@ export async function handleCsvConfirm(
   )
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export async function handlePhotoMessage(
   message: TelegramMessage,
   userId: string
@@ -644,83 +648,161 @@ export async function handlePhotoMessage(
   const photo = message.photo
   if (!photo || photo.length === 0) return
 
-  // Use largest resolution (last element in Telegram's photo array)
   const largestPhoto = photo[photo.length - 1]
+  const mediaGroupId = message.media_group_id || `single_${message.message_id}`
 
+  // Phase 1: Store file_id in queue
+  await prisma.telegramPhotoQueue.create({
+    data: {
+      chatId: String(chatId),
+      userId,
+      mediaGroupId,
+      fileId: largestPhoto.file_id,
+    },
+  })
+
+  // Wait for all photos in the group to arrive
+  await sleep(3000)
+
+  // Phase 2: Try to claim this batch atomically
+  const claimed = await prisma.telegramPhotoQueue.updateMany({
+    where: { mediaGroupId, claimed: false },
+    data: { claimed: true },
+  })
+
+  if (claimed.count === 0) {
+    // Another handler already claimed this batch
+    return
+  }
+
+  // Phase 3: Process all photos in the batch
   try {
-    await sendMessage(chatId, "📸 Processando imagem...")
+    const queueItems = await prisma.telegramPhotoQueue.findMany({
+      where: { mediaGroupId },
+      orderBy: { createdAt: "asc" },
+    })
 
-    // Download photo as Buffer
-    const filePath = await getFile(largestPhoto.file_id)
-    if (!filePath) {
-      return sendMessage(chatId, "Erro ao acessar a imagem. Tente novamente.")
-    }
-    const buffer = await downloadFileBuffer(filePath)
+    const totalPhotos = queueItems.length
+    const allTransactions: Array<{
+      description: string
+      amount: number
+      date: Date
+      categoryId: string | null
+      type: string
+      selected: boolean
+      isInstallment: boolean
+      currentInstallment: number | null
+      totalInstallments: number | null
+    }> = []
+    let lastBank = ""
 
-    // OCR
-    const ocrResult = await processBufferOCR(buffer)
-    if (!ocrResult.text || ocrResult.text.trim().length === 0) {
-      return sendMessage(chatId, "Não foi possível extrair texto da imagem. Verifique se a foto está legível.")
-    }
+    // Send initial progress message
+    const progressMsg = await sendMessage(chatId, `📸 Processando imagem 1 de ${totalPhotos}...`)
+    const progressMessageId = progressMsg?.result?.message_id
 
-    // Parse statement text
-    let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence)
-    if (parseResult.transactions.length === 0) {
-      const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence)
-      if (notificationResult) {
-        parseResult = notificationResult
+    for (let i = 0; i < queueItems.length; i++) {
+      const item = queueItems[i]
+
+      try {
+        // Download photo
+        const filePath = await getFile(item.fileId)
+        if (!filePath) continue
+        const buffer = await downloadFileBuffer(filePath)
+
+        // OCR
+        const ocrResult = await processBufferOCR(buffer)
+        if (!ocrResult.text || ocrResult.text.trim().length === 0) continue
+
+        // Parse
+        let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence)
+        if (parseResult.transactions.length === 0) {
+          const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence)
+          if (notificationResult) parseResult = notificationResult
+        }
+
+        if (parseResult.bank) lastBank = parseResult.bank
+
+        // Categorize
+        for (const t of parseResult.transactions) {
+          const suggested = await suggestCategory(t.description, userId)
+          const installment = detectInstallment(t.description)
+
+          allTransactions.push({
+            description: t.description,
+            amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
+            date: t.date instanceof Date ? t.date : new Date(t.date),
+            categoryId: suggested?.id || null,
+            type: t.type || "EXPENSE",
+            selected: true,
+            isInstallment: installment.isInstallment,
+            currentInstallment: installment.currentInstallment || null,
+            totalInstallments: installment.totalInstallments || null,
+          })
+        }
+      } catch (error) {
+        console.error(`Error processing photo ${i + 1}:`, error)
+      }
+
+      // Update progress
+      if (progressMessageId && i < queueItems.length - 1) {
+        try {
+          await editMessageText(
+            chatId,
+            progressMessageId,
+            `📸 Processando imagem ${i + 2} de ${totalPhotos}... (${allTransactions.length} transações)`
+          )
+        } catch {
+          // Ignore edit errors (e.g., message not modified)
+        }
       }
     }
 
-    if (parseResult.transactions.length === 0) {
-      return sendMessage(chatId, "Nenhuma transação encontrada na imagem. Certifique-se de que a foto do extrato está clara e legível.")
+    // Cleanup queue
+    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId } })
+
+    if (allTransactions.length === 0) {
+      const msg = "Nenhuma transação encontrada nas imagens. Certifique-se de que as fotos estão claras e legíveis."
+      if (progressMessageId) {
+        return editMessageText(chatId, progressMessageId, msg)
+      }
+      return sendMessage(chatId, msg)
     }
 
-    // Categorize and detect installments/recurring
-    const categorizedTransactions = []
-    for (const t of parseResult.transactions) {
-      const suggested = await suggestCategory(t.description, userId)
-      const installment = detectInstallment(t.description)
-      const recurring = detectRecurringTransaction(t.description)
+    // Deduplicate within batch (same date + description + amount)
+    const uniqueInBatch = allTransactions.filter(
+      (t, index, self) =>
+        index ===
+        self.findIndex(
+          (other) =>
+            other.date.getTime() === t.date.getTime() &&
+            other.description === t.description &&
+            other.amount === t.amount
+        )
+    )
 
-      categorizedTransactions.push({
-        description: t.description,
-        amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
-        date: t.date,
-        categoryId: suggested?.id || null,
-        type: t.type || "EXPENSE",
-        selected: true,
-        isInstallment: installment.isInstallment,
-        currentInstallment: installment.currentInstallment || null,
-        totalInstallments: installment.totalInstallments || null,
-        isRecurring: recurring.isRecurring,
-        recurringName: recurring.recurringName || null,
-      })
-    }
-
-    // Filter duplicates
-    const transactionsForDedup = categorizedTransactions.map(t => ({
-      ...t,
-      date: t.date instanceof Date ? t.date : new Date(t.date),
-    }))
-    const { unique, duplicateCount } = await filterDuplicates(userId, transactionsForDedup)
+    // Deduplicate against database
+    const { unique, duplicateCount } = await filterDuplicates(userId, uniqueInBatch)
 
     if (unique.length === 0) {
-      return sendMessage(chatId, `Todas as ${categorizedTransactions.length} transações já existem no sistema.`)
+      const msg = `Todas as ${uniqueInBatch.length} transações já existem no sistema.`
+      if (progressMessageId) {
+        return editMessageText(chatId, progressMessageId, msg)
+      }
+      return sendMessage(chatId, msg)
     }
 
-    // Calculate total
     const total = unique.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+    const inBatchDupes = allTransactions.length - uniqueInBatch.length
 
-    // Store in TelegramPendingImport
+    // Store pending import
     await prisma.telegramPendingImport.deleteMany({
       where: { expiresAt: { lt: new Date() } },
     })
 
     const payload = {
       transactions: unique.map(t => ({ ...t, selected: true })),
-      bank: parseResult.bank,
-      confidence: parseResult.averageConfidence,
+      bank: lastBank,
+      confidence: 0,
     }
 
     const pendingImport = await prisma.telegramPendingImport.create({
@@ -728,32 +810,42 @@ export async function handlePhotoMessage(
         userId,
         chatId: String(chatId),
         payload: JSON.stringify(payload),
-        origin: parseResult.bank,
+        origin: lastBank,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     })
 
-    // Build summary message
+    // Build summary
+    const totalDupes = duplicateCount + inBatchDupes
     const lines = [
-      `📊 ${parseResult.bank} — ${categorizedTransactions.length} transações encontradas`,
+      `📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`,
       `💰 Total: R$ ${total.toFixed(2).replace(".", ",")}`,
     ]
-    if (duplicateCount > 0) {
-      lines.push(`⚠️ ${duplicateCount} duplicata(s) removida(s)`)
+    if (totalDupes > 0) {
+      lines.push(`⚠️ ${totalDupes} duplicata(s) removida(s)`)
     }
     lines.push(`✅ ${unique.length} pronta(s) para importar`)
 
-    return sendMessage(chatId, lines.join("\n"), {
+    const summaryText = lines.join("\n")
+    const keyboard = {
       reply_markup: {
         inline_keyboard: [[
           { text: "✅ Importar", callback_data: `phcf:${pendingImport.id}` },
           { text: "❌ Cancelar", callback_data: `phcc:${pendingImport.id}` },
         ]],
       },
-    })
+    }
+
+    if (progressMessageId) {
+      return editMessageText(chatId, progressMessageId, summaryText, keyboard)
+    }
+    return sendMessage(chatId, summaryText, keyboard)
+
   } catch (error) {
-    console.error("Photo import error:", error)
-    return sendMessage(chatId, "Erro ao processar a imagem. Tente novamente.")
+    console.error("Photo batch import error:", error)
+    // Cleanup on error
+    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId } }).catch(() => {})
+    return sendMessage(chatId, "Erro ao processar as imagens. Tente novamente.")
   }
 }
 

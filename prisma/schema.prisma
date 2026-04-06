@@ -56,6 +56,7 @@ model User {
   telegramLink           TelegramLink?
   telegramLinkTokens     TelegramLinkToken[]
   telegramPendingImports TelegramPendingImport[]
+  telegramPhotoQueue     TelegramPhotoQueue[]
 }
 
 model Account {
@@ -620,5 +621,21 @@ model TelegramPendingImport {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
+
+model TelegramPhotoQueue {
+  id            String   @id @default(cuid())
+  chatId        String
+  userId        String
+  mediaGroupId  String
+  fileId        String
+  claimed       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaGroupId, fileId])
+  @@index([mediaGroupId])
   @@index([userId])
 }
