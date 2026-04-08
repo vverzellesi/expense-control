@@ -900,8 +900,6 @@ export async function handlePhotoConfirm(
     return editMessageText(chatId, messageId, "Erro: importação não encontrada.")
   }
 
-  await prisma.telegramPendingImport.delete({ where: { id: importId } })
-
   const { transactions: allTransactions } = JSON.parse(pending.payload) as {
     transactions: Array<{
       description: string
@@ -932,6 +930,9 @@ export async function handlePhotoConfirm(
     })),
     pending.origin
   )
+
+  // Delete pending import only after successful import
+  await prisma.telegramPendingImport.delete({ where: { id: importId } }).catch(() => {})
 
   const parts = [`✅ ${result.created.length} transações importadas`]
   if (result.skippedCount > 0) parts.push(`⚠️ ${result.skippedCount} duplicatas ignoradas`)
