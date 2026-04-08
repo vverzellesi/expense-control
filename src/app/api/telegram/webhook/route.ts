@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
+import { waitUntil } from "@vercel/functions"
 import { handleUpdate } from "@/lib/telegram/bot"
 import type { TelegramUpdate } from "@/lib/telegram/client"
+
+export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,14 +22,18 @@ export async function POST(request: NextRequest) {
 
     const update: TelegramUpdate = await request.json()
 
-    await handleUpdate(update)
+    // Process in the background so Telegram gets an immediate 200 response.
+    // Without this, heavy operations like OCR cause Telegram to time out
+    // and retry the webhook repeatedly, creating duplicate progress messages.
+    waitUntil(
+      handleUpdate(update).catch(err =>
+        console.error("Telegram handler error:", err)
+      )
+    )
 
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error("Telegram webhook error:", error)
-    return NextResponse.json(
-      { error: "Internal error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ ok: true })
   }
 }

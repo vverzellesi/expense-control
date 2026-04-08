@@ -180,7 +180,7 @@ export async function handleCallbackQuery(
   if (data.startsWith("phrv:")) {
     const parts = data.replace("phrv:", "").split(":")
     const importId = parts[0]
-    const page = parseInt(parts[1]) || 0
+    const page = Math.max(0, parseInt(parts[1]) || 0)
     return handlePhotoReview(chatId, messageId, userId, importId, page)
   }
 
@@ -707,8 +707,10 @@ export async function handlePhotoMessage(
   await sleep(3000)
 
   // Phase 2: Try to claim this batch atomically
+  // Filter by userId to prevent cross-user data leakage when
+  // mediaGroupId collides (e.g. single_<message_id> across chats)
   const claimed = await prisma.telegramPhotoQueue.updateMany({
-    where: { mediaGroupId, claimed: false },
+    where: { mediaGroupId, userId, claimed: false },
     data: { claimed: true },
   })
 
@@ -720,7 +722,7 @@ export async function handlePhotoMessage(
   // Phase 3: Process all photos in the batch
   try {
     const queueItems = await prisma.telegramPhotoQueue.findMany({
-      where: { mediaGroupId },
+      where: { mediaGroupId, userId },
       orderBy: { createdAt: "asc" },
     })
 
@@ -800,7 +802,7 @@ export async function handlePhotoMessage(
     }
 
     // Cleanup queue
-    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId } })
+    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId, userId } })
 
     if (allTransactions.length === 0) {
       const msg = "Nenhuma transação encontrada nas imagens. Certifique-se de que as fotos estão claras e legíveis."
@@ -878,7 +880,7 @@ export async function handlePhotoMessage(
   } catch (error) {
     console.error("Photo batch import error:", error)
     // Cleanup on error
-    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId } }).catch(() => {})
+    await prisma.telegramPhotoQueue.deleteMany({ where: { mediaGroupId, userId } }).catch(() => {})
     return sendMessage(chatId, "Erro ao processar as imagens. Tente novamente.")
   }
 }
@@ -899,8 +901,6 @@ export async function handlePhotoConfirm(
   if (pending.userId !== userId) {
     return editMessageText(chatId, messageId, "Erro: importação não encontrada.")
   }
-
-  await prisma.telegramPendingImport.delete({ where: { id: importId } })
 
   const { transactions: allTransactions } = JSON.parse(pending.payload) as {
     transactions: Array<{
@@ -932,6 +932,9 @@ export async function handlePhotoConfirm(
     })),
     pending.origin
   )
+
+  // Delete pending import only after successful import
+  await prisma.telegramPendingImport.delete({ where: { id: importId } }).catch(() => {})
 
   const parts = [`✅ ${result.created.length} transações importadas`]
   if (result.skippedCount > 0) parts.push(`⚠️ ${result.skippedCount} duplicatas ignoradas`)
