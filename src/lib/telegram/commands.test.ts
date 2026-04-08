@@ -552,7 +552,7 @@ describe("handlePhotoMessage - media group batching", () => {
       expect.objectContaining({ data: expect.objectContaining({ mediaGroupId: "group-1", fileId: "large" }) })
     )
     expect(prisma.telegramPhotoQueue.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { mediaGroupId: "group-1", claimed: false } })
+      expect.objectContaining({ where: { mediaGroupId: "group-1", userId: "user-1", claimed: false } })
     )
   })
 
@@ -666,7 +666,7 @@ describe("handlePhotoMessage - media group batching", () => {
     await promise
 
     // Should clean up queue entries on error
-    expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-err" } })
+    expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-err", userId: "user-1" } })
     // Should send error message
     expect(mockSendMessage).toHaveBeenCalledWith(12345, expect.stringContaining("Erro ao processar"))
   })
