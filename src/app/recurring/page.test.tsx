@@ -78,8 +78,9 @@ describe('RecurringPage - total value display', () => {
       expect(screen.queryByText('Carregando...')).toBeNull()
     })
 
-    // Total should be 120 + 30 = 150 (excluding inactive 50)
-    expect(screen.getByText('R$ 150,00')).toBeInTheDocument()
+    // Total (120 + 30 = 150) is shown in both the "Previsto" stats card and
+    // the bottom "Total:" header — assert at least one instance exists.
+    expect(screen.getAllByText('R$ 150,00').length).toBeGreaterThan(0)
   })
 
   it('shows income total when there are active income items', async () => {
@@ -95,9 +96,9 @@ describe('RecurringPage - total value display', () => {
       expect(screen.queryByText('Carregando...')).toBeNull()
     })
 
-    expect(screen.getByText('R$ 100,00')).toBeInTheDocument()
+    expect(screen.getAllByText('R$ 100,00').length).toBeGreaterThan(0)
     expect(screen.getByText('Receita:')).toBeInTheDocument()
-    expect(screen.getByText('R$ 5.000,00')).toBeInTheDocument()
+    expect(screen.getAllByText('R$ 5.000,00').length).toBeGreaterThan(0)
   })
 
   it('does not show income label when no active income items exist', async () => {
@@ -113,7 +114,7 @@ describe('RecurringPage - total value display', () => {
       expect(screen.queryByText('Carregando...')).toBeNull()
     })
 
-    expect(screen.getByText('R$ 100,00')).toBeInTheDocument()
+    expect(screen.getAllByText('R$ 100,00').length).toBeGreaterThan(0)
     expect(screen.queryByText('Receita:')).not.toBeInTheDocument()
   })
 
