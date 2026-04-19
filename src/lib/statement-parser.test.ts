@@ -242,33 +242,35 @@ Resgate RDB
 });
 
 describe("Nubank credit card invoice parsing (PDF)", () => {
-  // Real text extracted by unpdf from a Nubank credit card invoice PDF
-  const NUBANK_INVOICE_PDF_TEXT = `RAISSA SINDEAUX DE LIMA
+  // Fictional fixture modeled after the Nubank invoice PDF layout produced by unpdf.
+  // Structure is preserved (headers, section markers, "DD MMM •••• NNNN" lines)
+  // so the parser logic is exercised, but all names/merchants/amounts are made up.
+  const NUBANK_INVOICE_PDF_TEXT = `TITULAR FICTICIO
 FATURA 13 ABR 2026 EMISSÃO E ENVIO 04 ABR 2026
 RESUMO DA FATURA ATUAL
-Fatura anterior R$ 891,67
-Pagamento recebido −R$ 891,67
-Total de compras de todos os cartões, 04 MAR a 04 ABR R$ 567,61
-Outros lançamentos R$ 21,44
-Total a pagar R$ 589,05
-Pagamento mínimo para não ficar em atraso R$ 106,58
+Fatura anterior R$ 100,00
+Pagamento recebido −R$ 100,00
+Total de compras de todos os cartões, 04 MAR a 04 ABR R$ 500,00
+Outros lançamentos R$ 10,00
+Total a pagar R$ 510,00
+Pagamento mínimo para não ficar em atraso R$ 100,00
 PRÓXIMAS FATURAS
 Fechamento da próxima fatura 04 MAI 2026
 TRANSAÇÕES DE 04 MAR A 04 ABR
-Raissa S Lima R$ 567,61
-04 MAR •••• 3746 Odp-Outlet D*Odptech - Parcela 2/2 R$ 31,78
-04 MAR •••• 3746 Shein *Shein.Com - Parcela 5/6 R$ 63,50
-05 MAR •••• 3746 Mercadolivre*2produto R$ 163,73
-11 MAR •••• 3746 Applecombill R$ 5,90
-17 MAR •••• 3746 Cobasi R$ 63,80
-21 MAR •••• 1747 Lojas Americanas R$ 14,76
-23 MAR •••• 3746 Amazon R$ 56,81
-23 MAR •••• 3746 Amazon R$ 6,47
-23 MAR •••• 3746 Amazon R$ 33,32
-01 ABR •••• 1747 Uber Uber *Trip Help.U R$ 116,04
-02 ABR •••• 3746 Jjlanches R$ 11,50
-Pagamentos e Financiamentos -R$ 870,22
-13 MAR Pagamento em 13 MAR −R$ 891,67
+Titular Fict R$ 500,00
+04 MAR •••• 1111 Loja A - Parcela 2/2 R$ 10,00
+04 MAR •••• 1111 Loja B - Parcela 5/6 R$ 20,00
+05 MAR •••• 1111 Loja C R$ 30,00
+11 MAR •••• 1111 Servico X R$ 40,00
+17 MAR •••• 1111 Servico Y R$ 50,00
+21 MAR •••• 2222 Loja D R$ 60,00
+23 MAR •••• 1111 Loja E R$ 70,00
+23 MAR •••• 1111 Loja E R$ 80,00
+23 MAR •••• 1111 Loja E R$ 90,00
+01 ABR •••• 2222 Transporte F R$ 40,00
+02 ABR •••• 1111 Restaurante G R$ 10,00
+Pagamentos e Financiamentos -R$ 100,00
+13 MAR Pagamento em 13 MAR −R$ 100,00
 13 MAR Juros de dívida encerrada R$ 0,67
 login com sua conta Nubank.`;
 
@@ -285,25 +287,21 @@ login com sua conta Nubank.`;
   it("parses descriptions without card number noise", () => {
     const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
     const descriptions = result.transactions.map((t) => t.description);
-    expect(descriptions).toContain("Odp-Outlet D*Odptech - Parcela 2/2");
-    expect(descriptions).toContain("Shein *Shein.Com - Parcela 5/6");
-    expect(descriptions).toContain("Mercadolivre*2produto");
-    expect(descriptions).toContain("Uber Uber *Trip Help.U");
+    expect(descriptions).toContain("Loja A - Parcela 2/2");
+    expect(descriptions).toContain("Loja B - Parcela 5/6");
+    expect(descriptions).toContain("Loja C");
+    expect(descriptions).toContain("Transporte F");
   });
 
   it("parses amounts as negative (EXPENSE) for purchases", () => {
     const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
-    const netflix = result.transactions.find((t) =>
-      t.description.startsWith("Applecombill")
-    );
-    expect(netflix?.amount).toBe(-5.9);
-    expect(netflix?.type).toBe("EXPENSE");
+    const servicoX = result.transactions.find((t) => t.description === "Servico X");
+    expect(servicoX?.amount).toBe(-40);
+    expect(servicoX?.type).toBe("EXPENSE");
 
-    const uber = result.transactions.find((t) =>
-      t.description.startsWith("Uber")
-    );
-    expect(uber?.amount).toBe(-116.04);
-    expect(uber?.type).toBe("EXPENSE");
+    const transporte = result.transactions.find((t) => t.description === "Transporte F");
+    expect(transporte?.amount).toBe(-40);
+    expect(transporte?.type).toBe("EXPENSE");
   });
 
   it("uses invoice FATURA date to infer transaction year", () => {
@@ -322,22 +320,24 @@ login com sua conta Nubank.`;
 
   it("keeps duplicate merchants on same day with different amounts", () => {
     const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
-    // Three Amazon purchases on 23 MAR with different amounts
-    const amazons = result.transactions.filter(
-      (t) => t.description === "Amazon" && t.date.getDate() === 23
+    const lojaE = result.transactions.filter(
+      (t) => t.description === "Loja E" && t.date.getDate() === 23
     );
-    expect(amazons.length).toBe(3);
-    const amounts = amazons.map((t) => Math.abs(t.amount)).sort((a, b) => a - b);
-    expect(amounts).toEqual([6.47, 33.32, 56.81]);
+    expect(lojaE.length).toBe(3);
+    const amounts = lojaE.map((t) => Math.abs(t.amount)).sort((a, b) => a - b);
+    expect(amounts).toEqual([70, 80, 90]);
   });
 });
 
 describe("Itaú credit card invoice parsing (screenshot OCR)", () => {
-  // Real Tesseract output from an Itaú open-invoice screenshot (2026-04-19)
+  // Fictional fixture modeled after Tesseract output for an Itaú open-invoice
+  // screenshot. Layout is preserved (status bar, "DD de MONTH" headers,
+  // "cartão físico/virtual" sub-labels, garbled icon tokens before amount),
+  // but all merchants/amounts are made up.
   const ITAU_INVOICE_OCR_TEXT = `18:45 all FS
 < O)
 ontem, 18 de abril
-BP lojas americanas R$ 85,75 y
+BP loja alpha R$ 85,75 y
 cartão físico em 2x
 16 de abril
 99*
@@ -347,15 +347,15 @@ cartão físico
 torii
 ER e R$10,00 >
 cartão físico
-ferragens padak
+loja beta
 CC) 2gemsP R$18,90 >
 cartão físico
-6 shopee *lojapexin R$ 40,79 y
+6 servico gama R$ 40,79 y
 cartão virtual em 2x
 10 de abril
-E shopee *girusmov R$ 170,70 y
+E servico delta R$ 170,70 y
 cartão virtual em 3x
-conta vivo
+conta teste
 C) ie o R$99,99 >
 cartão virtual`;
 
@@ -374,38 +374,38 @@ cartão virtual`;
     const descriptions = result.transactions.map((t) => t.description);
     expect(descriptions).toContain("99*");
     expect(descriptions).toContain("torii");
-    expect(descriptions).toContain("ferragens padak");
-    expect(descriptions).toContain("conta vivo");
+    expect(descriptions).toContain("loja beta");
+    expect(descriptions).toContain("conta teste");
   });
 
   it("strips leading icon noise from inline descriptions", () => {
     const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
     const descriptions = result.transactions.map((t) => t.description);
-    expect(descriptions).toContain("lojas americanas");
-    expect(descriptions).toContain("shopee *lojapexin");
-    expect(descriptions).toContain("shopee *girusmov");
+    expect(descriptions).toContain("loja alpha");
+    expect(descriptions).toContain("servico gama");
+    expect(descriptions).toContain("servico delta");
   });
 
   it("parses amounts as EXPENSE with correct values", () => {
     const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
-    const americanas = result.transactions.find((t) => t.description === "lojas americanas");
-    expect(americanas?.amount).toBe(-85.75);
-    expect(americanas?.type).toBe("EXPENSE");
+    const alpha = result.transactions.find((t) => t.description === "loja alpha");
+    expect(alpha?.amount).toBe(-85.75);
+    expect(alpha?.type).toBe("EXPENSE");
 
-    const vivo = result.transactions.find((t) => t.description === "conta vivo");
-    expect(vivo?.amount).toBe(-99.99);
+    const teste = result.transactions.find((t) => t.description === "conta teste");
+    expect(teste?.amount).toBe(-99.99);
 
-    const girusmov = result.transactions.find((t) => t.description === "shopee *girusmov");
-    expect(girusmov?.amount).toBe(-170.70);
+    const delta = result.transactions.find((t) => t.description === "servico delta");
+    expect(delta?.amount).toBe(-170.70);
   });
 
   it("parses DD de MONTH date headers with correct year (2026)", () => {
     const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
-    const apr18 = result.transactions.find((t) => t.description === "lojas americanas");
+    const apr18 = result.transactions.find((t) => t.description === "loja alpha");
     expect(apr18?.date.getDate()).toBe(18);
     expect(apr18?.date.getMonth()).toBe(3); // April
 
-    const apr10 = result.transactions.find((t) => t.description === "shopee *girusmov");
+    const apr10 = result.transactions.find((t) => t.description === "servico delta");
     expect(apr10?.date.getDate()).toBe(10);
     expect(apr10?.date.getMonth()).toBe(3);
   });
