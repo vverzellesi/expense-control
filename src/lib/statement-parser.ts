@@ -1048,6 +1048,130 @@ export function extractCreditCardScreenshotTransactions(
 // Keep old name as alias for backwards compatibility in tests
 export const extractC6CreditCardTransactions = extractCreditCardScreenshotTransactions;
 
+// ===== Nubank credit card invoice format (PDF) =====
+
+// Invoice header: "FATURA 13 ABR 2026" — used as year reference
+const NUBANK_INVOICE_HEADER_PATTERN =
+  /FATURA\s+(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{4})/i;
+
+// Purchase line: "04 MAR •••• 3746 Odp-Outlet D*Odptech - Parcela 2/2 R$ 31,78"
+// Captures: day, month, card4, description, amount (with optional minus sign)
+const NUBANK_INVOICE_PURCHASE_PATTERN =
+  /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{3,}\s*(\d{4})\s+(.+?)\s+([−\-]?\s*R\$\s*[\d.,]+)\s*$/i;
+
+/**
+ * Detect if this is a Nubank credit card invoice PDF.
+ * Signals (need at least 2): Nubank brand + FATURA header / TRANSAÇÕES section /
+ * "Total a pagar" / purchase lines with "DD MMM •••• NNNN".
+ */
+function isNubankCreditCardInvoice(text: string): boolean {
+  const hasNubankRef =
+    /NUBANK/i.test(text) ||
+    /Nu\s*Pagamentos/i.test(text) ||
+    /Nu\s*Financeira/i.test(text);
+  if (!hasNubankRef) return false;
+
+  const hasInvoiceHeader = NUBANK_INVOICE_HEADER_PATTERN.test(text);
+  const hasTransactionSection =
+    /TRANSA[CÇ][OÕ]ES\s+DE\s+\d{1,2}\s+\w+\s+A\s+\d{1,2}\s+\w+/i.test(text);
+  const hasTotalAPagar = /Total\s+a\s+pagar/i.test(text);
+  const hasPurchaseLines =
+    /\d{1,2}\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{3,}\s*\d{4}/i.test(
+      text
+    );
+
+  const signalCount = [
+    hasInvoiceHeader,
+    hasTransactionSection,
+    hasTotalAPagar,
+    hasPurchaseLines,
+  ].filter(Boolean).length;
+  return signalCount >= 2;
+}
+
+/**
+ * Extract invoice FATURA date (used to infer transaction year).
+ */
+function extractNubankInvoiceDate(text: string): Date | null {
+  const match = text.match(NUBANK_INVOICE_HEADER_PATTERN);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const month = MONTH_ABBREV[match[2].toLowerCase()];
+  const year = parseInt(match[3], 10);
+  if (month === undefined) return null;
+  const date = new Date(year, month, day);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Parse a single Nubank invoice purchase line.
+ */
+function parseNubankInvoicePurchase(
+  line: string,
+  referenceDate: Date,
+  confidence: number
+): StatementTransaction | null {
+  const match = line.match(NUBANK_INVOICE_PURCHASE_PATTERN);
+  if (!match) return null;
+
+  const day = parseInt(match[1], 10);
+  const month = MONTH_ABBREV[match[2].toLowerCase()];
+  if (month === undefined || day < 1 || day > 31) return null;
+
+  // Infer year: if transaction month > reference month, it's from previous year
+  // (e.g., invoice FATURA is JAN 2026, transaction is DEZ → DEZ 2025)
+  const refMonth = referenceDate.getMonth();
+  const refYear = referenceDate.getFullYear();
+  const year = month > refMonth ? refYear - 1 : refYear;
+
+  const date = new Date(year, month, day);
+  if (isNaN(date.getTime())) return null;
+
+  const description = match[4].trim();
+  if (description.length < 2) return null;
+
+  const amountStr = match[5];
+  const rawAmount = parseAmount(amountStr);
+  if (rawAmount === 0) return null;
+
+  // Minus sign (− U+2212 or - U+002D) before R$ indicates refund/estorno
+  const isNegative = /^\s*[−\-]/.test(amountStr);
+  const type: TransactionType = isNegative ? "INCOME" : "EXPENSE";
+
+  return {
+    date,
+    description,
+    amount: type === "EXPENSE" ? -Math.abs(rawAmount) : Math.abs(rawAmount),
+    type,
+    confidence,
+  };
+}
+
+/**
+ * Extract purchase transactions from a Nubank credit card invoice PDF.
+ * Only parses lines with the "DD MMM •••• NNNN" card marker — fees,
+ * payments and interest lines are intentionally skipped.
+ */
+export function extractNubankCreditCardInvoiceTransactions(
+  text: string,
+  confidence: number
+): StatementTransaction[] {
+  const referenceDate = extractNubankInvoiceDate(text) || new Date();
+  const transactions: StatementTransaction[] = [];
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  for (const line of lines) {
+    const tx = parseNubankInvoicePurchase(line, referenceDate, confidence);
+    if (tx) transactions.push(tx);
+  }
+
+  return transactions;
+}
+
 /**
  * Main function to parse statement text from OCR
  */
@@ -1067,6 +1191,16 @@ export function parseStatementText(
     if (cardTransactions.length > 0) {
       return buildParseResult(detectCardScreenshotBank(text), cardTransactions);
     }
+  }
+
+  // Detect Nubank credit card invoice PDF (must come before Nubank bank statement
+  // check, since invoices also contain "Nubank" + "DD MMM YYYY" headers)
+  if (isNubankCreditCardInvoice(text)) {
+    const invoiceTxs = extractNubankCreditCardInvoiceTransactions(
+      text,
+      ocrConfidence
+    );
+    return buildParseResult("Fatura Nubank", invoiceTxs);
   }
 
   // Detect if this is a C6 Bank statement

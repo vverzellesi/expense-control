@@ -241,6 +241,97 @@ Resgate RDB
   });
 });
 
+describe("Nubank credit card invoice parsing (PDF)", () => {
+  // Real text extracted by unpdf from a Nubank credit card invoice PDF
+  const NUBANK_INVOICE_PDF_TEXT = `RAISSA SINDEAUX DE LIMA
+FATURA 13 ABR 2026 EMISSÃO E ENVIO 04 ABR 2026
+RESUMO DA FATURA ATUAL
+Fatura anterior R$ 891,67
+Pagamento recebido −R$ 891,67
+Total de compras de todos os cartões, 04 MAR a 04 ABR R$ 567,61
+Outros lançamentos R$ 21,44
+Total a pagar R$ 589,05
+Pagamento mínimo para não ficar em atraso R$ 106,58
+PRÓXIMAS FATURAS
+Fechamento da próxima fatura 04 MAI 2026
+TRANSAÇÕES DE 04 MAR A 04 ABR
+Raissa S Lima R$ 567,61
+04 MAR •••• 3746 Odp-Outlet D*Odptech - Parcela 2/2 R$ 31,78
+04 MAR •••• 3746 Shein *Shein.Com - Parcela 5/6 R$ 63,50
+05 MAR •••• 3746 Mercadolivre*2produto R$ 163,73
+11 MAR •••• 3746 Applecombill R$ 5,90
+17 MAR •••• 3746 Cobasi R$ 63,80
+21 MAR •••• 1747 Lojas Americanas R$ 14,76
+23 MAR •••• 3746 Amazon R$ 56,81
+23 MAR •••• 3746 Amazon R$ 6,47
+23 MAR •••• 3746 Amazon R$ 33,32
+01 ABR •••• 1747 Uber Uber *Trip Help.U R$ 116,04
+02 ABR •••• 3746 Jjlanches R$ 11,50
+Pagamentos e Financiamentos -R$ 870,22
+13 MAR Pagamento em 13 MAR −R$ 891,67
+13 MAR Juros de dívida encerrada R$ 0,67
+login com sua conta Nubank.`;
+
+  it("extracts all 11 purchases from the invoice", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    expect(result.transactions.length).toBe(11);
+  });
+
+  it("sets bank as Fatura Nubank", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    expect(result.bank).toBe("Fatura Nubank");
+  });
+
+  it("parses descriptions without card number noise", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("Odp-Outlet D*Odptech - Parcela 2/2");
+    expect(descriptions).toContain("Shein *Shein.Com - Parcela 5/6");
+    expect(descriptions).toContain("Mercadolivre*2produto");
+    expect(descriptions).toContain("Uber Uber *Trip Help.U");
+  });
+
+  it("parses amounts as negative (EXPENSE) for purchases", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    const netflix = result.transactions.find((t) =>
+      t.description.startsWith("Applecombill")
+    );
+    expect(netflix?.amount).toBe(-5.9);
+    expect(netflix?.type).toBe("EXPENSE");
+
+    const uber = result.transactions.find((t) =>
+      t.description.startsWith("Uber")
+    );
+    expect(uber?.amount).toBe(-116.04);
+    expect(uber?.type).toBe("EXPENSE");
+  });
+
+  it("uses invoice FATURA date to infer transaction year", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    // Invoice is FATURA 13 ABR 2026, so all transactions are 2026
+    const mar4 = result.transactions.find(
+      (t) => t.date.getDate() === 4 && t.date.getMonth() === 2
+    );
+    expect(mar4?.date.getFullYear()).toBe(2026);
+
+    const abr2 = result.transactions.find(
+      (t) => t.date.getDate() === 2 && t.date.getMonth() === 3
+    );
+    expect(abr2?.date.getFullYear()).toBe(2026);
+  });
+
+  it("keeps duplicate merchants on same day with different amounts", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    // Three Amazon purchases on 23 MAR with different amounts
+    const amazons = result.transactions.filter(
+      (t) => t.description === "Amazon" && t.date.getDate() === 23
+    );
+    expect(amazons.length).toBe(3);
+    const amounts = amazons.map((t) => Math.abs(t.amount)).sort((a, b) => a - b);
+    expect(amounts).toEqual([6.47, 33.32, 56.81]);
+  });
+});
+
 describe("C6 credit card invoice parsing (screenshot OCR)", () => {
   // Real OCR output from C6 credit card screenshot
   const C6_CARD_OCR_TEXT = `08:51 SED
