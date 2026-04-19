@@ -343,11 +343,12 @@ function parseAmount(amountStr: string): number {
   // Remove R$ and spaces
   let cleaned = amountStr.replace(/R\$?\s*/g, "").trim();
 
-  // Check for negative indicator
-  const isNegative = cleaned.includes("-") || cleaned.endsWith("D");
+  // Check for negative indicator — U+002D HYPHEN-MINUS or U+2212 MINUS SIGN
+  // (Nubank PDFs use U+2212 for negative amounts; most other sources use U+002D)
+  const isNegative = /[−-]/.test(cleaned) || cleaned.endsWith("D");
 
   // Remove signs and D/C indicators
-  cleaned = cleaned.replace(/[-+CD]/g, "").trim();
+  cleaned = cleaned.replace(/[−\-+CD]/g, "").trim();
 
   // Remove thousand separators and convert decimal separator
   cleaned = cleaned.replace(/\./g, "").replace(",", ".");
@@ -1057,7 +1058,7 @@ const NUBANK_INVOICE_HEADER_PATTERN =
 // Purchase line: "04 MAR •••• 3746 Odp-Outlet D*Odptech - Parcela 2/2 R$ 31,78"
 // Captures: day, month, card4, description, amount (with optional minus sign)
 const NUBANK_INVOICE_PURCHASE_PATTERN =
-  /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{3,}\s*(\d{4})\s+(.+?)\s+([−\-]?\s*R\$\s*[\d.,]+)\s*$/i;
+  /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{2,}\s*(\d{4})\s+(.+?)\s+([−\-]?\s*R\$\s*[\d.,]+)\s*$/i;
 
 /**
  * Detect if this is a Nubank credit card invoice PDF.
@@ -1076,7 +1077,7 @@ function isNubankCreditCardInvoice(text: string): boolean {
     /TRANSA[CÇ][OÕ]ES\s+DE\s+\d{1,2}\s+\w+\s+A\s+\d{1,2}\s+\w+/i.test(text);
   const hasTotalAPagar = /Total\s+a\s+pagar/i.test(text);
   const hasPurchaseLines =
-    /\d{1,2}\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{3,}\s*\d{4}/i.test(
+    /\d{1,2}\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{2,}\s*\d{4}/i.test(
       text
     );
 
@@ -1130,13 +1131,12 @@ function parseNubankInvoicePurchase(
   const description = match[4].trim();
   if (description.length < 2) return null;
 
-  const amountStr = match[5];
-  const rawAmount = parseAmount(amountStr);
+  const rawAmount = parseAmount(match[5]);
   if (rawAmount === 0) return null;
 
-  // Minus sign (− U+2212 or - U+002D) before R$ indicates refund/estorno
-  const isNegative = /^\s*[−\-]/.test(amountStr);
-  const type: TransactionType = isNegative ? "INCOME" : "EXPENSE";
+  // parseAmount already applies the minus sign (U+2212 or U+002D) to the value.
+  // Negative purchase → refund/estorno (INCOME). Positive → regular purchase (EXPENSE).
+  const type: TransactionType = rawAmount < 0 ? "INCOME" : "EXPENSE";
 
   return {
     date,
@@ -1221,10 +1221,15 @@ function isItauNoiseLine(line: string): boolean {
 /**
  * Extract transactions from an Itaú credit card invoice screenshot.
  * Uses state tracking: date headers + pending description + amount lines.
+ *
+ * `referenceDate` is used to infer the year for "DD de MONTH" headers (which
+ * don't carry the year). Defaults to `new Date()` — pass an explicit value
+ * in tests to avoid time-dependent behavior.
  */
 export function extractItauInvoiceTransactions(
   text: string,
-  confidence: number
+  confidence: number,
+  referenceDate: Date = new Date()
 ): StatementTransaction[] {
   const lines = text
     .split("\n")
@@ -1235,9 +1240,8 @@ export function extractItauInvoiceTransactions(
   let currentDate: Date | null = null;
   let pendingDescription: string | null = null;
 
-  const now = new Date();
-  const refYear = now.getFullYear();
-  const refMonth = now.getMonth();
+  const refYear = referenceDate.getFullYear();
+  const refMonth = referenceDate.getMonth();
 
   const amountPattern = /R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
 
@@ -1251,8 +1255,9 @@ export function extractItauInvoiceTransactions(
         // If month is in the future relative to today, it's from the previous year
         const year = month > refMonth ? refYear - 1 : refYear;
         currentDate = new Date(year, month, day);
+        pendingDescription = null;
       }
-      pendingDescription = null;
+      // Invalid date lookup → keep previous state, don't silently re-attribute
       continue;
     }
 
@@ -1262,9 +1267,7 @@ export function extractItauInvoiceTransactions(
     if (amountMatch) {
       if (!currentDate) continue;
 
-      const amount = parseFloat(
-        amountMatch[1].replace(/\./g, "").replace(",", ".")
-      );
+      const amount = parseAmount(amountMatch[0]);
       if (amount <= 0) continue;
 
       const amountStart = line.indexOf(amountMatch[0]);
