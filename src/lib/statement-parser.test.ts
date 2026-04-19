@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStatementText, detectBank, isC6CreditCardInvoice, isCreditCardScreenshot, extractC6CreditCardTransactions, extractCreditCardScreenshotTransactions } from "./statement-parser";
+import { parseStatementText, detectBank, isC6CreditCardInvoice, isCreditCardScreenshot, extractC6CreditCardTransactions, extractCreditCardScreenshotTransactions, extractItauInvoiceTransactions } from "./statement-parser";
 
 describe("Nubank statement parsing", () => {
   const NUBANK_STATEMENT_TEXT = `
@@ -238,6 +238,268 @@ Resgate RDB
     // First transaction has no amount, gets skipped. Resgate RDB has 100,00.
     expect(result.transactions.length).toBe(1);
     expect(result.transactions[0].description).toMatch(/Resgate RDB/);
+  });
+});
+
+describe("Nubank credit card invoice parsing (PDF)", () => {
+  // Fictional fixture modeled after the Nubank invoice PDF layout produced by unpdf.
+  // Structure is preserved (headers, section markers, "DD MMM •••• NNNN" lines)
+  // so the parser logic is exercised, but all names/merchants/amounts are made up.
+  const NUBANK_INVOICE_PDF_TEXT = `TITULAR FICTICIO
+FATURA 13 ABR 2026 EMISSÃO E ENVIO 04 ABR 2026
+RESUMO DA FATURA ATUAL
+Fatura anterior R$ 100,00
+Pagamento recebido −R$ 100,00
+Total de compras de todos os cartões, 04 MAR a 04 ABR R$ 500,00
+Outros lançamentos R$ 10,00
+Total a pagar R$ 510,00
+Pagamento mínimo para não ficar em atraso R$ 100,00
+PRÓXIMAS FATURAS
+Fechamento da próxima fatura 04 MAI 2026
+TRANSAÇÕES DE 04 MAR A 04 ABR
+Titular Fict R$ 500,00
+04 MAR •••• 1111 Loja A - Parcela 2/2 R$ 10,00
+04 MAR •••• 1111 Loja B - Parcela 5/6 R$ 20,00
+05 MAR •••• 1111 Loja C R$ 30,00
+11 MAR •••• 1111 Servico X R$ 40,00
+17 MAR •••• 1111 Servico Y R$ 50,00
+21 MAR •••• 2222 Loja D R$ 60,00
+23 MAR •••• 1111 Loja E R$ 70,00
+23 MAR •••• 1111 Loja E R$ 80,00
+23 MAR •••• 1111 Loja E R$ 90,00
+01 ABR •••• 2222 Transporte F R$ 40,00
+02 ABR •••• 1111 Restaurante G R$ 10,00
+Pagamentos e Financiamentos -R$ 100,00
+13 MAR Pagamento em 13 MAR −R$ 100,00
+13 MAR Juros de dívida encerrada R$ 0,67
+login com sua conta Nubank.`;
+
+  it("extracts all 11 purchases from the invoice", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    expect(result.transactions.length).toBe(11);
+  });
+
+  it("sets bank as Fatura Nubank", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    expect(result.bank).toBe("Fatura Nubank");
+  });
+
+  it("parses descriptions without card number noise", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("Loja A - Parcela 2/2");
+    expect(descriptions).toContain("Loja B - Parcela 5/6");
+    expect(descriptions).toContain("Loja C");
+    expect(descriptions).toContain("Transporte F");
+  });
+
+  it("parses amounts as negative (EXPENSE) for purchases", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    const servicoX = result.transactions.find((t) => t.description === "Servico X");
+    expect(servicoX?.amount).toBe(-40);
+    expect(servicoX?.type).toBe("EXPENSE");
+
+    const transporte = result.transactions.find((t) => t.description === "Transporte F");
+    expect(transporte?.amount).toBe(-40);
+    expect(transporte?.type).toBe("EXPENSE");
+  });
+
+  it("uses invoice FATURA date to infer transaction year", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    // Invoice is FATURA 13 ABR 2026, so all transactions are 2026
+    const mar4 = result.transactions.find(
+      (t) => t.date.getDate() === 4 && t.date.getMonth() === 2
+    );
+    expect(mar4?.date.getFullYear()).toBe(2026);
+
+    const abr2 = result.transactions.find(
+      (t) => t.date.getDate() === 2 && t.date.getMonth() === 3
+    );
+    expect(abr2?.date.getFullYear()).toBe(2026);
+  });
+
+  it("keeps duplicate merchants on same day with different amounts", () => {
+    const result = parseStatementText(NUBANK_INVOICE_PDF_TEXT, 95);
+    const lojaE = result.transactions.filter(
+      (t) => t.description === "Loja E" && t.date.getDate() === 23
+    );
+    expect(lojaE.length).toBe(3);
+    const amounts = lojaE.map((t) => Math.abs(t.amount)).sort((a, b) => a - b);
+    expect(amounts).toEqual([70, 80, 90]);
+  });
+
+  it("treats refund (minus sign before R$) as INCOME", () => {
+    const text = `Titular Ficticio
+FATURA 13 ABR 2026
+Total a pagar R$ 100,00
+TRANSAÇÕES DE 04 MAR A 04 ABR
+Nubank
+15 MAR •••• 1111 Loja Z - Estorno −R$ 50,00
+20 MAR •••• 1111 Loja Z R$ 30,00`;
+    const result = parseStatementText(text, 95);
+    const estorno = result.transactions.find((t) => t.amount > 0);
+    expect(estorno).toBeDefined();
+    expect(estorno?.type).toBe("INCOME");
+    expect(estorno?.amount).toBe(50);
+  });
+
+  it("infers previous year for transactions after reference month (Dec -> Jan)", () => {
+    const text = `Titular Ficticio
+FATURA 10 JAN 2026
+Total a pagar R$ 100,00
+TRANSAÇÕES DE 10 DEZ A 10 JAN
+Nubank
+15 DEZ •••• 1111 Loja Natal R$ 150,00
+05 JAN •••• 1111 Loja Ano Novo R$ 200,00`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(2);
+    const dez = result.transactions.find((t) => t.description === "Loja Natal");
+    expect(dez?.date.getFullYear()).toBe(2025);
+    expect(dez?.date.getMonth()).toBe(11); // December
+
+    const jan = result.transactions.find((t) => t.description === "Loja Ano Novo");
+    expect(jan?.date.getFullYear()).toBe(2026);
+    expect(jan?.date.getMonth()).toBe(0); // January
+  });
+
+  it("does not misclassify Nubank bank statement as invoice", () => {
+    const text = `
+Nu Financeira
+01 MAR 2026 Total de entradas + 500,00
+Transferência recebida pelo Pix JOAO TESTE
+500,00
+`;
+    const result = parseStatementText(text, 95);
+    expect(result.bank).toBe("Extrato Nubank");
+  });
+
+  it("matches purchase line with only 2 bullet chars (lenient OCR)", () => {
+    const text = `Titular Ficticio
+FATURA 13 ABR 2026
+Total a pagar R$ 100,00
+TRANSAÇÕES DE 04 MAR A 04 ABR
+Nubank
+15 MAR •• 1111 Loja OCR Garbled R$ 40,00`;
+    const result = parseStatementText(text, 95);
+    expect(result.transactions.length).toBe(1);
+    expect(result.transactions[0].description).toBe("Loja OCR Garbled");
+  });
+});
+
+describe("Itaú credit card invoice parsing (screenshot OCR)", () => {
+  // Fictional fixture modeled after Tesseract output for an Itaú open-invoice
+  // screenshot. Layout is preserved (status bar, "DD de MONTH" headers,
+  // "cartão físico/virtual" sub-labels, garbled icon tokens before amount),
+  // but all merchants/amounts are made up.
+  const ITAU_INVOICE_OCR_TEXT = `18:45 all FS
+< O)
+ontem, 18 de abril
+BP loja alpha R$ 85,75 y
+cartão físico em 2x
+16 de abril
+99*
+CC) ao R$13,50 >
+cartão físico
+15 de abril
+torii
+ER e R$10,00 >
+cartão físico
+loja beta
+CC) 2gemsP R$18,90 >
+cartão físico
+6 servico gama R$ 40,79 y
+cartão virtual em 2x
+10 de abril
+E servico delta R$ 170,70 y
+cartão virtual em 3x
+conta teste
+C) ie o R$99,99 >
+cartão virtual`;
+
+  it("extracts all 7 transactions", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    expect(result.transactions.length).toBe(7);
+  });
+
+  it("sets bank as Fatura Itaú", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    expect(result.bank).toBe("Fatura Itaú");
+  });
+
+  it("uses pending description line when amount line is OCR-garbled", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("99*");
+    expect(descriptions).toContain("torii");
+    expect(descriptions).toContain("loja beta");
+    expect(descriptions).toContain("conta teste");
+  });
+
+  it("strips leading icon noise from inline descriptions", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("loja alpha");
+    expect(descriptions).toContain("servico gama");
+    expect(descriptions).toContain("servico delta");
+  });
+
+  it("parses amounts as EXPENSE with correct values", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const alpha = result.transactions.find((t) => t.description === "loja alpha");
+    expect(alpha?.amount).toBe(-85.75);
+    expect(alpha?.type).toBe("EXPENSE");
+
+    const teste = result.transactions.find((t) => t.description === "conta teste");
+    expect(teste?.amount).toBe(-99.99);
+
+    const delta = result.transactions.find((t) => t.description === "servico delta");
+    expect(delta?.amount).toBe(-170.70);
+  });
+
+  it("parses DD de MONTH date headers with correct day and month", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const apr18 = result.transactions.find((t) => t.description === "loja alpha");
+    expect(apr18?.date.getDate()).toBe(18);
+    expect(apr18?.date.getMonth()).toBe(3); // April
+
+    const apr10 = result.transactions.find((t) => t.description === "servico delta");
+    expect(apr10?.date.getDate()).toBe(10);
+    expect(apr10?.date.getMonth()).toBe(3);
+  });
+
+  it("uses explicit referenceDate to infer year deterministically", () => {
+    const reference = new Date(2026, 3, 19); // 19 April 2026
+    const txs = extractItauInvoiceTransactions(ITAU_INVOICE_OCR_TEXT, 80, reference);
+    const apr18 = txs.find((t) => t.description === "loja alpha");
+    expect(apr18?.date.getFullYear()).toBe(2026);
+    expect(apr18?.date.getMonth()).toBe(3);
+  });
+
+  it("infers previous year when transaction month is future of reference month", () => {
+    // Reference: 10 Feb 2026. A December entry must be from 2025.
+    const reference = new Date(2026, 1, 10);
+    const text = `15:00 all
+< O)
+15 de dezembro
+BP loja natal R$ 50,00
+cartão físico`;
+    const txs = extractItauInvoiceTransactions(text, 80, reference);
+    expect(txs).toHaveLength(1);
+    expect(txs[0].date.getFullYear()).toBe(2025);
+    expect(txs[0].date.getMonth()).toBe(11); // December
+  });
+
+  it("handles março with cedilla in date header", () => {
+    const reference = new Date(2026, 3, 19);
+    const text = `15:00 all
+< O)
+15 de março
+BP loja teste R$ 25,00
+cartão físico`;
+    const txs = extractItauInvoiceTransactions(text, 80, reference);
+    expect(txs).toHaveLength(1);
+    expect(txs[0].date.getMonth()).toBe(2); // March
+    expect(txs[0].date.getDate()).toBe(15);
   });
 });
 

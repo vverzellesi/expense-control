@@ -20,6 +20,36 @@ const mockMemberships = [
   },
 ]
 
+// The component calls two endpoints in parallel: /api/spaces and
+// /api/spaces/active/permissions. Route responses by URL so tests don't
+// have to care about resolution order.
+function mockSpacesApi(options: {
+  spaces?: unknown
+  spacesOk?: boolean
+  permissions?: unknown
+  permissionsOk?: boolean
+} = {}) {
+  const {
+    spaces = mockMemberships,
+    spacesOk = true,
+    permissions = { isSpaceContext: false, spaceId: null },
+    permissionsOk = true,
+  } = options
+
+  mockFetch.mockImplementation((url: string) => {
+    if (url === '/api/spaces') {
+      return Promise.resolve({ ok: spacesOk, json: () => Promise.resolve(spaces) })
+    }
+    if (url === '/api/spaces/active/permissions') {
+      return Promise.resolve({ ok: permissionsOk, json: () => Promise.resolve(permissions) })
+    }
+    if (url === '/api/spaces/active') {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  })
+}
+
 describe('SpaceSwitcher', () => {
   beforeEach(() => {
     mockFetch.mockReset()
@@ -27,10 +57,7 @@ describe('SpaceSwitcher', () => {
   })
 
   it('renders nothing when user has no spaces', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve([]),
-    })
+    mockSpacesApi({ spaces: [] })
 
     const { container } = render(<SpaceSwitcher />)
 
@@ -40,10 +67,7 @@ describe('SpaceSwitcher', () => {
   })
 
   it('renders switcher when user has spaces', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockMemberships),
-    })
+    mockSpacesApi()
 
     render(<SpaceSwitcher />)
 
@@ -53,10 +77,7 @@ describe('SpaceSwitcher', () => {
   })
 
   it('shows personal account as default label', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockMemberships),
-    })
+    mockSpacesApi()
 
     render(<SpaceSwitcher />)
 
@@ -66,15 +87,7 @@ describe('SpaceSwitcher', () => {
   })
 
   it('switches to space when clicked', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockMemberships),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ activeSpaceId: 'space-1' }),
-      })
+    mockSpacesApi()
 
     render(<SpaceSwitcher />)
 
@@ -101,10 +114,7 @@ describe('SpaceSwitcher', () => {
   })
 
   it('handles fetch error gracefully', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve({ error: 'Unauthorized' }),
-    })
+    mockSpacesApi({ spacesOk: false, spaces: { error: 'Unauthorized' } })
 
     const { container } = render(<SpaceSwitcher />)
 

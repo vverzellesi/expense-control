@@ -343,11 +343,12 @@ function parseAmount(amountStr: string): number {
   // Remove R$ and spaces
   let cleaned = amountStr.replace(/R\$?\s*/g, "").trim();
 
-  // Check for negative indicator
-  const isNegative = cleaned.includes("-") || cleaned.endsWith("D");
+  // Check for negative indicator — U+002D HYPHEN-MINUS or U+2212 MINUS SIGN
+  // (Nubank PDFs use U+2212 for negative amounts; most other sources use U+002D)
+  const isNegative = /[−-]/.test(cleaned) || cleaned.endsWith("D");
 
   // Remove signs and D/C indicators
-  cleaned = cleaned.replace(/[-+CD]/g, "").trim();
+  cleaned = cleaned.replace(/[−\-+CD]/g, "").trim();
 
   // Remove thousand separators and convert decimal separator
   cleaned = cleaned.replace(/\./g, "").replace(",", ".");
@@ -1048,6 +1049,262 @@ export function extractCreditCardScreenshotTransactions(
 // Keep old name as alias for backwards compatibility in tests
 export const extractC6CreditCardTransactions = extractCreditCardScreenshotTransactions;
 
+// ===== Nubank credit card invoice format (PDF) =====
+
+// Invoice header: "FATURA 13 ABR 2026" — used as year reference
+const NUBANK_INVOICE_HEADER_PATTERN =
+  /FATURA\s+(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{4})/i;
+
+// Purchase line: "04 MAR •••• 3746 Odp-Outlet D*Odptech - Parcela 2/2 R$ 31,78"
+// Captures: day, month, card4, description, amount (with optional minus sign)
+const NUBANK_INVOICE_PURCHASE_PATTERN =
+  /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{2,}\s*(\d{4})\s+(.+?)\s+([−\-]?\s*R\$\s*[\d.,]+)\s*$/i;
+
+/**
+ * Detect if this is a Nubank credit card invoice PDF.
+ * Signals (need at least 2): Nubank brand + FATURA header / TRANSAÇÕES section /
+ * "Total a pagar" / purchase lines with "DD MMM •••• NNNN".
+ */
+function isNubankCreditCardInvoice(text: string): boolean {
+  const hasNubankRef =
+    /NUBANK/i.test(text) ||
+    /Nu\s*Pagamentos/i.test(text) ||
+    /Nu\s*Financeira/i.test(text);
+  if (!hasNubankRef) return false;
+
+  const hasInvoiceHeader = NUBANK_INVOICE_HEADER_PATTERN.test(text);
+  const hasTransactionSection =
+    /TRANSA[CÇ][OÕ]ES\s+DE\s+\d{1,2}\s+\w+\s+A\s+\d{1,2}\s+\w+/i.test(text);
+  const hasTotalAPagar = /Total\s+a\s+pagar/i.test(text);
+  const hasPurchaseLines =
+    /\d{1,2}\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+[•·\*]{2,}\s*\d{4}/i.test(
+      text
+    );
+
+  const signalCount = [
+    hasInvoiceHeader,
+    hasTransactionSection,
+    hasTotalAPagar,
+    hasPurchaseLines,
+  ].filter(Boolean).length;
+  return signalCount >= 2;
+}
+
+/**
+ * Extract invoice FATURA date (used to infer transaction year).
+ */
+function extractNubankInvoiceDate(text: string): Date | null {
+  const match = text.match(NUBANK_INVOICE_HEADER_PATTERN);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const month = MONTH_ABBREV[match[2].toLowerCase()];
+  const year = parseInt(match[3], 10);
+  if (month === undefined) return null;
+  const date = new Date(year, month, day);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Parse a single Nubank invoice purchase line.
+ */
+function parseNubankInvoicePurchase(
+  line: string,
+  referenceDate: Date,
+  confidence: number
+): StatementTransaction | null {
+  const match = line.match(NUBANK_INVOICE_PURCHASE_PATTERN);
+  if (!match) return null;
+
+  const day = parseInt(match[1], 10);
+  const month = MONTH_ABBREV[match[2].toLowerCase()];
+  if (month === undefined || day < 1 || day > 31) return null;
+
+  // Infer year: if transaction month > reference month, it's from previous year
+  // (e.g., invoice FATURA is JAN 2026, transaction is DEZ → DEZ 2025)
+  const refMonth = referenceDate.getMonth();
+  const refYear = referenceDate.getFullYear();
+  const year = month > refMonth ? refYear - 1 : refYear;
+
+  const date = new Date(year, month, day);
+  if (isNaN(date.getTime())) return null;
+
+  const description = match[4].trim();
+  if (description.length < 2) return null;
+
+  const rawAmount = parseAmount(match[5]);
+  if (rawAmount === 0) return null;
+
+  // parseAmount already applies the minus sign (U+2212 or U+002D) to the value.
+  // Negative purchase → refund/estorno (INCOME). Positive → regular purchase (EXPENSE).
+  const type: TransactionType = rawAmount < 0 ? "INCOME" : "EXPENSE";
+
+  return {
+    date,
+    description,
+    amount: type === "EXPENSE" ? -Math.abs(rawAmount) : Math.abs(rawAmount),
+    type,
+    confidence,
+  };
+}
+
+/**
+ * Extract purchase transactions from a Nubank credit card invoice PDF.
+ * Only parses lines with the "DD MMM •••• NNNN" card marker — fees,
+ * payments and interest lines are intentionally skipped.
+ */
+export function extractNubankCreditCardInvoiceTransactions(
+  text: string,
+  confidence: number
+): StatementTransaction[] {
+  const referenceDate = extractNubankInvoiceDate(text) || new Date();
+  const transactions: StatementTransaction[] = [];
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  for (const line of lines) {
+    const tx = parseNubankInvoicePurchase(line, referenceDate, confidence);
+    if (tx) transactions.push(tx);
+  }
+
+  return transactions;
+}
+
+// ===== Itaú credit card invoice screenshot format =====
+
+// Date header: "ontem, 18 de abril" or "15 de abril" (lowercase month, optional "ontem,")
+const ITAU_INVOICE_DATE_PATTERN =
+  /^(?:ontem,?\s*)?(\d{1,2})\s+de\s+(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s*$/i;
+
+// Card type line (noise): "cartão físico", "cartão virtual em 2x"
+const ITAU_CARD_TYPE_PATTERN =
+  /^cart[aã]o\s+(?:f[ií]sico|virtual)(?:\s+em\s+\d+x)?\s*$/i;
+
+/**
+ * Detect Itaú credit card invoice screenshot: multiple "DD de MONTH" headers +
+ * "cartão físico/virtual" sub-labels + R$ amounts.
+ */
+function isItauInvoiceScreenshot(text: string): boolean {
+  const lines = text.split("\n").map((l) => l.trim());
+  const dateHeaders = lines.filter((l) => ITAU_INVOICE_DATE_PATTERN.test(l)).length;
+  const cardTypes = lines.filter((l) => ITAU_CARD_TYPE_PATTERN.test(l)).length;
+  const hasAmounts = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/.test(text);
+  return dateHeaders >= 1 && cardTypes >= 1 && hasAmounts;
+}
+
+/**
+ * Strip OCR noise from start of inline description.
+ * Tesseract often prepends icon glyphs as 1-3 char tokens (e.g., "BP", "CC)", "6 ").
+ * Only strip the leading token when the rest still has a real merchant word (≥4 alpha chars).
+ */
+function cleanItauInlineDescription(text: string): string {
+  const trimmed = text.replace(/^[^a-zA-Z0-9*]+/, "").trim();
+  const match = trimmed.match(/^(\S{1,3})\s+(.+)$/);
+  if (match && /[a-zA-Z]{4,}/.test(match[2])) {
+    return match[2].replace(/\s+/g, " ").trim();
+  }
+  return trimmed.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Detect lines that are pure noise (status bar, navigation icons).
+ */
+function isItauNoiseLine(line: string): boolean {
+  if (/^\d{1,2}:\d{2}/.test(line)) return true; // status bar time
+  if (line.length <= 6 && /^[<>←→]/.test(line)) return true; // back/nav arrows
+  if (/^[^a-zA-Z0-9]+$/.test(line)) return true; // symbols only
+  return false;
+}
+
+/**
+ * Extract transactions from an Itaú credit card invoice screenshot.
+ * Uses state tracking: date headers + pending description + amount lines.
+ *
+ * `referenceDate` is used to infer the year for "DD de MONTH" headers (which
+ * don't carry the year). Defaults to `new Date()` — pass an explicit value
+ * in tests to avoid time-dependent behavior.
+ */
+export function extractItauInvoiceTransactions(
+  text: string,
+  confidence: number,
+  referenceDate: Date = new Date()
+): StatementTransaction[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const transactions: StatementTransaction[] = [];
+  let currentDate: Date | null = null;
+  let pendingDescription: string | null = null;
+
+  const refYear = referenceDate.getFullYear();
+  const refMonth = referenceDate.getMonth();
+
+  const amountPattern = /R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+
+  for (const line of lines) {
+    const dateMatch = line.match(ITAU_INVOICE_DATE_PATTERN);
+    if (dateMatch) {
+      const day = parseInt(dateMatch[1], 10);
+      const monthName = dateMatch[2].toLowerCase().replace("ç", "c");
+      const month = MONTH_FULL[monthName];
+      if (month !== undefined && day >= 1 && day <= 31) {
+        // If month is in the future relative to today, it's from the previous year
+        const year = month > refMonth ? refYear - 1 : refYear;
+        currentDate = new Date(year, month, day);
+        pendingDescription = null;
+      }
+      // Invalid date lookup → keep previous state, don't silently re-attribute
+      continue;
+    }
+
+    if (ITAU_CARD_TYPE_PATTERN.test(line)) continue;
+
+    const amountMatch = line.match(amountPattern);
+    if (amountMatch) {
+      if (!currentDate) continue;
+
+      const amount = parseAmount(amountMatch[0]);
+      if (amount <= 0) continue;
+
+      const amountStart = line.indexOf(amountMatch[0]);
+      const inlineDesc = cleanItauInlineDescription(line.substring(0, amountStart));
+
+      let description: string;
+      if (pendingDescription && pendingDescription.length >= 2) {
+        description = pendingDescription;
+      } else if (inlineDesc.length >= 3 && /[a-zA-Z]/.test(inlineDesc)) {
+        description = inlineDesc;
+      } else {
+        pendingDescription = null;
+        continue;
+      }
+
+      transactions.push({
+        date: new Date(currentDate),
+        description,
+        amount: -Math.abs(amount),
+        type: "EXPENSE",
+        confidence,
+      });
+
+      pendingDescription = null;
+      continue;
+    }
+
+    if (isItauNoiseLine(line)) continue;
+
+    if (line.length >= 2) {
+      pendingDescription = line;
+    }
+  }
+
+  return transactions;
+}
+
 /**
  * Main function to parse statement text from OCR
  */
@@ -1066,6 +1323,25 @@ export function parseStatementText(
     const cardTransactions = extractCreditCardScreenshotTransactions(text, ocrConfidence);
     if (cardTransactions.length > 0) {
       return buildParseResult(detectCardScreenshotBank(text), cardTransactions);
+    }
+  }
+
+  // Detect Nubank credit card invoice PDF (must come before Nubank bank statement
+  // check, since invoices also contain "Nubank" + "DD MMM YYYY" headers)
+  if (isNubankCreditCardInvoice(text)) {
+    const invoiceTxs = extractNubankCreditCardInvoiceTransactions(
+      text,
+      ocrConfidence
+    );
+    return buildParseResult("Fatura Nubank", invoiceTxs);
+  }
+
+  // Detect Itaú credit card invoice screenshot (uses "DD de MONTH" +
+  // "cartão físico/virtual" layout — different from "Fatura" header screenshots)
+  if (isItauInvoiceScreenshot(text)) {
+    const itauTxs = extractItauInvoiceTransactions(text, ocrConfidence);
+    if (itauTxs.length > 0) {
+      return buildParseResult("Fatura Itaú", itauTxs);
     }
   }
 
