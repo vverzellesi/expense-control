@@ -830,6 +830,14 @@ export default function ImportPage() {
     });
   }
 
+  // Map Tesseract status → Portuguese UI label
+  function translateOcrStatus(status: string): string {
+    if (/loading/i.test(status)) return "Carregando modelo de OCR...";
+    if (/initializing/i.test(status)) return "Inicializando OCR...";
+    if (/recognizing/i.test(status)) return "Reconhecendo texto...";
+    return "Processando OCR...";
+  }
+
   async function callOCRApi(file: File): Promise<{
     transactions: ExtendedTransaction[];
     origin: string;
@@ -837,43 +845,95 @@ export default function ImportPage() {
   }> {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("stream", "true");
 
-    const res = await fetch("/api/ocr", {
-      method: "POST",
-      body: formData,
-    });
+    const res = await fetch("/api/ocr", { method: "POST", body: formData });
 
-    // Handle non-JSON responses (e.g., 504 gateway timeout)
-    let data;
-    try {
-      data = await res.json();
-    } catch {
+    if (!res.ok || !res.body) {
+      // Fall back to JSON parse for HTTP-level errors
+      let errText = "";
+      try { errText = await res.text(); } catch { /* ignore */ }
       throw new Error(
         res.status === 504
           ? "O servidor demorou demais para processar. Tente com menos arquivos ou imagens menores."
-          : `Erro do servidor (${res.status}). Tente novamente.`
+          : errText || `Erro do servidor (${res.status}). Tente novamente.`
       );
     }
 
-    if (data.needsPassword) {
-      throw Object.assign(new Error("needsPassword"), { data });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    // Discriminated-union event shapes from /api/ocr streaming mode
+    type StreamEvent =
+      | { type: "progress"; status: string; progress: number }
+      | { type: "result"; transactions: ExtendedTransaction[]; origin: string; confidence: number; rawText?: string }
+      | { type: "password"; needsPassword: true; error?: string; savedPasswordFailed?: boolean }
+      | { type: "error"; error: string; status?: number };
+    let final: Extract<StreamEvent, { type: "result" }> | null = null;
+    let passwordEvent: Extract<StreamEvent, { type: "password" }> | null = null;
+    let errorEvent: Extract<StreamEvent, { type: "error" }> | null = null;
+
+    // Read the NDJSON stream. Each complete line is a JSON event.
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let event: StreamEvent;
+        try {
+          event = JSON.parse(line) as StreamEvent;
+        } catch {
+          continue;
+        }
+        if (event.type === "progress") {
+          // Tesseract "recognizing text" phase (progress 0..1) maps to 20..95%;
+          // earlier phases (loading/initializing) map to 5..20%.
+          const { status, progress } = event;
+          const pct = /recognizing/i.test(status)
+            ? 20 + Math.round(progress * 75)
+            : 5 + Math.round(progress * 15);
+          setOcrProgress(Math.min(95, Math.max(0, pct)));
+          setOcrProgressLabel(translateOcrStatus(status));
+        } else if (event.type === "result") {
+          final = event;
+        } else if (event.type === "password") {
+          passwordEvent = event;
+        } else if (event.type === "error") {
+          errorEvent = event;
+        }
+      }
     }
 
-    if (!res.ok) {
-      throw new Error(data.error || "Erro ao processar arquivo");
+    if (passwordEvent) {
+      throw Object.assign(new Error("needsPassword"), {
+        data: {
+          savedPasswordFailed: passwordEvent.savedPasswordFailed,
+          error: passwordEvent.error,
+        },
+      });
+    }
+    if (errorEvent) {
+      throw new Error(errorEvent.error);
+    }
+    if (!final) {
+      throw new Error("Resposta incompleta do servidor. Tente novamente.");
     }
 
     return {
-      transactions: normalizeTransactionDates(data.transactions),
-      origin: data.origin,
-      confidence: data.confidence,
+      transactions: normalizeTransactionDates(final.transactions),
+      origin: final.origin,
+      confidence: final.confidence,
     };
   }
 
   async function processOCR(file: File) {
-    const progressInterval = setInterval(() => {
-      setOcrProgress((prev) => Math.min(prev + 5, 90));
-    }, 500);
+    setOcrProgress(0);
+    setOcrProgressLabel("Enviando arquivo...");
 
     try {
       let result;
@@ -881,7 +941,6 @@ export default function ImportPage() {
         result = await callOCRApi(file);
       } catch (error: unknown) {
         if (error instanceof Error && error.message === "needsPassword") {
-          clearInterval(progressInterval);
           const errData = (error as Error & { data: { savedPasswordFailed?: boolean } }).data;
           setPendingFile(file);
           setNeedsPassword(true);
@@ -895,7 +954,6 @@ export default function ImportPage() {
         throw error;
       }
 
-      clearInterval(progressInterval);
       setOcrProgress(100);
 
       setOrigin(result.origin);
@@ -914,7 +972,7 @@ export default function ImportPage() {
 
       setStep("preview");
     } finally {
-      clearInterval(progressInterval);
+      // Progress is managed by the stream consumer now; nothing to clean up.
     }
   }
 
