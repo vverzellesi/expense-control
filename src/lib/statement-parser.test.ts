@@ -332,6 +332,85 @@ login com sua conta Nubank.`;
   });
 });
 
+describe("Itaú credit card invoice parsing (screenshot OCR)", () => {
+  // Real Tesseract output from an Itaú open-invoice screenshot (2026-04-19)
+  const ITAU_INVOICE_OCR_TEXT = `18:45 all FS
+< O)
+ontem, 18 de abril
+BP lojas americanas R$ 85,75 y
+cartão físico em 2x
+16 de abril
+99*
+CC) ao R$13,50 >
+cartão físico
+15 de abril
+torii
+ER e R$10,00 >
+cartão físico
+ferragens padak
+CC) 2gemsP R$18,90 >
+cartão físico
+6 shopee *lojapexin R$ 40,79 y
+cartão virtual em 2x
+10 de abril
+E shopee *girusmov R$ 170,70 y
+cartão virtual em 3x
+conta vivo
+C) ie o R$99,99 >
+cartão virtual`;
+
+  it("extracts all 7 transactions", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    expect(result.transactions.length).toBe(7);
+  });
+
+  it("sets bank as Fatura Itaú", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    expect(result.bank).toBe("Fatura Itaú");
+  });
+
+  it("uses pending description line when amount line is OCR-garbled", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("99*");
+    expect(descriptions).toContain("torii");
+    expect(descriptions).toContain("ferragens padak");
+    expect(descriptions).toContain("conta vivo");
+  });
+
+  it("strips leading icon noise from inline descriptions", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const descriptions = result.transactions.map((t) => t.description);
+    expect(descriptions).toContain("lojas americanas");
+    expect(descriptions).toContain("shopee *lojapexin");
+    expect(descriptions).toContain("shopee *girusmov");
+  });
+
+  it("parses amounts as EXPENSE with correct values", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const americanas = result.transactions.find((t) => t.description === "lojas americanas");
+    expect(americanas?.amount).toBe(-85.75);
+    expect(americanas?.type).toBe("EXPENSE");
+
+    const vivo = result.transactions.find((t) => t.description === "conta vivo");
+    expect(vivo?.amount).toBe(-99.99);
+
+    const girusmov = result.transactions.find((t) => t.description === "shopee *girusmov");
+    expect(girusmov?.amount).toBe(-170.70);
+  });
+
+  it("parses DD de MONTH date headers with correct year (2026)", () => {
+    const result = parseStatementText(ITAU_INVOICE_OCR_TEXT, 80);
+    const apr18 = result.transactions.find((t) => t.description === "lojas americanas");
+    expect(apr18?.date.getDate()).toBe(18);
+    expect(apr18?.date.getMonth()).toBe(3); // April
+
+    const apr10 = result.transactions.find((t) => t.description === "shopee *girusmov");
+    expect(apr10?.date.getDate()).toBe(10);
+    expect(apr10?.date.getMonth()).toBe(3);
+  });
+});
+
 describe("C6 credit card invoice parsing (screenshot OCR)", () => {
   // Real OCR output from C6 credit card screenshot
   const C6_CARD_OCR_TEXT = `08:51 SED

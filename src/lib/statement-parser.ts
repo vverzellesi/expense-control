@@ -1172,6 +1172,136 @@ export function extractNubankCreditCardInvoiceTransactions(
   return transactions;
 }
 
+// ===== Itaú credit card invoice screenshot format =====
+
+// Date header: "ontem, 18 de abril" or "15 de abril" (lowercase month, optional "ontem,")
+const ITAU_INVOICE_DATE_PATTERN =
+  /^(?:ontem,?\s*)?(\d{1,2})\s+de\s+(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s*$/i;
+
+// Card type line (noise): "cartão físico", "cartão virtual em 2x"
+const ITAU_CARD_TYPE_PATTERN =
+  /^cart[aã]o\s+(?:f[ií]sico|virtual)(?:\s+em\s+\d+x)?\s*$/i;
+
+/**
+ * Detect Itaú credit card invoice screenshot: multiple "DD de MONTH" headers +
+ * "cartão físico/virtual" sub-labels + R$ amounts.
+ */
+function isItauInvoiceScreenshot(text: string): boolean {
+  const lines = text.split("\n").map((l) => l.trim());
+  const dateHeaders = lines.filter((l) => ITAU_INVOICE_DATE_PATTERN.test(l)).length;
+  const cardTypes = lines.filter((l) => ITAU_CARD_TYPE_PATTERN.test(l)).length;
+  const hasAmounts = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/.test(text);
+  return dateHeaders >= 1 && cardTypes >= 1 && hasAmounts;
+}
+
+/**
+ * Strip OCR noise from start of inline description.
+ * Tesseract often prepends icon glyphs as 1-3 char tokens (e.g., "BP", "CC)", "6 ").
+ * Only strip the leading token when the rest still has a real merchant word (≥4 alpha chars).
+ */
+function cleanItauInlineDescription(text: string): string {
+  const trimmed = text.replace(/^[^a-zA-Z0-9*]+/, "").trim();
+  const match = trimmed.match(/^(\S{1,3})\s+(.+)$/);
+  if (match && /[a-zA-Z]{4,}/.test(match[2])) {
+    return match[2].replace(/\s+/g, " ").trim();
+  }
+  return trimmed.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Detect lines that are pure noise (status bar, navigation icons).
+ */
+function isItauNoiseLine(line: string): boolean {
+  if (/^\d{1,2}:\d{2}/.test(line)) return true; // status bar time
+  if (line.length <= 6 && /^[<>←→]/.test(line)) return true; // back/nav arrows
+  if (/^[^a-zA-Z0-9]+$/.test(line)) return true; // symbols only
+  return false;
+}
+
+/**
+ * Extract transactions from an Itaú credit card invoice screenshot.
+ * Uses state tracking: date headers + pending description + amount lines.
+ */
+export function extractItauInvoiceTransactions(
+  text: string,
+  confidence: number
+): StatementTransaction[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const transactions: StatementTransaction[] = [];
+  let currentDate: Date | null = null;
+  let pendingDescription: string | null = null;
+
+  const now = new Date();
+  const refYear = now.getFullYear();
+  const refMonth = now.getMonth();
+
+  const amountPattern = /R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+
+  for (const line of lines) {
+    const dateMatch = line.match(ITAU_INVOICE_DATE_PATTERN);
+    if (dateMatch) {
+      const day = parseInt(dateMatch[1], 10);
+      const monthName = dateMatch[2].toLowerCase().replace("ç", "c");
+      const month = MONTH_FULL[monthName];
+      if (month !== undefined && day >= 1 && day <= 31) {
+        // If month is in the future relative to today, it's from the previous year
+        const year = month > refMonth ? refYear - 1 : refYear;
+        currentDate = new Date(year, month, day);
+      }
+      pendingDescription = null;
+      continue;
+    }
+
+    if (ITAU_CARD_TYPE_PATTERN.test(line)) continue;
+
+    const amountMatch = line.match(amountPattern);
+    if (amountMatch) {
+      if (!currentDate) continue;
+
+      const amount = parseFloat(
+        amountMatch[1].replace(/\./g, "").replace(",", ".")
+      );
+      if (amount <= 0) continue;
+
+      const amountStart = line.indexOf(amountMatch[0]);
+      const inlineDesc = cleanItauInlineDescription(line.substring(0, amountStart));
+
+      let description: string;
+      if (pendingDescription && pendingDescription.length >= 2) {
+        description = pendingDescription;
+      } else if (inlineDesc.length >= 3 && /[a-zA-Z]/.test(inlineDesc)) {
+        description = inlineDesc;
+      } else {
+        pendingDescription = null;
+        continue;
+      }
+
+      transactions.push({
+        date: new Date(currentDate),
+        description,
+        amount: -Math.abs(amount),
+        type: "EXPENSE",
+        confidence,
+      });
+
+      pendingDescription = null;
+      continue;
+    }
+
+    if (isItauNoiseLine(line)) continue;
+
+    if (line.length >= 2) {
+      pendingDescription = line;
+    }
+  }
+
+  return transactions;
+}
+
 /**
  * Main function to parse statement text from OCR
  */
@@ -1201,6 +1331,15 @@ export function parseStatementText(
       ocrConfidence
     );
     return buildParseResult("Fatura Nubank", invoiceTxs);
+  }
+
+  // Detect Itaú credit card invoice screenshot (uses "DD de MONTH" +
+  // "cartão físico/virtual" layout — different from "Fatura" header screenshots)
+  if (isItauInvoiceScreenshot(text)) {
+    const itauTxs = extractItauInvoiceTransactions(text, ocrConfidence);
+    if (itauTxs.length > 0) {
+      return buildParseResult("Fatura Itaú", itauTxs);
+    }
   }
 
   // Detect if this is a C6 Bank statement
