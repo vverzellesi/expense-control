@@ -160,11 +160,11 @@ describe("POST /api/ocr (pipeline)", () => {
     expect(data.needsPassword).toBe(true);
   });
 
-  it("erro no_transactions_found retorna 400", async () => {
+  it("erro no_transactions_found retorna 400 SEM expor rawText (data leak fix)", async () => {
     mockParsePipeline.mockResolvedValue({
       kind: "error",
       error: "no_transactions_found",
-      rawText: "lixo",
+      rawText: "dado financeiro bruto sensível",
     });
 
     const response = await POST(makeRequest(makeFile("nada.pdf")));
@@ -172,7 +172,8 @@ describe("POST /api/ocr (pipeline)", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toContain("Nenhuma transação");
-    expect(data.rawText).toBe("lixo");
+    // Contrato de segurança: OCR bruto NÃO vai pro cliente
+    expect(data.rawText).toBeUndefined();
   });
 
   it("erro invalid_file retorna 400 com a message do pipeline", async () => {

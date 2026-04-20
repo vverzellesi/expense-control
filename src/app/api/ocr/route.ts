@@ -131,11 +131,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ needsPassword: true });
       }
       if (result.error === "no_transactions_found") {
+        // NÃO expor rawText ao cliente (dado financeiro bruto).
+        // Se quiser observabilidade server-side, loggar aqui.
         return NextResponse.json(
           {
             error:
               "Nenhuma transação encontrada no arquivo. Certifique-se de que o extrato está claro e legível.",
-            rawText: result.rawText,
           },
           { status: 400 }
         );
