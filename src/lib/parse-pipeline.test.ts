@@ -3,7 +3,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@/lib/rate-limit/ai-quota");
 vi.mock("@/lib/ai-parser/gemini-client");
 vi.mock("@/lib/ai-parser/invoice-parser");
-vi.mock("@/lib/ocr-parser");
+// Preserva PdfPasswordError (classe real) e mocka apenas funções.
+vi.mock("@/lib/ocr-parser", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ocr-parser")>();
+  return {
+    ...actual,
+    processFile: vi.fn(),
+    processImageOCR: vi.fn(),
+    processBufferOCR: vi.fn(),
+    isPdfEncrypted: vi.fn(),
+  };
+});
 vi.mock("@/lib/statement-parser");
 vi.mock("@/lib/notification-parser");
 
