@@ -16,6 +16,10 @@ vi.mock("@/lib/auth-utils", () => ({
 
 vi.mock("@/lib/rate-limit/ai-quota", () => ({
   getUsage: mockGetUsage,
+  currentYearMonth: () => {
+    const now = new Date();
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  },
 }));
 
 import { GET } from "./route";

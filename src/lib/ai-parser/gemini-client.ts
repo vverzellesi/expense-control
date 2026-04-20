@@ -56,7 +56,11 @@ class RealGeminiClient implements GeminiClient {
         throw new Error("Gemini retornou resposta vazia");
       }
 
-      return JSON.parse(text) as AiInvoiceOutput;
+      const output = JSON.parse(text);
+      if (!output || !Array.isArray(output.transactions)) {
+        throw new Error("Gemini retornou JSON com estrutura inválida");
+      }
+      return output as AiInvoiceOutput;
     } finally {
       clearTimeout(timeoutHandle);
     }

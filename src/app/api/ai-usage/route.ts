@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, unauthorizedResponse } from "@/lib/auth-utils";
-import { getUsage } from "@/lib/rate-limit/ai-quota";
+import { getUsage, currentYearMonth } from "@/lib/rate-limit/ai-quota";
 
 export const runtime = "nodejs";
-
-function currentYearMonth(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 export async function GET(_request: NextRequest) {
   try {

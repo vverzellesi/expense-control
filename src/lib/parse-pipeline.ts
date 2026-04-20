@@ -127,7 +127,7 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
         };
       }
     } catch (err) {
-      console.warn("STEP 1 (notif) falhou, seguindo para STEP 2:", err);
+      console.warn("STEP 1 (notif) falhou, seguindo para STEP 2:", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -159,7 +159,7 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
         }
         // Gate reprovou → release + fallback (no finally abaixo)
       } catch (err) {
-        console.warn("AI falhou, release quota + fallback:", err);
+        console.warn("AI falhou, release quota + fallback:", err instanceof Error ? err.message : String(err));
         // PdfPasswordError não deveria chegar aqui (preflight filtrou),
         // mas por via das dúvidas, liberamos e caímos no STEP 3.
       } finally {
@@ -224,7 +224,7 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
     return {
       kind: "error",
       error: "internal",
-      message: err instanceof Error ? err.message : "Erro desconhecido",
+      message: "Erro ao processar arquivo",
     };
   }
 }

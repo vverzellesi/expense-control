@@ -209,9 +209,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("OCR processing error:", error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Erro ao processar arquivo",
-      },
+      { error: "Erro ao processar arquivo" },
       { status: 500 }
     );
   }
