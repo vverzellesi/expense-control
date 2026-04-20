@@ -40,16 +40,8 @@ vi.mock("./client", () => ({
   downloadFileBuffer: vi.fn(),
 }))
 
-vi.mock("@/lib/ocr-parser", () => ({
-  processBufferOCR: vi.fn(),
-}))
-
-vi.mock("@/lib/statement-parser", () => ({
-  parseStatementText: vi.fn(),
-}))
-
-vi.mock("@/lib/notification-parser", () => ({
-  parseNotificationText: vi.fn(),
+vi.mock("@/lib/parse-pipeline", () => ({
+  parseFileForImport: vi.fn(),
 }))
 
 vi.mock("@/lib/dedup", async (importOriginal) => {
@@ -86,9 +78,7 @@ import {
   handlePhotoBackToSummary,
 } from "./commands"
 import type { TelegramMessage } from "./client"
-import { processBufferOCR } from "@/lib/ocr-parser"
-import { parseStatementText } from "@/lib/statement-parser"
-import { parseNotificationText } from "@/lib/notification-parser"
+import { parseFileForImport } from "@/lib/parse-pipeline"
 import { suggestCategory } from "@/lib/categorizer"
 import { filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
@@ -97,9 +87,7 @@ const mockSendMessage = vi.mocked(sendMessage)
 const mockEditMessageText = vi.mocked(editMessageText)
 const mockGetFile = vi.mocked(getFile)
 const mockDownloadFileBuffer = vi.mocked(downloadFileBuffer)
-const mockProcessBufferOCR = vi.mocked(processBufferOCR)
-const mockParseStatementText = vi.mocked(parseStatementText)
-const mockParseNotificationText = vi.mocked(parseNotificationText)
+const mockParsePipeline = vi.mocked(parseFileForImport)
 const mockSuggestCategory = vi.mocked(suggestCategory)
 const mockFilterDuplicates = vi.mocked(filterDuplicates)
 const mockImportTransactions = vi.mocked(importTransactions)
@@ -294,23 +282,21 @@ describe("handlePhotoMessage", () => {
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake-image"))
 
-    mockProcessBufferOCR.mockResolvedValue({
-      text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234",
-      confidence: 85,
-    })
-
-    const transaction = {
-      date: new Date(2026, 2, 14),
-      description: "COMPRA",
-      amount: -50,
-      type: "EXPENSE" as const,
-      confidence: 85,
-    }
-
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [transaction],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 85,
     })
 
     mockSuggestCategory.mockResolvedValue(null)
@@ -338,21 +324,25 @@ describe("handlePhotoMessage", () => {
     await promise
 
     expect(mockGetFile).toHaveBeenCalledWith("large")
-    expect(mockProcessBufferOCR).toHaveBeenCalled()
+    expect(mockParsePipeline).toHaveBeenCalled()
   })
 
   it("handles no transactions found after OCR (empty text)", async () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "", confidence: 0 })
+    mockParsePipeline.mockResolvedValue({
+      kind: "error",
+      error: "no_transactions_found",
+      rawText: "",
+    })
     mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
 
     const promise = handlePhotoMessage(makePhotoMessage(), "user-1")
     await vi.advanceTimersByTimeAsync(3000)
     await promise
 
-    // With batch flow, empty OCR means 0 transactions, so it shows "Nenhuma transacao encontrada nas imagens"
+    // With batch flow, pipeline error means 0 transactions, so it shows "Nenhuma transacao encontrada nas imagens"
     const lastCall = mockSendMessage.mock.calls[mockSendMessage.mock.calls.length - 1] ||
                      mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
     expect(lastCall).toBeDefined()
@@ -362,9 +352,11 @@ describe("handlePhotoMessage", () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "some random text", confidence: 85 })
-    mockParseStatementText.mockReturnValue({ bank: "Unknown", transactions: [], averageConfidence: 0 })
-    mockParseNotificationText.mockReturnValue(null)
+    mockParsePipeline.mockResolvedValue({
+      kind: "error",
+      error: "no_transactions_found",
+      rawText: "some random text",
+    })
     mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
 
     const promise = handlePhotoMessage(makePhotoMessage(), "user-1")
@@ -387,11 +379,21 @@ describe("handlePhotoMessage", () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({ unique: [], duplicateCount: 1 } as never)
@@ -526,14 +528,24 @@ describe("handlePhotoMessage - media group batching", () => {
     ] as never)
     vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
 
-    // Mock OCR + parse chain
+    // Mock pipeline
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({
@@ -569,7 +581,7 @@ describe("handlePhotoMessage - media group batching", () => {
 
     // Should not attempt to process photos
     expect(mockGetFile).not.toHaveBeenCalled()
-    expect(mockProcessBufferOCR).not.toHaveBeenCalled()
+    expect(mockParsePipeline).not.toHaveBeenCalled()
   })
 
   it("generates unique mediaGroupId for single photos (no media_group_id)", async () => {
@@ -584,11 +596,21 @@ describe("handlePhotoMessage - media group batching", () => {
     vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({
@@ -622,11 +644,21 @@ describe("handlePhotoMessage - media group batching", () => {
 
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({

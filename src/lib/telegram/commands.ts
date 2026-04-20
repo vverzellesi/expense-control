@@ -15,9 +15,7 @@ import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
 import { suggestCategory, detectInstallment } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates, deduplicateTransactions } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
-import { processBufferOCR } from "@/lib/ocr-parser"
-import { parseStatementText } from "@/lib/statement-parser"
-import { parseNotificationText } from "@/lib/notification-parser"
+import { parseFileForImport } from "@/lib/parse-pipeline"
 import { formatCurrency } from "@/lib/utils"
 import {
   handleSummaryQuery,
@@ -739,6 +737,8 @@ export async function handlePhotoMessage(
       totalInstallments: number | null
     }> = []
     let lastBank = ""
+    let batchUsedFallback = false
+    let batchUsedAi = false
 
     // Send initial progress message
     const progressMsg = await sendMessage(chatId, `📸 Processando imagem 1 de ${totalPhotos}...`)
@@ -753,21 +753,26 @@ export async function handlePhotoMessage(
         if (!filePath) continue
         const buffer = await downloadFileBuffer(filePath)
 
-        // OCR
-        const ocrResult = await processBufferOCR(buffer)
-        if (!ocrResult.text || ocrResult.text.trim().length === 0) continue
+        // Parse via pipeline unificado (notif → AI → regex)
+        const parsed = await parseFileForImport({
+          buffer,
+          mimeType: "image/jpeg", // Telegram photos come as JPEG
+          filename: `telegram-${item.fileId}.jpg`,
+          userId,
+        })
 
-        // Parse
-        let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence)
-        if (parseResult.transactions.length === 0) {
-          const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence)
-          if (notificationResult) parseResult = notificationResult
+        if (parsed.kind === "error") {
+          // Tracking: se uma foto falhar, pula mas continua o batch.
+          console.warn(`Telegram photo parse failed: ${parsed.error}`)
+          continue
         }
 
-        if (parseResult.bank) lastBank = parseResult.bank
+        if (parsed.bank) lastBank = parsed.bank
+        if (parsed.usedFallback) batchUsedFallback = true
+        if (parsed.source === "ai") batchUsedAi = true
 
         // Categorize
-        for (const t of parseResult.transactions) {
+        for (const t of parsed.transactions) {
           const suggested = await suggestCategory(t.description, userId)
           const installment = detectInstallment(t.description)
 
