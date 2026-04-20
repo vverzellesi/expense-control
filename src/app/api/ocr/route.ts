@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processFile, PdfPasswordError } from "@/lib/ocr-parser";
-import { parseStatementText, suggestCategoryForStatement } from "@/lib/statement-parser";
-import { parseNotificationText } from "@/lib/notification-parser";
-import { suggestCategory, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
+import { parseFileForImport } from "@/lib/parse-pipeline";
+import {
+  suggestCategory,
+  detectInstallment,
+  detectRecurringTransaction,
+} from "@/lib/categorizer";
 import prisma from "@/lib/db";
-import { getAuthContext, unauthorizedResponse, forbiddenResponse } from "@/lib/auth-utils";
+import {
+  getAuthContext,
+  unauthorizedResponse,
+  forbiddenResponse,
+} from "@/lib/auth-utils";
 import { encrypt, decrypt } from "@/lib/crypto";
-import type { ImportedTransaction } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,12 +44,20 @@ async function savePdfPassword(userId: string, password: string): Promise<void> 
   });
 }
 
+function guessMimeFromName(fileName: string): string {
+  if (fileName.endsWith(".pdf")) return "application/pdf";
+  if (fileName.endsWith(".png")) return "image/png";
+  if (fileName.endsWith(".webp")) return "image/webp";
+  if (fileName.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext();
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const password = formData.get("password") as string | null;
+    const password = (formData.get("password") as string | null) || undefined;
     const savePasswordFlag = formData.get("savePassword") === "true";
 
     if (!file) {
@@ -54,53 +67,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
     const fileName = file.name.toLowerCase();
     const validExtensions = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
-    const isValid = validExtensions.some((ext) => fileName.endsWith(ext));
-
-    if (!isValid) {
+    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
       return NextResponse.json(
         { error: "Formato de arquivo não suportado. Use PDF ou imagem (PNG, JPG)" },
         { status: 400 }
       );
     }
 
-    // Process file — handle password-protected PDFs
-    let ocrResult;
-    try {
-      ocrResult = await processFile(file, password || undefined);
-    } catch (error) {
-      if (error instanceof PdfPasswordError) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const mimeType = file.type || guessMimeFromName(fileName);
+
+    // Primeiro tenta com a senha explícita (se houver).
+    let result = await parseFileForImport({
+      buffer,
+      mimeType,
+      filename: file.name,
+      userId: ctx.userId,
+      password,
+    });
+
+    // Se pediu senha e não foi passada explícita, tenta com a senha salva.
+    let savedPasswordTried = false;
+    if (
+      result.kind === "error" &&
+      (result.error === "needs_password" || result.error === "wrong_password") &&
+      !password
+    ) {
+      const savedPassword = await getSavedPdfPassword(ctx.userId);
+      if (savedPassword) {
+        savedPasswordTried = true;
+        result = await parseFileForImport({
+          buffer,
+          mimeType,
+          filename: file.name,
+          userId: ctx.userId,
+          password: savedPassword,
+        });
+      }
+    }
+
+    if (result.kind === "error") {
+      if (result.error === "needs_password") {
+        return NextResponse.json({ needsPassword: true });
+      }
+      if (result.error === "wrong_password") {
+        // Senha explícita errada.
         if (password) {
-          // Explicit password was wrong
           return NextResponse.json({
             needsPassword: true,
             error: "Senha incorreta. Tente novamente.",
           });
         }
-
-        // No password provided — try saved password
-        const savedPassword = await getSavedPdfPassword(ctx.userId);
-        if (savedPassword) {
-          try {
-            ocrResult = await processFile(file, savedPassword);
-          } catch (retryError) {
-            if (retryError instanceof PdfPasswordError) {
-              // Saved password also failed — tell frontend
-              return NextResponse.json({ needsPassword: true, savedPasswordFailed: true });
-            }
-            throw retryError;
-          }
-        } else {
-          return NextResponse.json({ needsPassword: true });
+        // Senha salva foi tentada e falhou.
+        if (savedPasswordTried) {
+          return NextResponse.json({
+            needsPassword: true,
+            savedPasswordFailed: true,
+          });
         }
-      } else {
-        throw error;
+        // Fallback: pede senha ao usuário.
+        return NextResponse.json({ needsPassword: true });
       }
+      if (result.error === "no_transactions_found") {
+        return NextResponse.json(
+          {
+            error:
+              "Nenhuma transação encontrada no arquivo. Certifique-se de que o extrato está claro e legível.",
+            rawText: result.rawText,
+          },
+          { status: 400 }
+        );
+      }
+      if (result.error === "invalid_file") {
+        return NextResponse.json(
+          { error: result.message || "Arquivo inválido" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(
+        { error: result.message || "Erro ao processar arquivo" },
+        { status: 500 }
+      );
     }
 
-    // Save password if requested and a password was explicitly provided (best-effort)
+    // Salva senha se requisitada (best-effort) — só se veio senha explícita.
     if (savePasswordFlag && password) {
       try {
         await savePdfPassword(ctx.userId, password);
@@ -109,75 +161,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!ocrResult.text || ocrResult.text.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Não foi possível extrair texto do arquivo. Verifique se a imagem está legível." },
-        { status: 400 }
-      );
-    }
-
-    // Parse statement text (try bank statement format first, then notification format)
-    let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence);
-
-    // If no transactions found as statement, try notification format
-    if (parseResult.transactions.length === 0) {
-      const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence);
-      if (notificationResult) {
-        parseResult = notificationResult;
-      }
-    }
-
-    if (parseResult.transactions.length === 0) {
-      return NextResponse.json(
-        {
-          error: "Nenhuma transação encontrada no arquivo. Certifique-se de que o extrato está claro e legível.",
-          rawText: ocrResult.text,
-          confidence: ocrResult.confidence,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Convert to ImportedTransaction format and apply categorization
-    const transactions: (ImportedTransaction & {
-      categoryId?: string;
-      selected: boolean;
-      transactionKind?: string;
-    })[] = [];
-
+    // Pós-processamento: categoria sugerida + parcelas + recorrência.
     const defaultCategory = await prisma.category.findFirst({
       where: { ...ctx.ownerFilter, name: "Outros" },
     });
 
-    for (const t of parseResult.transactions) {
-      const suggestedCat = await suggestCategory(t.description, ctx.userId);
-      let categoryId = suggestedCat?.id || defaultCategory?.id;
-      const installmentInfo = detectInstallment(t.description);
-      const recurringInfo = detectRecurringTransaction(t.description);
+    const transactions = await Promise.all(
+      result.transactions.map(async (t) => {
+        const suggestedCat = await suggestCategory(t.description, ctx.userId);
+        const categoryId = suggestedCat?.id || defaultCategory?.id;
+        const installmentInfo = detectInstallment(t.description);
+        const recurringInfo = detectRecurringTransaction(t.description);
 
-      transactions.push({
-        description: t.description,
-        amount: t.amount,
-        date: t.date,
-        type: t.type,
-        categoryId,
-        suggestedCategoryId: categoryId,
-        isInstallment: installmentInfo.isInstallment,
-        currentInstallment: installmentInfo.currentInstallment,
-        totalInstallments: installmentInfo.totalInstallments,
-        isRecurring: recurringInfo.isRecurring,
-        recurringName: recurringInfo.recurringName,
-        confidence: t.confidence,
-        transactionKind: t.transactionKind,
-        selected: true,
-      });
-    }
+        return {
+          description: t.description,
+          amount: t.amount,
+          date: t.date,
+          type: t.type,
+          categoryId,
+          suggestedCategoryId: categoryId,
+          isInstallment: installmentInfo.isInstallment,
+          currentInstallment: installmentInfo.currentInstallment,
+          totalInstallments: installmentInfo.totalInstallments,
+          isRecurring: recurringInfo.isRecurring,
+          recurringName: recurringInfo.recurringName,
+          confidence: t.confidence,
+          transactionKind: t.transactionKind,
+          selected: true,
+        };
+      })
+    );
 
     return NextResponse.json({
       transactions,
-      origin: parseResult.bank,
-      confidence: parseResult.averageConfidence,
-      rawText: ocrResult.text,
+      origin: result.bank,
+      confidence: result.confidence,
+      rawText: result.rawText,
+      source: result.source, // NOVO — UI usa para mostrar "extraído com IA"
+      usedFallback: result.usedFallback, // NOVO — UI usa para aviso amarelo
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
