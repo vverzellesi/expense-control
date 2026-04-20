@@ -1,0 +1,3 @@
+# Fixtures reais nunca vão pro repo (PII)
+fixtures/
+ground-truth/
