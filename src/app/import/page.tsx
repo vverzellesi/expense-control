@@ -53,6 +53,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { deduplicateTransactions } from "@/lib/dedup";
 import { detectTransfer, detectInstallment, detectRecurringTransaction } from "@/lib/categorizer";
 import { detectOriginFromCSV, isC6ExchangeRateRow, type StatementType } from "@/lib/csv-parser";
+import { AiQuotaBadge } from "@/components/ai/AiQuotaBadge";
+import { ParseSourceBadge } from "@/components/ai/ParseSourceBadge";
 import type { Category, ImportedTransaction, TransactionType, SpecialTransactionType, CategoryTag } from "@/types";
 
 // Detecta transações especiais de cartão de crédito
@@ -195,6 +197,8 @@ export default function ImportPage() {
   const [hasSavedPassword, setHasSavedPassword] = useState(false);
   const [savePassword, setSavePassword] = useState(true);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [parseSource, setParseSource] = useState<"ai" | "notif" | "regex" | null>(null);
+  const [usedFallback, setUsedFallback] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -536,6 +540,8 @@ export default function ImportPage() {
 
       // Process transactions (same logic as processOCR success path)
       setOrigin(data.origin);
+      setParseSource(data.source ?? null);
+      setUsedFallback(data.usedFallback ?? false);
       setOcrConfidence(data.confidence);
       const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
         let normalizedDate: Date;
@@ -834,6 +840,8 @@ export default function ImportPage() {
     transactions: ExtendedTransaction[];
     origin: string;
     confidence: number;
+    source: "ai" | "notif" | "regex" | null;
+    usedFallback: boolean;
   }> {
     const formData = new FormData();
     formData.append("file", file);
@@ -867,6 +875,8 @@ export default function ImportPage() {
       transactions: normalizeTransactionDates(data.transactions),
       origin: data.origin,
       confidence: data.confidence,
+      source: data.source ?? null,
+      usedFallback: data.usedFallback ?? false,
     };
   }
 
@@ -899,6 +909,8 @@ export default function ImportPage() {
       setOcrProgress(100);
 
       setOrigin(result.origin);
+      setParseSource(result.source);
+      setUsedFallback(result.usedFallback);
       setOcrConfidence(result.confidence);
       const transactionsWithDuplicates = await checkDuplicates(result.transactions);
       setTransactions(transactionsWithDuplicates);
@@ -927,6 +939,8 @@ export default function ImportPage() {
     try {
       const allTransactions: ExtendedTransaction[] = [];
       let lastOrigin = "";
+      let lastSource: "ai" | "notif" | "regex" | null = null;
+      let lastUsedFallback = false;
       let totalConfidence = 0;
       let successCount = 0;
       const errors: string[] = [];
@@ -939,6 +953,8 @@ export default function ImportPage() {
           const result = await callOCRApi(files[i]);
           allTransactions.push(...result.transactions);
           lastOrigin = result.origin || lastOrigin;
+          lastSource = result.source;
+          lastUsedFallback = result.usedFallback;
           totalConfidence += result.confidence;
           successCount++;
         } catch (error) {
@@ -969,6 +985,8 @@ export default function ImportPage() {
       const uniqueTransactions = deduplicateTransactions(allTransactions);
 
       setOrigin(lastOrigin);
+      setParseSource(lastSource);
+      setUsedFallback(lastUsedFallback);
       setOcrConfidence(successCount > 0 ? totalConfidence / successCount : null);
       const transactionsWithDuplicates = await checkDuplicates(uniqueTransactions);
       setTransactions(transactionsWithDuplicates);
@@ -1266,6 +1284,8 @@ export default function ImportPage() {
     setPdfPassword("");
     setPasswordError(null);
     setSavePassword(true);
+    setParseSource(null);
+    setUsedFallback(false);
   }
 
   const selectedCount = transactions.filter((t) => t.selected).length;
@@ -1313,6 +1333,9 @@ export default function ImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 flex justify-end">
+              <AiQuotaBadge />
+            </div>
             <div className="space-y-4">
               <div
                 className={`flex items-center justify-center rounded-lg border-2 border-dashed p-6 md:p-12 transition-colors ${
@@ -1449,6 +1472,9 @@ export default function ImportPage() {
             <CardHeader>
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span>Preview das Transações</span>
+                {parseSource && (
+                  <ParseSourceBadge source={parseSource} usedFallback={usedFallback} />
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   {ocrConfidence !== null && (
                     <div className="flex items-center gap-1 text-sm">
