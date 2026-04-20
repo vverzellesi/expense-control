@@ -1,0 +1,18 @@
+{
+  "bank": "Nubank",
+  "documentType": "fatura_cartao",
+  "transactions": [
+    {
+      "description": "",
+      "amount": -10,
+      "date": "not-a-date",
+      "type": "INCOME"
+    },
+    {
+      "description": "ITEM VÁLIDO",
+      "amount": 50,
+      "date": "2026-03-10",
+      "type": "EXPENSE"
+    }
+  ]
+}
