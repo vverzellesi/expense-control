@@ -63,6 +63,14 @@ vi.mock("@/lib/import-service", () => ({
   importTransactions: vi.fn(),
 }))
 
+vi.mock("@/lib/rate-limit/ai-quota", () => ({
+  getUsage: vi.fn(),
+  hasQuota: vi.fn(),
+  increment: vi.fn(),
+  tryReserve: vi.fn(),
+  release: vi.fn(),
+}))
+
 import prisma from "@/lib/db"
 import { sendMessage, editMessageText, getFile, downloadFileBuffer } from "./client"
 import {
@@ -82,6 +90,7 @@ import { parseFileForImport } from "@/lib/parse-pipeline"
 import { suggestCategory } from "@/lib/categorizer"
 import { filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
+import { getUsage } from "@/lib/rate-limit/ai-quota"
 
 const mockSendMessage = vi.mocked(sendMessage)
 const mockEditMessageText = vi.mocked(editMessageText)
@@ -91,6 +100,7 @@ const mockParsePipeline = vi.mocked(parseFileForImport)
 const mockSuggestCategory = vi.mocked(suggestCategory)
 const mockFilterDuplicates = vi.mocked(filterDuplicates)
 const mockImportTransactions = vi.mocked(importTransactions)
+const mockGetUsage = vi.mocked(getUsage)
 const mockFindUniqueToken = vi.mocked(prisma.telegramLinkToken.findUnique)
 const mockFindUniqueLink = vi.mocked(prisma.telegramLink.findUnique)
 const mockTransaction = vi.mocked(prisma.$transaction)
@@ -701,6 +711,140 @@ describe("handlePhotoMessage - media group batching", () => {
     expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-err", userId: "user-1" } })
     // Should send error message
     expect(mockSendMessage).toHaveBeenCalledWith(12345, expect.stringContaining("Erro ao processar"))
+  })
+
+  it("inclui linha '(IA · X/5 usos)' quando batch usou AI com sucesso", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-ai"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-ai", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "PAG*IFOOD", amount: 45, type: "EXPENSE", confidence: 1 },
+      ],
+      source: "ai",
+      usedFallback: false,
+      confidence: 1,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PAG*IFOOD", amount: -45, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    mockGetUsage.mockResolvedValue({ used: 4, remaining: 1, limit: 5 })
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-ai" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Summary should have been sent via editMessageText (progress message)
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("✨")
+    expect(text).toContain("IA · 4/5")
+  })
+
+  it("inclui aviso '⚠️ Cota esgotada — parser tradicional' quando batch usou fallback", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-fallback"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-fallback", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-fb" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("⚠️")
+    expect(text).toContain("parser tradicional")
+  })
+
+  it("não adiciona linha de IA quando source='notif'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-notif"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-notif", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "CPG IFOOD", amount: 25, type: "EXPENSE", confidence: 0.9 },
+      ],
+      source: "notif",
+      usedFallback: false,
+      confidence: 0.9,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "CPG IFOOD", amount: -25, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-notif" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).not.toContain("IA ·")
+    expect(text).not.toContain("parser tradicional")
   })
 })
 
