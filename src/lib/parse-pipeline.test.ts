@@ -138,7 +138,7 @@ describe("parseFileForImport", () => {
     expect(aiQuota.release).not.toHaveBeenCalled();
   });
 
-  it("ACCEPTANCE GATE: AI retorna documentType=desconhecido libera quota e cai no fallback", async () => {
+  it("ACCEPTANCE GATE: AI retorna documentType=desconhecido NÃO libera quota (chamada já foi cobrada) e cai no fallback", async () => {
     vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
       bank: "Desconhecido",
       documentType: "desconhecido",
@@ -181,10 +181,11 @@ describe("parseFileForImport", () => {
       expect(result.usedFallback).toBe(true);
     }
     expect(aiQuota.tryReserve).toHaveBeenCalled();
-    expect(aiQuota.release).toHaveBeenCalledWith(userId, "2026-04");
+    // Correct semantics: generateContent JÁ COBROU. Não liberar a quota.
+    expect(aiQuota.release).not.toHaveBeenCalled();
   });
 
-  it("ACCEPTANCE GATE: AI retorna 0 transações libera quota e cai no fallback", async () => {
+  it("ACCEPTANCE GATE: AI retorna 0 transações NÃO libera quota (chamada foi cobrada) e cai no fallback", async () => {
     vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
       bank: "Nubank",
       documentType: "fatura_cartao",
@@ -209,7 +210,8 @@ describe("parseFileForImport", () => {
     if (result.kind === "error") {
       expect(result.error).toBe("no_transactions_found");
     }
-    expect(aiQuota.release).toHaveBeenCalledWith(userId, "2026-04");
+    // Correct semantics: generateContent JÁ COBROU. Não liberar a quota.
+    expect(aiQuota.release).not.toHaveBeenCalled();
   });
 
   it("STEP 2 skip: sem GEMINI_API_KEY cai em fallback sem reservar", async () => {
@@ -277,7 +279,7 @@ describe("parseFileForImport", () => {
     expect(aiQuota.release).not.toHaveBeenCalled(); // não reservou, não precisa liberar
   });
 
-  it("STEP 2 falha (API error) libera quota e cai no fallback", async () => {
+  it("STEP 2 falha (API error) NÃO libera quota (chamada iniciada é cobrada) e cai no fallback", async () => {
     vi.mocked(invoiceParser.parseFileWithAi).mockRejectedValue(new Error("API down"));
     vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
     vi.mocked(statementParser.parseStatementText).mockReturnValue({
@@ -307,10 +309,11 @@ describe("parseFileForImport", () => {
       expect(result.usedFallback).toBe(true);
     }
     expect(aiQuota.tryReserve).toHaveBeenCalled();
-    expect(aiQuota.release).toHaveBeenCalledWith(userId, "2026-04");
+    // Correct semantics: generateContent foi iniciado. Gemini COBROU. Não liberar.
+    expect(aiQuota.release).not.toHaveBeenCalled();
   });
 
-  it("yearMonth é capturado UMA vez e reusado em reserve + release (evita race de virada de mês)", async () => {
+  it("yearMonth é capturado UMA vez e reusado em reserve (evita race de virada de mês)", async () => {
     vi.mocked(invoiceParser.parseFileWithAi).mockRejectedValue(new Error("falha"));
     vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "", confidence: 0 });
     vi.mocked(statementParser.parseStatementText).mockReturnValue({
@@ -328,7 +331,43 @@ describe("parseFileForImport", () => {
 
     expect(aiQuota.currentYearMonth).toHaveBeenCalledTimes(1);
     expect(aiQuota.tryReserve).toHaveBeenCalledWith(userId, "2026-04");
-    expect(aiQuota.release).toHaveBeenCalledWith(userId, "2026-04");
+    // Não libera — chamada foi iniciada e cobrada.
+    expect(aiQuota.release).not.toHaveBeenCalled();
+  });
+
+  it("tryReserve lança (DB caiu) → fallback com fallbackReason='quota_error', NÃO 500", async () => {
+    vi.mocked(aiQuota.tryReserve).mockRejectedValue(new Error("DB connection lost"));
+    vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+    vi.mocked(statementParser.parseStatementText).mockReturnValue({
+      bank: "C6",
+      averageConfidence: 0.85,
+      transactions: [
+        {
+          date: new Date(),
+          description: "PIX",
+          amount: 100,
+          type: "INCOME",
+          confidence: 0.85,
+        },
+      ],
+    });
+
+    const result = await parseFileForImport({
+      buffer,
+      mimeType: "application/pdf",
+      filename: "x.pdf",
+      userId,
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.source).toBe("regex");
+      expect(result.usedFallback).toBe(true);
+    }
+    // Não tentou AI porque a reserva nem foi confirmada
+    expect(invoiceParser.parseFileWithAi).not.toHaveBeenCalled();
+    // Não há release — nada foi reservado com sucesso
+    expect(aiQuota.release).not.toHaveBeenCalled();
   });
 
   it("arquivo > 50MB retorna invalid_file sem chamar AI", async () => {

@@ -8,7 +8,6 @@ import { parseStatementText } from "@/lib/statement-parser";
 import { parseNotificationText } from "@/lib/notification-parser";
 import {
   tryReserve,
-  release,
   currentYearMonth,
 } from "@/lib/rate-limit/ai-quota";
 import { createGeminiClient } from "@/lib/ai-parser/gemini-client";
@@ -135,9 +134,22 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   const client = !skipAiDueToEncryption ? createGeminiClient() : null;
 
   if (client) {
-    const reserved = await tryReserve(userId, yearMonth);
+    // tryReserve pode falhar se o DB caiu. Wrap em try/catch para não vazar 500
+    // do endpoint — caímos no fallback com fallbackReason="quota_error".
+    let reserved = false;
+    try {
+      reserved = await tryReserve(userId, yearMonth);
+    } catch (err) {
+      console.warn("tryReserve falhou, caindo em fallback:", err instanceof Error ? err.message : String(err));
+      reserved = false;
+    }
+
     if (reserved) {
-      let gatePassed = false;
+      // IMPORTANTE: uma vez que generateContent() começa, o Gemini JÁ COBROU a
+      // chamada. O release() só faria sentido se tivéssemos um preflight
+      // server-side que aborte ANTES do generateContent ser emitido — o que
+      // não temos hoje. Portanto: não liberamos quota em erro/gate reprovado,
+      // porque o custo real já foi consumido.
       try {
         const aiResult = await parseFileWithAi(buffer, mimeType, client);
 
@@ -147,7 +159,6 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
           aiResult.documentType === "extrato_bancario";
 
         if (validDocType && aiResult.transactions.length > 0) {
-          gatePassed = true;
           return {
             kind: "success",
             bank: aiResult.bank,
@@ -157,19 +168,11 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
             confidence: aiResult.averageConfidence,
           };
         }
-        // Gate reprovou → release + fallback (no finally abaixo)
+        // Gate reprovou → cai no fallback (sem release — cobrado).
       } catch (err) {
-        console.warn("AI falhou, release quota + fallback:", err instanceof Error ? err.message : String(err));
+        console.warn("AI falhou, cai em fallback (quota permanece cobrada):", err instanceof Error ? err.message : String(err));
         // PdfPasswordError não deveria chegar aqui (preflight filtrou),
-        // mas por via das dúvidas, liberamos e caímos no STEP 3.
-      } finally {
-        if (!gatePassed) {
-          try {
-            await release(userId, yearMonth);
-          } catch (releaseErr) {
-            console.error("Falha ao liberar quota (non-fatal):", releaseErr);
-          }
-        }
+        // mas por via das dúvidas, caímos no STEP 3.
       }
     }
   }
