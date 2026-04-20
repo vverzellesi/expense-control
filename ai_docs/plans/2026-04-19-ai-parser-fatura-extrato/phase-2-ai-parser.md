@@ -39,27 +39,32 @@ And node_modules/@google/genai existe
 And o build (npm run build) continua passando
 ```
 
-- [ ] **Step 1: Instalar pacote**
+- [x] **Step 1: Instalar pacote**
 
 Run: `npm install @google/genai`
 Expected output: `added 1 package` ou similar (pode vir com subdeps).
 
-- [ ] **Step 2: Confirmar versão**
+- [x] **Step 2: Confirmar versão**
 
 Run: `node -e "console.log(require('@google/genai/package.json').version)"`
 Expected: versão >=0.10 (SDK é novo, nome `@google/genai`; NÃO é o legacy `@google/generative-ai`).
 
-- [ ] **Step 3: Verificar que lint/build continuam ok**
+- [x] **Step 3: Verificar que lint/build continuam ok**
 
 Run: `npm run lint`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json package-lock.json
 git commit -m "chore(ai-parser): add @google/genai SDK"
 ```
+
+**Learnings:**
+- Versão instalada: `@google/genai@1.50.1` (via `node_modules/@google/genai/package.json` — o pacote não expõe `./package.json` via `exports`, então `require('@google/genai/package.json')` falha; preferir leitura direta do arquivo).
+- `npm run lint` não funciona no repositório: não há `.eslintrc*` no root e o ESLint entra em modo interativo de setup. Isso é estado pré-existente, não introduzido por esta fase.
+- SDK ESM-only: importar via `import { ... } from "@google/genai"` funciona em TS; exports incluem `GoogleGenAI`, `Type`, `Schema` (type), `GenerateContentParameters`, etc.
 
 ---
 
@@ -81,7 +86,7 @@ When ele é importado em invoice-parser
 Then os tipos TypeScript batem (bank, documentType, transactions[])
 ```
 
-- [ ] **Step 1: Criar schema.ts**
+- [x] **Step 1: Criar schema.ts**
 
 Escrever `src/lib/ai-parser/schema.ts`:
 
@@ -152,17 +157,21 @@ export interface AiInvoiceOutput {
 }
 ```
 
-- [ ] **Step 2: Validar que compila**
+- [x] **Step 2: Validar que compila**
 
 Run: `npx tsc --noEmit --project tsconfig.json`
 Expected: sem erros de tipo em `schema.ts`. (Se `Schema`/`Type` não existirem no SDK, ajustar import — consultar https://googleapis.github.io/js-genai/ conforme a versão instalada.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/ai-parser/schema.ts
 git commit -m "feat(ai-parser): define Gemini structured output schema"
 ```
+
+**Learnings:**
+- `Schema` e `Type` são exportados pelo `@google/genai@1.50.1` conforme esperado; o código do plano compilou sem ajustes.
+- `Type` é um enum (valores `STRING`, `NUMBER`, `OBJECT`, `ARRAY` etc); `Schema` é uma interface TypeScript. Apenas o pré-existente erro em `csv-parser.test.ts` aparece no `tsc --noEmit`, não relacionado à fase.
 
 ---
 
@@ -184,7 +193,7 @@ When invoice-parser importa SYSTEM_PROMPT
 Then é uma string não vazia com as regras 1-7 do brainstorm
 ```
 
-- [ ] **Step 1: Criar prompt.ts**
+- [x] **Step 1: Criar prompt.ts**
 
 Escrever `src/lib/ai-parser/prompt.ts`:
 
@@ -232,12 +241,15 @@ FILOSOFIA:
 FORMATO DE SAÍDA: JSON conforme schema. Nada fora do JSON.`;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/lib/ai-parser/prompt.ts
 git commit -m "feat(ai-parser): add Gemini system prompt"
 ```
+
+**Learnings:**
+- Prompt salvo como constante única em `src/lib/ai-parser/prompt.ts` conforme plano. As regras 1-14 (incluindo descarte de "Pagamento efetuado" em fatura, ano da compra quando vencimento em janeiro, c/d→INCOME/EXPENSE) ficam isoladas para permitir iteração sem tocar na lógica do cliente ou do parser.
 
 ---
 
@@ -261,7 +273,7 @@ And timeouts de 60s são respeitados
 And erros de 5xx tentam retry 1× com backoff de 2s
 ```
 
-- [ ] **Step 1: Criar gemini-client.ts**
+- [x] **Step 1: Criar gemini-client.ts**
 
 Escrever `src/lib/ai-parser/gemini-client.ts`:
 
@@ -340,17 +352,23 @@ export function createGeminiClient(): GeminiClient | null {
 
 **Mudança vs plano inicial:** retry removido. Budget do endpoint é 60s e precisa sobrar tempo pro fallback regex em caso de falha. Se Gemini deu timeout ou 5xx, a tentativa seguinte seria quase garantidamente lenta de novo — melhor cair direto no `processFile` + `parseStatementText` e devolver algo ao usuário. Retry era dívida.
 
-- [ ] **Step 2: Validar compilação**
+- [x] **Step 2: Validar compilação**
 
 Run: `npx tsc --noEmit --project tsconfig.json`
 Expected: sem erros. (Se a API do `@google/genai` divergir — método `generateContent` tem forma diferente — ajustar chamada conforme docs oficiais da versão instalada.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/ai-parser/gemini-client.ts
 git commit -m "feat(ai-parser): add Gemini client wrapper with retry"
 ```
+
+**Learnings:**
+- A API do SDK v1.50.1 confere com o código do plano: `ai.models.generateContent({ model, contents, config })` existe, `GenerateContentConfig` aceita `abortSignal`, `responseMimeType`, `responseSchema`, `temperature`. `response.text` retorna a string JSON quando `responseMimeType="application/json"` é usado.
+- Wrapper é injetável via interface `GeminiClient` — testes do invoice-parser mockam só essa interface, não precisam tocar no SDK real.
+- `AI_MONTHLY_QUOTA=0` sendo tratado como "AI disabled" é responsabilidade do pipeline (Phase 3), não do wrapper. Aqui `createGeminiClient()` só retorna `null` se `GEMINI_API_KEY` ausente.
+- Retry ladder NÃO foi implementado (plano explicitamente remove). Commit message menciona "with retry" herança do texto original — na prática o wrapper não tem retry.
 
 ---
 
@@ -376,7 +394,7 @@ Then todas carregam sem erro
 And nenhum dado real de PF aparece
 ```
 
-- [ ] **Step 1: Criar fixture Nubank (fatura)**
+- [x] **Step 1: Criar fixture Nubank (fatura)**
 
 Criar `tests/fixtures/ai-parser/nubank-fatura-sample-response.json`:
 
@@ -410,7 +428,7 @@ Criar `tests/fixtures/ai-parser/nubank-fatura-sample-response.json`:
 }
 ```
 
-- [ ] **Step 2: Criar fixture Itaú (extrato)**
+- [x] **Step 2: Criar fixture Itaú (extrato)**
 
 Criar `tests/fixtures/ai-parser/itau-extrato-sample-response.json`:
 
@@ -444,7 +462,7 @@ Criar `tests/fixtures/ai-parser/itau-extrato-sample-response.json`:
 }
 ```
 
-- [ ] **Step 3: Criar fixture vazia**
+- [x] **Step 3: Criar fixture vazia**
 
 Criar `tests/fixtures/ai-parser/empty-response.json`:
 
@@ -456,7 +474,7 @@ Criar `tests/fixtures/ai-parser/empty-response.json`:
 }
 ```
 
-- [ ] **Step 4: Criar fixture malformada (pra testar erro)**
+- [x] **Step 4: Criar fixture malformada (pra testar erro)**
 
 Criar `tests/fixtures/ai-parser/malformed-ai-response.json`:
 
@@ -481,12 +499,16 @@ Criar `tests/fixtures/ai-parser/malformed-ai-response.json`:
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/fixtures/ai-parser/
 git commit -m "test(ai-parser): add fixtures for unit/integration tests"
 ```
+
+**Learnings:**
+- Fixtures usam dados fake (PAG*IFOOD, NETFLIX.COM, FULANO TESTE) — sem PII. Alinhado com `feedback_mock_test_data.md`.
+- `malformed-ai-response.json` cobre três tipos de descarte numa rodada: `description=""`, `amount=-10`, `date="not-a-date"`. Validação silenciosa no parser deixa log de warning e segue adiante, conforme plano.
 
 ---
 
@@ -508,7 +530,7 @@ When os testes rodam
 Then falham por módulo inexistente
 ```
 
-- [ ] **Step 1: Criar arquivo de teste**
+- [x] **Step 1: Criar arquivo de teste**
 
 Escrever `src/lib/ai-parser/invoice-parser.test.ts`:
 
@@ -611,17 +633,21 @@ describe("parseFileWithAi", () => {
 });
 ```
 
-- [ ] **Step 2: Rodar — deve falhar**
+- [x] **Step 2: Rodar — deve falhar**
 
 Run: `npm run test:unit -- src/lib/ai-parser/invoice-parser.test.ts`
 Expected: FAIL com `Cannot find module './invoice-parser'`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/ai-parser/invoice-parser.test.ts
 git commit -m "test(ai-parser): add failing tests for invoice-parser"
 ```
+
+**Learnings:**
+- RED confirmado com `Failed to resolve import "./invoice-parser" from "src/lib/ai-parser/invoice-parser.test.ts"` — Vitest falha na resolução antes mesmo de rodar os testes. Equivalente ao `Cannot find module` esperado.
+- 8 testes escritos (plano diz "7" no Step 2 do 2.7 mas são 8): sinal negativo EXPENSE, positivo INCOME, empty response, descarte de malformed, documentType exposto, averageConfidence=1, propagação de erro, chamada correta do cliente.
 
 ---
 
@@ -644,7 +670,7 @@ Then todos os testes passam
 And entradas inválidas são descartadas silenciosamente (warning log)
 ```
 
-- [ ] **Step 1: Implementar invoice-parser.ts**
+- [x] **Step 1: Implementar invoice-parser.ts**
 
 Escrever `src/lib/ai-parser/invoice-parser.ts`:
 
@@ -716,17 +742,23 @@ export async function parseFileWithAi(
 }
 ```
 
-- [ ] **Step 2: Rodar testes — devem passar**
+- [x] **Step 2: Rodar testes — devem passar**
 
 Run: `npm run test:unit -- src/lib/ai-parser/invoice-parser.test.ts`
 Expected: PASS (7 testes).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/ai-parser/invoice-parser.ts
 git commit -m "feat(ai-parser): implement invoice-parser with sanitization"
 ```
+
+**Learnings:**
+- GREEN: 8 testes passaram (arquivo `src/lib/ai-parser/invoice-parser.test.ts`). Full suite rodou em 5.80s com 627 testes passando — zero regressão.
+- `sanitize()` descarta silenciosamente entradas inválidas e emite `console.warn` com contagem. Útil pra debug sem quebrar o pipeline.
+- `parseIsoDate` usa `Date.UTC(year, month-1, day)` pra evitar drift de timezone — crítico quando consumidor normaliza por mês.
+- `AiParseResult extends StatementParseResult` adiciona o campo `documentType` sem quebrar compatibilidade com o resto da aplicação que espera `StatementParseResult` puro (Phase 3 usará o campo extra).
 
 ---
 
@@ -741,7 +773,7 @@ git commit -m "feat(ai-parser): implement invoice-parser with sanitization"
 
 **Why:** Documentar a env var nova pro próximo dev que clonar o repo.
 
-- [ ] **Step 1: Editar .env.example**
+- [x] **Step 1: Editar .env.example**
 
 Verificar se `.env.example` existe:
 
@@ -758,21 +790,24 @@ AI_MONTHLY_QUOTA=5
 
 Se não existir, criar com essas linhas.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add .env.example
 git commit -m "chore(ai-parser): document GEMINI_API_KEY and AI_MONTHLY_QUOTA envs"
 ```
 
+**Learnings:**
+- `.env.example` já existia; apenas anexadas as duas linhas no final. Sem alteração em valores pré-existentes.
+
 ---
 
 ## Phase 2 Exit Criteria
 
-- [ ] `npm run test:unit -- src/lib/ai-parser` — todos passam
-- [ ] `npm run lint` passa
-- [ ] `npx tsc --noEmit` passa sem erros de tipo novos
-- [ ] `@google/genai` instalado, import funciona
-- [ ] Fixtures em `tests/fixtures/ai-parser/` existem
+- [x] `npm run test:unit -- src/lib/ai-parser` — todos passam (8 testes em invoice-parser.test.ts)
+- [x] `npm run lint` passa (N/A — projeto não tem `.eslintrc` configurado; estado pré-existente)
+- [x] `npx tsc --noEmit` passa sem erros de tipo novos (apenas erro pré-existente em `src/lib/csv-parser.test.ts:256` não relacionado)
+- [x] `@google/genai` instalado (v1.50.1), import funciona
+- [x] Fixtures em `tests/fixtures/ai-parser/` existem (4 arquivos: nubank, itau, empty, malformed)
 
 **Próxima fase:** [phase-3-unified-pipeline.md](phase-3-unified-pipeline.md) — amarrar tudo num pipeline único que substitui o OCR+regex atual.
