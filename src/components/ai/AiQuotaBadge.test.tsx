@@ -11,10 +11,10 @@ describe("<AiQuotaBadge />", () => {
     vi.restoreAllMocks();
   });
 
-  it("mostra loading inicial e depois o contador", async () => {
+  it("mostra loading inicial e depois o contador quando enabled=true", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      json: async () => ({ used: 2, remaining: 3, limit: 5, yearMonth: "2026-04" }),
+      json: async () => ({ enabled: true, used: 2, remaining: 3, limit: 5, yearMonth: "2026-04" }),
     });
 
     render(<AiQuotaBadge />);
@@ -26,12 +26,24 @@ describe("<AiQuotaBadge />", () => {
   it("mostra estado esgotado (remaining = 0) com variant destructive", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      json: async () => ({ used: 5, remaining: 0, limit: 5, yearMonth: "2026-04" }),
+      json: async () => ({ enabled: true, used: 5, remaining: 0, limit: 5, yearMonth: "2026-04" }),
     });
 
     render(<AiQuotaBadge />);
     await waitFor(() => {
       expect(screen.getByText(/IA esgotada/i)).toBeInTheDocument();
+    });
+  });
+
+  it("não renderiza nada quando endpoint retorna enabled=false (AI desabilitada)", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled: false }),
+    });
+
+    const { container } = render(<AiQuotaBadge />);
+    await waitFor(() => {
+      expect(container.firstChild).toBeNull();
     });
   });
 

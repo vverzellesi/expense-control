@@ -306,6 +306,9 @@ describe("handlePhotoMessage", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
       confidence: 85,
     })
 
@@ -403,6 +406,9 @@ describe("handlePhotoMessage", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
       confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -555,6 +561,9 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
       confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -620,6 +629,9 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
       confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -668,6 +680,9 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
       confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -734,6 +749,8 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "ai",
       usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
       confidence: 1,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -759,14 +776,63 @@ describe("handlePhotoMessage - media group batching", () => {
     expect(text).toContain("IA · 4/5")
   })
 
-  it("inclui aviso '⚠️ Cota esgotada — parser tradicional' quando batch usou fallback", async () => {
+  it("AI sucesso: getUsage falhando é tolerado (best-effort) — resumo ainda sai", async () => {
     const msg = makePhotoMessage()
-    msg.media_group_id = "group-fallback"
+    msg.media_group_id = "group-ai-getusage-err"
 
     vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
     vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
     vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
-      { id: "q1", fileId: "large", mediaGroupId: "group-fallback", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q1", fileId: "large", mediaGroupId: "group-ai-getusage-err", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "PAG*IFOOD", amount: 45, type: "EXPENSE", confidence: 1 },
+      ],
+      source: "ai",
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
+      confidence: 1,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PAG*IFOOD", amount: -45, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    // getUsage falha — getUsage é best-effort no summary
+    mockGetUsage.mockRejectedValue(new Error("DB down"))
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-ai" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Resumo AINDA deve sair (usando fallback da linha sem contador).
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("✨")
+    expect(text).not.toContain("Erro ao processar")
+  })
+
+  it("fallbackReason='quota_exhausted': mensagem específica '⚠️ Cota de IA esgotada'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-quota-exhausted"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-quota-exhausted", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
     ] as never)
     vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
 
@@ -780,6 +846,9 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: true,
+      aiAttempted: false,
+      fallbackReason: "quota_exhausted",
       confidence: 0.85,
     })
     mockSuggestCategory.mockResolvedValue(null)
@@ -799,8 +868,102 @@ describe("handlePhotoMessage - media group batching", () => {
     const editCalls = mockEditMessageText.mock.calls
     const lastEdit = editCalls[editCalls.length - 1]
     const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
-    expect(text).toContain("⚠️")
+    expect(text).toContain("Cota de IA esgotada")
     expect(text).toContain("parser tradicional")
+  })
+
+  it("fallbackReason='disabled' (AI não configurada): NÃO diz 'cota esgotada' (só mensagem neutra)", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-disabled"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-disabled", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-dis" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    // Contrato crítico: quando AI não está configurada, não mentir sobre "cota esgotada".
+    expect(text).not.toContain("Cota de IA esgotada")
+    expect(text).not.toContain("IA indisponível")
+  })
+
+  it("fallbackReason='gate_rejected': mensagem específica 'IA não reconheceu'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-gate"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-gate", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: true,
+      aiAttempted: true,
+      fallbackReason: "gate_rejected",
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-gate" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("IA não reconheceu")
   })
 
   it("não adiciona linha de IA quando source='notif'", async () => {
@@ -824,6 +987,8 @@ describe("handlePhotoMessage - media group batching", () => {
       ],
       source: "notif",
       usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: false,
       confidence: 0.9,
     })
     mockSuggestCategory.mockResolvedValue(null)

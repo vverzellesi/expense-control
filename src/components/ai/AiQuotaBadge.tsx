@@ -4,12 +4,17 @@ import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-type Usage = {
+type UsageEnabled = {
+  enabled: true;
   used: number;
   remaining: number;
   limit: number;
   yearMonth: string;
 };
+
+type UsageDisabled = { enabled: false };
+
+type UsageResponse = UsageEnabled | UsageDisabled;
 
 function daysUntilReset(yearMonth: string): number {
   const [y, m] = yearMonth.split("-").map(Number);
@@ -20,7 +25,7 @@ function daysUntilReset(yearMonth: string): number {
 }
 
 export function AiQuotaBadge() {
-  const [usage, setUsage] = useState<Usage | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -32,7 +37,7 @@ export function AiQuotaBadge() {
           if (!cancelled) setFailed(true);
           return;
         }
-        const data = (await res.json()) as Usage;
+        const data = (await res.json()) as UsageResponse;
         if (!cancelled) setUsage(data);
       } catch {
         if (!cancelled) setFailed(true);
@@ -44,6 +49,9 @@ export function AiQuotaBadge() {
   }, []);
 
   if (failed) return null;
+  // AI desabilitada no servidor: não renderiza nada (sem badge enganoso).
+  if (usage && usage.enabled === false) return null;
+
   if (!usage) {
     return (
       <Badge variant="outline" className="text-xs font-normal">

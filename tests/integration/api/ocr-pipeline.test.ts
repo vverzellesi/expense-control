@@ -79,7 +79,7 @@ describe("POST /api/ocr (pipeline)", () => {
     });
   });
 
-  it("delega para parseFileForImport e propaga source/usedFallback quando AI sucesso", async () => {
+  it("delega para parseFileForImport e propaga source/usedFallback/aiEnabled/aiAttempted quando AI sucesso", async () => {
     mockParsePipeline.mockResolvedValue({
       kind: "success",
       bank: "Nubank",
@@ -94,6 +94,8 @@ describe("POST /api/ocr (pipeline)", () => {
       ],
       source: "ai",
       usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
       confidence: 1,
     });
 
@@ -103,13 +105,16 @@ describe("POST /api/ocr (pipeline)", () => {
     expect(response.status).toBe(200);
     expect(data.source).toBe("ai");
     expect(data.usedFallback).toBe(false);
+    expect(data.aiEnabled).toBe(true);
+    expect(data.aiAttempted).toBe(true);
+    expect(data.fallbackReason).toBeUndefined();
     expect(data.transactions).toHaveLength(1);
     expect(data.origin).toBe("Nubank");
     // Contrato de sinal: despesa sai negativa.
     expect(data.transactions[0].amount).toBe(-45);
   });
 
-  it("usedFallback=true quando o pipeline caiu no regex", async () => {
+  it("usedFallback=true + fallbackReason quando o pipeline caiu no regex", async () => {
     mockParsePipeline.mockResolvedValue({
       kind: "success",
       bank: "C6",
@@ -124,6 +129,9 @@ describe("POST /api/ocr (pipeline)", () => {
       ],
       source: "regex",
       usedFallback: true,
+      aiEnabled: true,
+      aiAttempted: true,
+      fallbackReason: "ai_error",
       confidence: 0.85,
       rawText: "extrato mock",
     });
@@ -134,7 +142,9 @@ describe("POST /api/ocr (pipeline)", () => {
     expect(response.status).toBe(200);
     expect(data.source).toBe("regex");
     expect(data.usedFallback).toBe(true);
-    expect(data.rawText).toBe("extrato mock");
+    expect(data.fallbackReason).toBe("ai_error");
+    // Data leak fix: rawText NÃO deve vazar ao cliente.
+    expect(data.rawText).toBeUndefined();
   });
 
   it("erro needs_password retorna 200 com needsPassword=true", async () => {
@@ -202,6 +212,8 @@ describe("POST /api/ocr (pipeline)", () => {
         ],
         source: "ai",
         usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
         confidence: 1,
       });
 

@@ -32,14 +32,40 @@ export type ParseInput = {
   password?: string;
 };
 
+/**
+ * Motivos estruturados para o fallback. Usados pela UI (badges, Telegram)
+ * para dar feedback preciso ao invés de colapsar tudo em "usedFallback=true".
+ * - "disabled"        → GEMINI_API_KEY não configurada no servidor
+ * - "quota_exhausted" → reserva atômica retornou false (limite mensal atingido)
+ * - "quota_error"     → tryReserve lançou (ex: DB indisponível)
+ * - "ai_error"        → generateContent falhou (timeout, erro 5xx, JSON inválido)
+ * - "gate_rejected"   → AI retornou mas gate de aceitação recusou (doc não reconhecido)
+ * - "pdf_encrypted"   → PDF criptografado, AI pulada (Gemini não aceita senha)
+ */
+export type FallbackReason =
+  | "disabled"
+  | "quota_exhausted"
+  | "quota_error"
+  | "ai_error"
+  | "gate_rejected"
+  | "pdf_encrypted";
+
 export type ParseResult =
   | {
       kind: "success";
       bank: string;
       transactions: StatementParseResult["transactions"];
       source: "ai" | "notif" | "regex";
+      /** Derivado: source !== "notif" && fallbackReason != null. Mantido por compat. */
       usedFallback: boolean;
+      /** true se GEMINI_API_KEY está configurada no servidor. */
+      aiEnabled: boolean;
+      /** true se a IA foi tentada (mesmo que tenha falhado). */
+      aiAttempted: boolean;
+      /** Motivo do fallback quando source !== "ai". undefined em sucesso AI ou notif. */
+      fallbackReason?: FallbackReason;
       confidence: number;
+      /** OCR bruto (APENAS para uso server-side — NUNCA expor ao cliente). */
       rawText?: string;
     }
   | {
@@ -51,6 +77,7 @@ export type ParseResult =
         | "no_transactions_found"
         | "internal";
       message?: string;
+      /** OCR bruto (APENAS para uso server-side — NUNCA expor ao cliente). */
       rawText?: string;
     };
 
@@ -72,7 +99,7 @@ function bufferToFile(buffer: Buffer, name: string, mime: string): File {
  *   3. Fallback regex (OCR completo + statement-parser + notification-parser)
  *
  * Falhas na IA (erro, quota esgotada, gate reprovado) caem silenciosamente
- * para o STEP 3. PDFs criptografados pulam a IA direto (preflight).
+ * para o STEP 3 com fallbackReason explícito. PDFs criptografados pulam a IA.
  */
 export async function parseFileForImport(input: ParseInput): Promise<ParseResult> {
   const { buffer, mimeType, userId, password } = input;
@@ -115,12 +142,16 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
       );
       const notifResult = parseNotificationText(ocrLight.text, ocrLight.confidence);
       if (notifResult && notifResult.transactions.length > 0) {
+        const client = createGeminiClient();
         return {
           kind: "success",
           bank: notifResult.bank,
           transactions: notifResult.transactions,
           source: "notif",
           usedFallback: false,
+          aiEnabled: client !== null,
+          aiAttempted: false,
+          // fallbackReason UNDEFINED para notif — não é fallback, é uma via rápida.
           confidence: notifResult.averageConfidence,
           rawText: ocrLight.text,
         };
@@ -132,6 +163,17 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
 
   // STEP 2: AI — só roda se não for PDF criptografado, tiver key e reserva vier OK.
   const client = !skipAiDueToEncryption ? createGeminiClient() : null;
+  const aiEnabled = createGeminiClient() !== null;
+
+  // Determina fallbackReason inicial baseado em guards síncronos
+  let fallbackReason: FallbackReason | null = null;
+  let aiAttempted = false;
+
+  if (skipAiDueToEncryption) {
+    fallbackReason = "pdf_encrypted";
+  } else if (!aiEnabled) {
+    fallbackReason = "disabled";
+  }
 
   if (client) {
     // tryReserve pode falhar se o DB caiu. Wrap em try/catch para não vazar 500
@@ -139,9 +181,13 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
     let reserved = false;
     try {
       reserved = await tryReserve(userId, yearMonth);
+      if (!reserved) {
+        fallbackReason = "quota_exhausted";
+      }
     } catch (err) {
       console.warn("tryReserve falhou, caindo em fallback:", err instanceof Error ? err.message : String(err));
       reserved = false;
+      fallbackReason = "quota_error";
     }
 
     if (reserved) {
@@ -150,6 +196,7 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
       // server-side que aborte ANTES do generateContent ser emitido — o que
       // não temos hoje. Portanto: não liberamos quota em erro/gate reprovado,
       // porque o custo real já foi consumido.
+      aiAttempted = true;
       try {
         const aiResult = await parseFileWithAi(buffer, mimeType, client);
 
@@ -165,12 +212,17 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
             transactions: aiResult.transactions,
             source: "ai",
             usedFallback: false,
+            aiEnabled: true,
+            aiAttempted: true,
+            // fallbackReason UNDEFINED em sucesso AI.
             confidence: aiResult.averageConfidence,
           };
         }
         // Gate reprovou → cai no fallback (sem release — cobrado).
+        fallbackReason = "gate_rejected";
       } catch (err) {
         console.warn("AI falhou, cai em fallback (quota permanece cobrada):", err instanceof Error ? err.message : String(err));
+        fallbackReason = "ai_error";
         // PdfPasswordError não deveria chegar aqui (preflight filtrou),
         // mas por via das dúvidas, caímos no STEP 3.
       }
@@ -178,6 +230,12 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   }
 
   // STEP 3: Fallback (tesseract/unpdf + regex)
+  // Neste ponto, fallbackReason DEVE estar setado — garante contrato explícito.
+  if (fallbackReason === null) {
+    // Defensive: não deveria acontecer, mas se chegou aqui sem razão, é ai_error.
+    fallbackReason = "ai_error";
+  }
+
   try {
     const ocrResult = await processFile(
       bufferToFile(buffer, input.filename, mimeType),
@@ -192,6 +250,9 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
         transactions: statementResult.transactions,
         source: "regex",
         usedFallback: true,
+        aiEnabled,
+        aiAttempted,
+        fallbackReason,
         confidence: statementResult.averageConfidence,
         rawText: ocrResult.text,
       };
@@ -205,7 +266,12 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
         bank: notifResult.bank,
         transactions: notifResult.transactions,
         source: "notif",
+        // Aqui caímos do pipeline de fallback — é uma segunda via em cima do OCR completo.
+        // Mantemos usedFallback=true pra sinalizar que a IA não deu conta.
         usedFallback: true,
+        aiEnabled,
+        aiAttempted,
+        fallbackReason,
         confidence: notifResult.averageConfidence,
         rawText: ocrResult.text,
       };

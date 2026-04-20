@@ -401,4 +401,195 @@ describe("parseFileForImport", () => {
       expect(result.error).toBe("invalid_file");
     }
   });
+
+  describe("structured fallback contract (aiEnabled + aiAttempted + fallbackReason)", () => {
+    it("AI sucesso: aiEnabled=true, aiAttempted=true, fallbackReason=undefined, usedFallback=false", async () => {
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "fatura.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("ai");
+      expect(result.aiEnabled).toBe(true);
+      expect(result.aiAttempted).toBe(true);
+      expect(result.fallbackReason).toBeUndefined();
+      expect(result.usedFallback).toBe(false);
+    });
+
+    it("Sem GEMINI_API_KEY: aiEnabled=false, aiAttempted=false, fallbackReason='disabled'", async () => {
+      vi.mocked(geminiClientMod.createGeminiClient).mockReturnValue(null);
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.aiEnabled).toBe(false);
+      expect(result.aiAttempted).toBe(false);
+      expect(result.fallbackReason).toBe("disabled");
+      // usedFallback é derivado (source !== "notif" && fallbackReason != null)
+      expect(result.usedFallback).toBe(true);
+    });
+
+    it("Quota esgotada: fallbackReason='quota_exhausted', aiEnabled=true, aiAttempted=false", async () => {
+      vi.mocked(aiQuota.tryReserve).mockResolvedValue(false);
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.aiEnabled).toBe(true);
+      expect(result.aiAttempted).toBe(false);
+      expect(result.fallbackReason).toBe("quota_exhausted");
+    });
+
+    it("tryReserve erro de DB: fallbackReason='quota_error', aiEnabled=true, aiAttempted=false", async () => {
+      vi.mocked(aiQuota.tryReserve).mockRejectedValue(new Error("DB down"));
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.fallbackReason).toBe("quota_error");
+      expect(result.aiAttempted).toBe(false);
+    });
+
+    it("AI lança erro: fallbackReason='ai_error', aiAttempted=true", async () => {
+      vi.mocked(invoiceParser.parseFileWithAi).mockRejectedValue(new Error("API down"));
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.fallbackReason).toBe("ai_error");
+      expect(result.aiAttempted).toBe(true);
+    });
+
+    it("Gate reprovado (documentType=desconhecido): fallbackReason='gate_rejected', aiAttempted=true", async () => {
+      vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+        bank: "Desconhecido",
+        documentType: "desconhecido",
+        averageConfidence: 1,
+        transactions: [
+          { date: new Date(), description: "ruído", amount: -5, type: "EXPENSE", confidence: 1 },
+        ],
+      });
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.fallbackReason).toBe("gate_rejected");
+      expect(result.aiAttempted).toBe(true);
+    });
+
+    it("PDF criptografado: fallbackReason='pdf_encrypted' (quando chega no fallback), aiAttempted=false", async () => {
+      vi.mocked(ocrParser.isPdfEncrypted).mockResolvedValue(true);
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "locked.pdf",
+        userId,
+        password: "right-password",
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.fallbackReason).toBe("pdf_encrypted");
+      expect(result.aiAttempted).toBe(false);
+    });
+
+    it("source=notif: fallbackReason=undefined, usedFallback=false (não é fallback mesmo com AI disponível)", async () => {
+      vi.mocked(notifParser.parseNotificationText).mockReturnValue({
+        bank: "Nubank",
+        averageConfidence: 0.9,
+        transactions: [
+          { date: new Date(), description: "CPG IFOOD", amount: -25, type: "EXPENSE", confidence: 0.9 },
+        ],
+      });
+      vi.mocked(ocrParser.processImageOCR).mockResolvedValue({ text: "Compra R$25", confidence: 80 });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "image/png",
+        filename: "notif.png",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("notif");
+      expect(result.fallbackReason).toBeUndefined();
+      expect(result.usedFallback).toBe(false);
+    });
+  });
 });

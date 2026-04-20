@@ -676,6 +676,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Mapeia fallbackReason para mensagem user-facing do Telegram.
+ * - "disabled": null — AI não configurada, mensagem genérica é suficiente.
+ * - "quota_exhausted": aviso claro da cota mensal.
+ * - "quota_error" | "ai_error": aviso de indisponibilidade transitória.
+ * - "gate_rejected": IA não reconheceu o documento.
+ * - "pdf_encrypted": PDF criptografado (relevante pro fluxo web, raro no Telegram).
+ */
+function telegramFallbackMessage(
+  reason:
+    | "disabled"
+    | "quota_exhausted"
+    | "quota_error"
+    | "ai_error"
+    | "gate_rejected"
+    | "pdf_encrypted"
+): string | null {
+  switch (reason) {
+    case "disabled":
+      return null
+    case "quota_exhausted":
+      return "⚠️ Cota de IA esgotada este mês — usei parser tradicional."
+    case "quota_error":
+    case "ai_error":
+      return "⚠️ IA indisponível no momento — usei parser tradicional."
+    case "gate_rejected":
+      return "⚠️ IA não reconheceu o documento — usei parser tradicional."
+    case "pdf_encrypted":
+      return "⚠️ PDF protegido por senha — usei parser tradicional."
+  }
+}
+
 export async function handlePhotoMessage(
   message: TelegramMessage,
   userId: string
@@ -738,8 +770,19 @@ export async function handlePhotoMessage(
       totalInstallments: number | null
     }> = []
     let lastBank = ""
-    let batchUsedFallback = false
     let batchUsedAi = false
+    // Primeiro fallbackReason observado no batch (prioridade temporal).
+    // Usado para compor a mensagem final com o motivo real (ex: "quota_exhausted"
+    // vs "disabled" — a mensagem muda e evita dizer "cota esgotada" quando a
+    // IA sequer está habilitada).
+    let batchFallbackReason:
+      | "disabled"
+      | "quota_exhausted"
+      | "quota_error"
+      | "ai_error"
+      | "gate_rejected"
+      | "pdf_encrypted"
+      | undefined = undefined
 
     // Send initial progress message
     const progressMsg = await sendMessage(chatId, `📸 Processando imagem 1 de ${totalPhotos}...`)
@@ -769,8 +812,11 @@ export async function handlePhotoMessage(
         }
 
         if (parsed.bank) lastBank = parsed.bank
-        if (parsed.usedFallback) batchUsedFallback = true
         if (parsed.source === "ai") batchUsedAi = true
+        // Captura o primeiro fallbackReason do batch (prioridade temporal).
+        if (parsed.fallbackReason && !batchFallbackReason) {
+          batchFallbackReason = parsed.fallbackReason
+        }
 
         // Categorize
         for (const t of parsed.transactions) {
@@ -860,14 +906,26 @@ export async function handlePhotoMessage(
     const totalDupes = duplicateCount + inBatchDupes
     const lines: string[] = []
 
-    // Header com indicador de fonte (AI · quota · fallback)
-    if (batchUsedAi && !batchUsedFallback) {
-      const usage = await getUsage(userId)
-      lines.push(`✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA · ${usage.used}/${usage.limit} usos neste mês)`)
-    } else if (batchUsedFallback) {
-      lines.push(`⚠️ Cota de IA esgotada este mês — usei parser tradicional.`)
+    // Header com indicador de fonte. A mensagem de fallback AGORA usa
+    // `fallbackReason` estruturado ao invés de um boolean colapsado — permite
+    // distinguir "quota esgotada" de "AI desabilitada" de "erro transitório".
+    if (batchUsedAi && !batchFallbackReason) {
+      // Sucesso AI: mostrar contador de quota como feedback positivo.
+      // getUsage é best-effort — se o DB cair, não quebramos o resumo.
+      let usageLine = `✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA)`
+      try {
+        const usage = await getUsage(userId)
+        usageLine = `✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA · ${usage.used}/${usage.limit} usos neste mês)`
+      } catch (err) {
+        console.warn("getUsage falhou (non-fatal):", err instanceof Error ? err.message : String(err))
+      }
+      lines.push(usageLine)
+    } else if (batchFallbackReason) {
+      const msg = telegramFallbackMessage(batchFallbackReason)
+      if (msg) lines.push(msg)
       lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas (revise com atenção)`)
     } else {
+      // source=notif em todas as fotos, ou caminho sem AI habilitada e sem fallback registrado.
       lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`)
     }
 

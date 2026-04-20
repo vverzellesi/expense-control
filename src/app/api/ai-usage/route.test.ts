@@ -26,8 +26,11 @@ import { GET } from "./route";
 import { NextRequest } from "next/server";
 
 describe("GET /api/ai-usage", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
   it("retorna 401 se usuário não autenticado", async () => {
@@ -37,7 +40,9 @@ describe("GET /api/ai-usage", () => {
     expect(res.status).toBe(401);
   });
 
-  it("retorna JSON com used/remaining/limit/yearMonth para usuário autenticado", async () => {
+  it("retorna JSON com enabled=true + used/remaining/limit/yearMonth quando AI configurada", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.AI_MONTHLY_QUOTA = "5";
     mockGetAuthContext.mockResolvedValue({
       userId: "u1",
       ownerFilter: { userId: "u1" },
@@ -54,10 +59,44 @@ describe("GET /api/ai-usage", () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({
+      enabled: true,
       used: 2,
       remaining: 3,
       limit: 5,
       yearMonth: expect.stringMatching(/^\d{4}-\d{2}$/),
     });
+  });
+
+  it("retorna enabled=false quando GEMINI_API_KEY ausente (sem bater no getUsage)", async () => {
+    delete process.env.GEMINI_API_KEY;
+    mockGetAuthContext.mockResolvedValue({
+      userId: "u1",
+      ownerFilter: { userId: "u1" },
+    });
+
+    const req = new NextRequest("http://localhost/api/ai-usage");
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ enabled: false });
+    expect(mockGetUsage).not.toHaveBeenCalled();
+  });
+
+  it("retorna enabled=false quando AI_MONTHLY_QUOTA=0 (feature flag off)", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.AI_MONTHLY_QUOTA = "0";
+    mockGetAuthContext.mockResolvedValue({
+      userId: "u1",
+      ownerFilter: { userId: "u1" },
+    });
+
+    const req = new NextRequest("http://localhost/api/ai-usage");
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ enabled: false });
+    expect(mockGetUsage).not.toHaveBeenCalled();
   });
 });

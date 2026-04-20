@@ -198,7 +198,9 @@ export default function ImportPage() {
   const [savePassword, setSavePassword] = useState(true);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [parseSource, setParseSource] = useState<"ai" | "notif" | "regex" | null>(null);
-  const [usedFallback, setUsedFallback] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState<
+    "disabled" | "quota_exhausted" | "quota_error" | "ai_error" | "gate_rejected" | "pdf_encrypted" | undefined
+  >(undefined);
 
   useEffect(() => {
     fetchCategories();
@@ -541,7 +543,7 @@ export default function ImportPage() {
       // Process transactions (same logic as processOCR success path)
       setOrigin(data.origin);
       setParseSource(data.source ?? null);
-      setUsedFallback(data.usedFallback ?? false);
+      setFallbackReason(data.fallbackReason ?? undefined);
       setOcrConfidence(data.confidence);
       const parsedTransactions = data.transactions.map((t: ExtendedTransaction) => {
         let normalizedDate: Date;
@@ -841,7 +843,14 @@ export default function ImportPage() {
     origin: string;
     confidence: number;
     source: "ai" | "notif" | "regex" | null;
-    usedFallback: boolean;
+    fallbackReason:
+      | "disabled"
+      | "quota_exhausted"
+      | "quota_error"
+      | "ai_error"
+      | "gate_rejected"
+      | "pdf_encrypted"
+      | undefined;
   }> {
     const formData = new FormData();
     formData.append("file", file);
@@ -876,7 +885,7 @@ export default function ImportPage() {
       origin: data.origin,
       confidence: data.confidence,
       source: data.source ?? null,
-      usedFallback: data.usedFallback ?? false,
+      fallbackReason: data.fallbackReason ?? undefined,
     };
   }
 
@@ -910,7 +919,7 @@ export default function ImportPage() {
 
       setOrigin(result.origin);
       setParseSource(result.source);
-      setUsedFallback(result.usedFallback);
+      setFallbackReason(result.fallbackReason);
       setOcrConfidence(result.confidence);
       const transactionsWithDuplicates = await checkDuplicates(result.transactions);
       setTransactions(transactionsWithDuplicates);
@@ -940,7 +949,14 @@ export default function ImportPage() {
       const allTransactions: ExtendedTransaction[] = [];
       let lastOrigin = "";
       let lastSource: "ai" | "notif" | "regex" | null = null;
-      let lastUsedFallback = false;
+      let lastFallbackReason:
+        | "disabled"
+        | "quota_exhausted"
+        | "quota_error"
+        | "ai_error"
+        | "gate_rejected"
+        | "pdf_encrypted"
+        | undefined = undefined;
       let totalConfidence = 0;
       let successCount = 0;
       const errors: string[] = [];
@@ -954,7 +970,7 @@ export default function ImportPage() {
           allTransactions.push(...result.transactions);
           lastOrigin = result.origin || lastOrigin;
           lastSource = result.source;
-          lastUsedFallback = result.usedFallback;
+          lastFallbackReason = result.fallbackReason;
           totalConfidence += result.confidence;
           successCount++;
         } catch (error) {
@@ -986,7 +1002,7 @@ export default function ImportPage() {
 
       setOrigin(lastOrigin);
       setParseSource(lastSource);
-      setUsedFallback(lastUsedFallback);
+      setFallbackReason(lastFallbackReason);
       setOcrConfidence(successCount > 0 ? totalConfidence / successCount : null);
       const transactionsWithDuplicates = await checkDuplicates(uniqueTransactions);
       setTransactions(transactionsWithDuplicates);
@@ -1285,7 +1301,7 @@ export default function ImportPage() {
     setPasswordError(null);
     setSavePassword(true);
     setParseSource(null);
-    setUsedFallback(false);
+    setFallbackReason(undefined);
   }
 
   const selectedCount = transactions.filter((t) => t.selected).length;
@@ -1473,10 +1489,15 @@ export default function ImportPage() {
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span>Preview das Transações</span>
                 {parseSource && (
-                  <ParseSourceBadge source={parseSource} usedFallback={usedFallback} />
+                  <ParseSourceBadge source={parseSource} fallbackReason={fallbackReason} />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                  {ocrConfidence !== null && (
+                  {/*
+                   * Confiança OCR usa escala 0-100 do tesseract. A IA não
+                   * retorna "confiança OCR" — ela faz extração direta. Exibir
+                   * esse badge no caminho source=ai mostraria "Baixa" incorretamente.
+                   */}
+                  {ocrConfidence !== null && parseSource !== "ai" && (
                     <div className="flex items-center gap-1 text-sm">
                       <span className="text-gray-500">Confiança OCR:</span>
                       {getConfidenceBadge(ocrConfidence)}

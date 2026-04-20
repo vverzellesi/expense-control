@@ -196,9 +196,14 @@ export async function POST(request: NextRequest) {
       transactions,
       origin: result.bank,
       confidence: result.confidence,
-      rawText: result.rawText,
-      source: result.source, // NOVO — UI usa para mostrar "extraído com IA"
-      usedFallback: result.usedFallback, // NOVO — UI usa para aviso amarelo
+      // Contrato estruturado de fonte/fallback:
+      source: result.source, // "ai" | "notif" | "regex"
+      usedFallback: result.usedFallback, // mantido por compat (derivável)
+      aiEnabled: result.aiEnabled,
+      aiAttempted: result.aiAttempted,
+      fallbackReason: result.fallbackReason, // undefined em sucesso AI/notif
+      // NOTA: `rawText` NÃO é exposto ao cliente (dado financeiro bruto).
+      // Se precisar para debug server-side, logar aqui e não vazar pelo HTTP.
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
