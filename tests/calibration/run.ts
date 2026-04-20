@@ -1,6 +1,9 @@
 // tsx tests/calibration/run.ts
 // Roda o parse-pipeline com GEMINI_API_KEY real contra arquivos locais em
 // tests/calibration/fixtures/ (gitignored) e reporta métricas por arquivo.
+//
+// Requer CALIBRATION_USER_ID no env (um user_id real do DB) — a quota é
+// rastreada por user. Usar um user dedicado evita poluir a quota real.
 
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { resolve, extname, basename } from "path";
@@ -27,6 +30,16 @@ function mimeFor(filename: string): string {
 async function main() {
   if (!process.env.GEMINI_API_KEY) {
     console.error("❌ GEMINI_API_KEY ausente. Configure antes de rodar calibração.");
+    process.exit(1);
+  }
+
+  const calibrationUserId = process.env.CALIBRATION_USER_ID;
+  if (!calibrationUserId) {
+    console.error(
+      "❌ CALIBRATION_USER_ID ausente. Defina com um user_id real do DB\n" +
+        "   (o pipeline precisa para reservar/contar quota). Exemplo:\n" +
+        "   CALIBRATION_USER_ID=abc-123 tsx tests/calibration/run.ts"
+    );
     process.exit(1);
   }
 
@@ -66,7 +79,7 @@ async function main() {
       buffer,
       mimeType: mimeFor(file),
       filename: file,
-      userId: "calibration-user",
+      userId: calibrationUserId,
     });
     const ms = Date.now() - t0;
 

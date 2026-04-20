@@ -90,6 +90,29 @@ function bufferToFile(buffer: Buffer, name: string, mime: string): File {
 }
 
 /**
+ * Loga uma linha JSON com observabilidade do pipeline. Fica em console.info
+ * (stdout) para ser consumida por agregadores de logs. Nunca loga userId nem
+ * o conteúdo das transações — apenas metadados.
+ */
+function logParseResult(event: {
+  source: "ai" | "notif" | "regex";
+  fallbackReason?: FallbackReason;
+  documentType?: "fatura_cartao" | "extrato_bancario" | "desconhecido";
+  txCount: number;
+  latencyMs: number;
+  mimeType: string;
+  quotaReserved: boolean;
+}): void {
+  // eslint-disable-next-line no-console
+  console.info(
+    JSON.stringify({
+      event: "parse_pipeline",
+      ...event,
+    })
+  );
+}
+
+/**
  * Pipeline unificado de extração de transações a partir de arquivos
  * (PDF, imagens de extratos, fotos de notificações bancárias).
  *
@@ -103,6 +126,7 @@ function bufferToFile(buffer: Buffer, name: string, mime: string): File {
  */
 export async function parseFileForImport(input: ParseInput): Promise<ParseResult> {
   const { buffer, mimeType, userId, password } = input;
+  const startedAt = Date.now();
 
   // yearMonth capturado UMA vez no início pra evitar race na virada de mês UTC.
   const yearMonth = currentYearMonth();
@@ -143,6 +167,13 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
       const notifResult = parseNotificationText(ocrLight.text, ocrLight.confidence);
       if (notifResult && notifResult.transactions.length > 0) {
         const client = createGeminiClient();
+        logParseResult({
+          source: "notif",
+          txCount: notifResult.transactions.length,
+          latencyMs: Date.now() - startedAt,
+          mimeType,
+          quotaReserved: false,
+        });
         return {
           kind: "success",
           bank: notifResult.bank,
@@ -168,6 +199,8 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   // Determina fallbackReason inicial baseado em guards síncronos
   let fallbackReason: FallbackReason | null = null;
   let aiAttempted = false;
+  // Mantido no escopo da função para o structured log final.
+  let quotaReserved = false;
 
   if (skipAiDueToEncryption) {
     fallbackReason = "pdf_encrypted";
@@ -178,19 +211,18 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   if (client) {
     // tryReserve pode falhar se o DB caiu. Wrap em try/catch para não vazar 500
     // do endpoint — caímos no fallback com fallbackReason="quota_error".
-    let reserved = false;
     try {
-      reserved = await tryReserve(userId, yearMonth);
-      if (!reserved) {
+      quotaReserved = await tryReserve(userId, yearMonth);
+      if (!quotaReserved) {
         fallbackReason = "quota_exhausted";
       }
     } catch (err) {
       console.warn("tryReserve falhou, caindo em fallback:", err instanceof Error ? err.message : String(err));
-      reserved = false;
+      quotaReserved = false;
       fallbackReason = "quota_error";
     }
 
-    if (reserved) {
+    if (quotaReserved) {
       // IMPORTANTE: uma vez que generateContent() começa, o Gemini JÁ COBROU a
       // chamada. O release() só faria sentido se tivéssemos um preflight
       // server-side que aborte ANTES do generateContent ser emitido — o que
@@ -214,6 +246,14 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
           aiResult.documentConfidence >= 0.5;
 
         if (validDocType && aiResult.transactions.length > 0 && confidenceOk) {
+          logParseResult({
+            source: "ai",
+            documentType: aiResult.documentType,
+            txCount: aiResult.transactions.length,
+            latencyMs: Date.now() - startedAt,
+            mimeType,
+            quotaReserved: true,
+          });
           return {
             kind: "success",
             bank: aiResult.bank,
@@ -252,6 +292,14 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
 
     const statementResult = parseStatementText(ocrResult.text, ocrResult.confidence);
     if (statementResult.transactions.length > 0) {
+      logParseResult({
+        source: "regex",
+        fallbackReason,
+        txCount: statementResult.transactions.length,
+        latencyMs: Date.now() - startedAt,
+        mimeType,
+        quotaReserved,
+      });
       return {
         kind: "success",
         bank: statementResult.bank,
@@ -269,6 +317,14 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
     // Última tentativa: notification-parser em cima do texto OCR completo.
     const notifResult = parseNotificationText(ocrResult.text, ocrResult.confidence);
     if (notifResult && notifResult.transactions.length > 0) {
+      logParseResult({
+        source: "notif",
+        fallbackReason,
+        txCount: notifResult.transactions.length,
+        latencyMs: Date.now() - startedAt,
+        mimeType,
+        quotaReserved,
+      });
       return {
         kind: "success",
         bank: notifResult.bank,

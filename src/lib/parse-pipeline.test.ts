@@ -402,6 +402,68 @@ describe("parseFileForImport", () => {
     }
   });
 
+  describe("structured logging", () => {
+    it("loga JSON line com source, fallbackReason, documentType, txCount, latencyMs, mimeType, quotaReserved", async () => {
+      const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        await parseFileForImport({
+          buffer,
+          mimeType: "application/pdf",
+          filename: "fatura.pdf",
+          userId,
+        });
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const rawLog = logSpy.mock.calls[0][0];
+        expect(typeof rawLog).toBe("string");
+        const logData = JSON.parse(rawLog as string);
+        expect(logData).toMatchObject({
+          source: "ai",
+          documentType: "fatura_cartao",
+          txCount: 1,
+          mimeType: "application/pdf",
+          quotaReserved: true,
+        });
+        expect(logData.fallbackReason).toBeUndefined();
+        expect(typeof logData.latencyMs).toBe("number");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("loga com fallbackReason quando cai no fallback", async () => {
+      vi.mocked(aiQuota.tryReserve).mockResolvedValue(false);
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        await parseFileForImport({
+          buffer,
+          mimeType: "application/pdf",
+          filename: "x.pdf",
+          userId,
+        });
+
+        const logData = JSON.parse(logSpy.mock.calls[0][0] as string);
+        expect(logData).toMatchObject({
+          source: "regex",
+          fallbackReason: "quota_exhausted",
+          quotaReserved: false,
+          txCount: 1,
+        });
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+  });
+
   describe("structured fallback contract (aiEnabled + aiAttempted + fallbackReason)", () => {
     it("AI sucesso: aiEnabled=true, aiAttempted=true, fallbackReason=undefined, usedFallback=false", async () => {
       const result = await parseFileForImport({
