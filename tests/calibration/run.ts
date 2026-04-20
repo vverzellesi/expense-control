@@ -94,9 +94,20 @@ async function main() {
     }
 
     const expected = gt?.expectedTransactionCount ?? res.transactions.length;
-    const accuracy = expected > 0
-      ? Math.min(res.transactions.length / expected, 1)
-      : 1;
+    // Métrica simétrica: pune tanto under- quanto over-extraction.
+    // expected=3, count=3 → 1.0
+    // expected=3, count=2 → 0.67 (faltou 1)
+    // expected=3, count=5 → 0.33 (inventou 2)
+    // expected=3, count=0 → 0.0
+    // expected=0, count=0 → 1.0
+    // expected=0, count=qualquer > 0 → 0.0
+    const count = res.transactions.length;
+    let accuracy: number;
+    if (expected === 0) {
+      accuracy = count === 0 ? 1 : 0;
+    } else {
+      accuracy = Math.max(0, 1 - Math.abs(count - expected) / expected);
+    }
 
     const ok = accuracy >= 0.8 && res.source === "ai";
     console.log(

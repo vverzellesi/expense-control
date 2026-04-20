@@ -2,11 +2,17 @@ import { Type, type Schema } from "@google/genai";
 
 /**
  * Schema endurecido (Oracle review):
- * - transactionKind como enum fechado (evita string livre inventada)
  * - amount com minimum: 0 (valores absolutos, não-negativos)
  * - date com format: "date" em adição ao pattern
  * - documentConfidence no topo para gate de acceptance
  * - ordering explícito para estabilidade
+ *
+ * transactionKind é FREE STRING (não enum) para preservar compatibilidade
+ * com o contrato dos parsers legacy (`src/types/index.ts:160` declara como
+ * `string`, e o notification/statement parser emitem rótulos como
+ * "PIX ENVIADO", "PIX RECEBIDO", "BOLETO", "CARTAO", "IOF" etc.). O prompt
+ * em si já restringe o vocabulário — um enum duplicaria essa restrição
+ * e perderia granularidade (ex: "PIX ENVIADO" vs "PIX RECEBIDO").
  */
 export const AI_INVOICE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -57,9 +63,8 @@ export const AI_INVOICE_SCHEMA: Schema = {
           },
           transactionKind: {
             type: Type.STRING,
-            enum: ["compra", "transferencia", "pagamento", "taxa", "estorno", "outro"],
             description:
-              "Classificação da transação. Use 'outro' se não souber.",
+              "Classificação da transação conforme prompt: PIX, TED, BOLETO, CARTAO, ESTORNO, SAQUE, TARIFA, IOF. Omita se não for óbvio.",
           },
         },
         required: ["description", "amount", "date", "type"],
@@ -81,6 +86,6 @@ export interface AiInvoiceOutput {
     amount: number;
     date: string;
     type: "INCOME" | "EXPENSE";
-    transactionKind?: "compra" | "transferencia" | "pagamento" | "taxa" | "estorno" | "outro";
+    transactionKind?: string;
   }>;
 }

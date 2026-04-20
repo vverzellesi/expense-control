@@ -948,15 +948,21 @@ export default function ImportPage() {
     try {
       const allTransactions: ExtendedTransaction[] = [];
       let lastOrigin = "";
-      let lastSource: "ai" | "notif" | "regex" | null = null;
-      let lastFallbackReason:
+      // Agregação do source/fallback: o pior caso vence (fallback > ai > notif).
+      // Se UM arquivo caiu em fallback, o preview deve refletir isso, mesmo que
+      // outros arquivos tenham sido processados pela IA. Last-write-wins esconderia
+      // o estado degradado.
+      type BatchFallbackReason =
         | "disabled"
         | "quota_exhausted"
         | "quota_error"
         | "ai_error"
         | "gate_rejected"
-        | "pdf_encrypted"
-        | undefined = undefined;
+        | "pdf_encrypted";
+      let hasAnyAi = false;
+      let hasAnyFallback = false;
+      let hasAnyNotif = false;
+      let firstFallbackReason: BatchFallbackReason | undefined = undefined;
       let totalConfidence = 0;
       let successCount = 0;
       const errors: string[] = [];
@@ -969,14 +975,37 @@ export default function ImportPage() {
           const result = await callOCRApi(files[i]);
           allTransactions.push(...result.transactions);
           lastOrigin = result.origin || lastOrigin;
-          lastSource = result.source;
-          lastFallbackReason = result.fallbackReason;
+
+          // Agregação: fallback é o estado pior e sobrepõe AI/notif na UI.
+          if (result.source === "regex" || result.fallbackReason) {
+            hasAnyFallback = true;
+            if (!firstFallbackReason && result.fallbackReason) {
+              firstFallbackReason = result.fallbackReason;
+            }
+          } else if (result.source === "ai") {
+            hasAnyAi = true;
+          } else if (result.source === "notif") {
+            hasAnyNotif = true;
+          }
+
           totalConfidence += result.confidence;
           successCount++;
         } catch (error) {
           errors.push(`${files[i].name}: ${error instanceof Error ? error.message : "Erro"}`);
         }
       }
+
+      // Decisão final: fallback > ai > notif.
+      const aggregatedSource: "ai" | "notif" | "regex" | null = hasAnyFallback
+        ? "regex"
+        : hasAnyAi
+          ? "ai"
+          : hasAnyNotif
+            ? "notif"
+            : null;
+      const aggregatedFallbackReason = hasAnyFallback
+        ? firstFallbackReason
+        : undefined;
 
       setOcrProgress(100);
       setOcrProgressLabel("");
@@ -1001,8 +1030,8 @@ export default function ImportPage() {
       const uniqueTransactions = deduplicateTransactions(allTransactions);
 
       setOrigin(lastOrigin);
-      setParseSource(lastSource);
-      setFallbackReason(lastFallbackReason);
+      setParseSource(aggregatedSource);
+      setFallbackReason(aggregatedFallbackReason);
       setOcrConfidence(successCount > 0 ? totalConfidence / successCount : null);
       const transactionsWithDuplicates = await checkDuplicates(uniqueTransactions);
       setTransactions(transactionsWithDuplicates);
