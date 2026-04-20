@@ -57,6 +57,9 @@ model User {
   telegramLinkTokens     TelegramLinkToken[]
   telegramPendingImports TelegramPendingImport[]
   telegramPhotoQueue     TelegramPhotoQueue[]
+
+  // AI usage tracking
+  aiUsage AiUsage[]
 }
 
 model Account {
@@ -637,5 +640,21 @@ model TelegramPhotoQueue {
 
   @@unique([mediaGroupId, fileId])
   @@index([mediaGroupId])
+  @@index([userId])
+}
+
+// ==========================================
+// AI USAGE TRACKING
+// ==========================================
+
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  yearMonth String // "2026-04"
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, yearMonth])
   @@index([userId])
 }
