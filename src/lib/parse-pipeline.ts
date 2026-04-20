@@ -200,12 +200,20 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
       try {
         const aiResult = await parseFileWithAi(buffer, mimeType, client);
 
-        // Acceptance gate duplo: documentType reconhecido + transações existem.
+        // Acceptance gate triplo:
+        //   1. documentType reconhecido (fatura ou extrato, não "desconhecido")
+        //   2. ao menos 1 transação extraída (doc sem conteúdo = sem valor)
+        //   3. documentConfidence >= 0.5 quando presente (o modelo admite
+        //      incerteza sobre o próprio documento — respeitar)
         const validDocType =
           aiResult.documentType === "fatura_cartao" ||
           aiResult.documentType === "extrato_bancario";
 
-        if (validDocType && aiResult.transactions.length > 0) {
+        const confidenceOk =
+          aiResult.documentConfidence === undefined ||
+          aiResult.documentConfidence >= 0.5;
+
+        if (validDocType && aiResult.transactions.length > 0 && confidenceOk) {
           return {
             kind: "success",
             bank: aiResult.bank,

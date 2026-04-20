@@ -4,6 +4,12 @@ import type { AiInvoiceOutput } from "./schema";
 
 export interface AiParseResult extends StatementParseResult {
   documentType: "fatura_cartao" | "extrato_bancario" | "desconhecido";
+  /**
+   * Confiança [0, 1] da própria IA de que o doc é mesmo um extrato/fatura.
+   * undefined = IA não preencheu (compat com schemas antigos).
+   * Usado pelo gate em parse-pipeline para rejeitar docs aleatórios.
+   */
+  documentConfidence?: number;
 }
 
 function parseIsoDate(iso: string): Date | null {
@@ -41,6 +47,17 @@ function sanitize(output: AiInvoiceOutput): StatementTransaction[] {
   return result;
 }
 
+/**
+ * Sanitiza documentConfidence para [0, 1]. Retorna undefined se ausente/NaN.
+ * Valores fora do range são clampados (≤0 → 0, ≥1 → 1).
+ */
+function sanitizeDocumentConfidence(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
 export async function parseFileWithAi(
   buffer: Buffer,
   mimeType: string,
@@ -59,6 +76,7 @@ export async function parseFileWithAi(
   return {
     bank: output.bank,
     documentType: output.documentType,
+    documentConfidence: sanitizeDocumentConfidence(output.documentConfidence),
     transactions,
     averageConfidence: 1,
   };

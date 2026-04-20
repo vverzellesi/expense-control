@@ -35,6 +35,12 @@ TRANSACTION KIND:
 DOCUMENT TYPE:
 13. Se fatura de cartão → "fatura_cartao". Se extrato bancário → "extrato_bancario". Se não for nenhum (print qualquer, notificação push, documento ilegível) → "desconhecido" e transactions: [].
 
+DOCUMENT CONFIDENCE:
+14. Devolva "documentConfidence" em [0.0, 1.0] indicando QUANTO você tem certeza de que este documento é realmente uma fatura/extrato bancário — não o quanto você extraiu bem as transações.
+    - 0.9–1.0: claramente fatura/extrato com cabeçalho/logo identificáveis
+    - 0.5–0.8: parece fatura/extrato mas tem ambiguidade (qualidade ruim, estrutura atípica)
+    - 0.0–0.5: provavelmente não é fatura/extrato (screenshot aleatório, notificação push, documento ilegível)
+
 FILOSOFIA:
 14. Em dúvida, PREFIRA IGNORAR. Falsos negativos são preferíveis a falsos positivos — o usuário revisa e completa manualmente.
 

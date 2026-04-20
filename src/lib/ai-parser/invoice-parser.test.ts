@@ -93,4 +93,43 @@ describe("parseFileWithAi", () => {
     await parseFileWithAi(buffer, "image/jpeg", client);
     expect(client.generateInvoiceStructured).toHaveBeenCalledWith(buffer, "image/jpeg");
   });
+
+  it("expõe documentConfidence sanitizado quando a IA retorna", async () => {
+    const client = mockClient({
+      bank: "Nubank",
+      documentType: "fatura_cartao",
+      documentConfidence: 0.85,
+      transactions: [
+        { description: "PAG*IFOOD", amount: 45, date: "2026-03-15", type: "EXPENSE" },
+      ],
+    });
+    const result = await parseFileWithAi(buffer, "application/pdf", client);
+    expect(result.documentConfidence).toBe(0.85);
+  });
+
+  it("sanitiza documentConfidence fora do range [0, 1] (clampa para 0)", async () => {
+    const client = mockClient({
+      bank: "Nubank",
+      documentType: "fatura_cartao",
+      documentConfidence: -0.5,
+      transactions: [
+        { description: "PAG*IFOOD", amount: 45, date: "2026-03-15", type: "EXPENSE" },
+      ],
+    });
+    const result = await parseFileWithAi(buffer, "application/pdf", client);
+    expect(result.documentConfidence).toBe(0);
+  });
+
+  it("documentConfidence ausente vira undefined (gate decide o que fazer)", async () => {
+    const client = mockClient({
+      bank: "Nubank",
+      documentType: "fatura_cartao",
+      // sem documentConfidence
+      transactions: [
+        { description: "PAG*IFOOD", amount: 45, date: "2026-03-15", type: "EXPENSE" },
+      ],
+    } as AiInvoiceOutput);
+    const result = await parseFileWithAi(buffer, "application/pdf", client);
+    expect(result.documentConfidence).toBeUndefined();
+  });
 });

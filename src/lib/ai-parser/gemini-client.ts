@@ -29,11 +29,15 @@ class RealGeminiClient implements GeminiClient {
     try {
       const response = await this.ai.models.generateContent({
         model: MODEL,
+        // `contents` carrega APENAS o input do usuário (o arquivo).
+        // As instruções do sistema vão em `config.systemInstruction`,
+        // que é o campo canônico da API — colocá-las em parts[0].text
+        // (como estava antes) mistura as regras com o conteúdo do usuário
+        // e é menos robusto contra prompt injection.
         contents: [
           {
             role: "user",
             parts: [
-              { text: SYSTEM_PROMPT },
               {
                 inlineData: {
                   mimeType,
@@ -44,6 +48,7 @@ class RealGeminiClient implements GeminiClient {
           },
         ],
         config: {
+          systemInstruction: SYSTEM_PROMPT,
           temperature: 0,
           responseMimeType: "application/json",
           responseSchema: AI_INVOICE_SCHEMA,

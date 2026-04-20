@@ -569,6 +569,82 @@ describe("parseFileForImport", () => {
       expect(result.aiAttempted).toBe(false);
     });
 
+    it("Gate: rejeita quando documentConfidence < 0.5 (fallbackReason='gate_rejected')", async () => {
+      vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+        bank: "Nubank",
+        documentType: "fatura_cartao", // documentType válido
+        documentConfidence: 0.3,        // MAS confidence baixa → rejeita
+        averageConfidence: 1,
+        transactions: [
+          { date: new Date(), description: "X", amount: -5, type: "EXPENSE", confidence: 1 },
+        ],
+      });
+      vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "C6",
+        averageConfidence: 0.85,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.fallbackReason).toBe("gate_rejected");
+      expect(result.source).toBe("regex");
+    });
+
+    it("Gate: aceita quando documentConfidence ausente + documentType válido + 1+ transações (compat)", async () => {
+      vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+        bank: "Nubank",
+        documentType: "fatura_cartao",
+        // documentConfidence ausente
+        averageConfidence: 1,
+        transactions: [
+          { date: new Date(), description: "X", amount: -5, type: "EXPENSE", confidence: 1 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("ai");
+      expect(result.fallbackReason).toBeUndefined();
+    });
+
+    it("Gate: aceita quando documentConfidence >= 0.5", async () => {
+      vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+        bank: "Nubank",
+        documentType: "fatura_cartao",
+        documentConfidence: 0.7,
+        averageConfidence: 1,
+        transactions: [
+          { date: new Date(), description: "X", amount: -5, type: "EXPENSE", confidence: 1 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "application/pdf",
+        filename: "x.pdf",
+        userId,
+      });
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("ai");
+    });
+
     it("source=notif: fallbackReason=undefined, usedFallback=false (não é fallback mesmo com AI disponível)", async () => {
       vi.mocked(notifParser.parseNotificationText).mockReturnValue({
         bank: "Nubank",
