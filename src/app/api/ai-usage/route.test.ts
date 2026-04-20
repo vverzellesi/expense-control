@@ -1,11 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// vi.hoisted ensures mocks are available when vi.mock factories run (they are hoisted)
+const { mockGetAuthContext, mockGetUsage } = vi.hoisted(() => ({
+  mockGetAuthContext: vi.fn(),
+  mockGetUsage: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-utils", () => ({
+  getAuthContext: mockGetAuthContext,
+  unauthorizedResponse: () => {
+    const { NextResponse } = require("next/server");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  },
+}));
+
+vi.mock("@/lib/rate-limit/ai-quota", () => ({
+  getUsage: mockGetUsage,
+}));
+
 import { GET } from "./route";
 import { NextRequest } from "next/server";
-import * as authUtils from "@/lib/auth-utils";
-import * as aiQuota from "@/lib/rate-limit/ai-quota";
-
-vi.mock("@/lib/auth-utils");
-vi.mock("@/lib/rate-limit/ai-quota");
 
 describe("GET /api/ai-usage", () => {
   beforeEach(() => {
@@ -13,21 +27,18 @@ describe("GET /api/ai-usage", () => {
   });
 
   it("retorna 401 se usuário não autenticado", async () => {
-    vi.mocked(authUtils.getAuthContext).mockRejectedValue(new Error("Unauthorized"));
-    vi.mocked(authUtils.unauthorizedResponse).mockReturnValue(
-      new Response(null, { status: 401 }) as never
-    );
+    mockGetAuthContext.mockRejectedValue(new Error("Unauthorized"));
     const req = new NextRequest("http://localhost/api/ai-usage");
     const res = await GET(req);
     expect(res.status).toBe(401);
   });
 
   it("retorna JSON com used/remaining/limit/yearMonth para usuário autenticado", async () => {
-    vi.mocked(authUtils.getAuthContext).mockResolvedValue({
+    mockGetAuthContext.mockResolvedValue({
       userId: "u1",
       ownerFilter: { userId: "u1" },
-    } as never);
-    vi.mocked(aiQuota.getUsage).mockResolvedValue({
+    });
+    mockGetUsage.mockResolvedValue({
       used: 2,
       remaining: 3,
       limit: 5,
