@@ -16,6 +16,7 @@ import { suggestCategory, detectInstallment } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates, deduplicateTransactions } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
 import { parseFileForImport } from "@/lib/parse-pipeline"
+import { getUsage } from "@/lib/rate-limit/ai-quota"
 import { formatCurrency } from "@/lib/utils"
 import {
   handleSummaryQuery,
@@ -857,10 +858,21 @@ export async function handlePhotoMessage(
 
     // Build summary
     const totalDupes = duplicateCount + inBatchDupes
-    const lines = [
-      `📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`,
-      `💰 Total: ${formatCurrency(total)}`,
-    ]
+    const lines: string[] = []
+
+    // Header com indicador de fonte (AI · quota · fallback)
+    if (batchUsedAi && !batchUsedFallback) {
+      const usage = await getUsage(userId)
+      lines.push(`✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA · ${usage.used}/${usage.limit} usos neste mês)`)
+    } else if (batchUsedFallback) {
+      lines.push(`⚠️ Cota de IA esgotada este mês — usei parser tradicional.`)
+      lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas (revise com atenção)`)
+    } else {
+      lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`)
+    }
+
+    lines.push(`💰 Total: ${formatCurrency(total)}`)
+
     if (totalDupes > 0) {
       lines.push(`⚠️ ${totalDupes} duplicata(s) removida(s)`)
     }
