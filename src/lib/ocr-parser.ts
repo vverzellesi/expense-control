@@ -19,20 +19,30 @@ export class PdfPasswordError extends Error {
   }
 }
 
+// Max width for OCR input. iPhone screenshots are ~1170×2532 and OCR cost
+// scales with pixel count, pushing us past Vercel's 60s function timeout.
+// 1200px is the sweet spot: big enough for Tesseract accuracy, small enough
+// to finish in time.
+const OCR_MAX_WIDTH_PX = 1200;
+
 /**
- * Pre-process image for better OCR accuracy
- * - Converts to grayscale
- * - Increases contrast
- * - Applies sharpening
+ * Pre-process image for better OCR accuracy:
+ * - Downscale to OCR_MAX_WIDTH_PX if wider (primary lever for serverless timeout)
+ * - Convert to grayscale
+ * - Normalise contrast
+ * - Sharpen
  */
 async function preprocessImage(buffer: Buffer): Promise<Buffer> {
   try {
-    return await sharp(buffer)
-      .grayscale()
-      .normalise()
-      .sharpen()
-      .png()
-      .toBuffer();
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
+
+    let pipeline = image;
+    if (metadata.width && metadata.width > OCR_MAX_WIDTH_PX) {
+      pipeline = pipeline.resize(OCR_MAX_WIDTH_PX, undefined, { fit: "inside" });
+    }
+
+    return await pipeline.grayscale().normalise().sharpen().png().toBuffer();
   } catch {
     // If sharp processing fails, return original buffer
     return buffer;
@@ -40,9 +50,19 @@ async function preprocessImage(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Callback receiving real-time OCR progress from Tesseract.
+ * `status` is the Tesseract phase (e.g., "loading language traineddata",
+ * "recognizing text"); `progress` is a fraction 0..1 for the current phase.
+ */
+export type OcrProgressCallback = (update: { status: string; progress: number }) => void;
+
+/**
  * Process an image file with OCR
  */
-export async function processImageOCR(file: File): Promise<OCRResult> {
+export async function processImageOCR(
+  file: File,
+  onProgress?: OcrProgressCallback
+): Promise<OCRResult> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
@@ -50,7 +70,9 @@ export async function processImageOCR(file: File): Promise<OCRResult> {
   const processedBuffer = await preprocessImage(buffer);
 
   const result = await Tesseract.recognize(processedBuffer, "por", {
-    logger: () => {},
+    logger: onProgress
+      ? (m) => onProgress({ status: m.status, progress: m.progress })
+      : () => {},
   });
 
   return {
@@ -62,11 +84,16 @@ export async function processImageOCR(file: File): Promise<OCRResult> {
 /**
  * Process a buffer with OCR (for PDF pages)
  */
-export async function processBufferOCR(buffer: Buffer): Promise<OCRResult> {
+export async function processBufferOCR(
+  buffer: Buffer,
+  onProgress?: OcrProgressCallback
+): Promise<OCRResult> {
   const processedBuffer = await preprocessImage(buffer);
 
   const result = await Tesseract.recognize(processedBuffer, "por", {
-    logger: () => {},
+    logger: onProgress
+      ? (m) => onProgress({ status: m.status, progress: m.progress })
+      : () => {},
   });
 
   return {
@@ -139,11 +166,14 @@ export async function processPDFOCR(
 
 /**
  * Process any supported file (image or PDF)
- * Password is only used for PDF files and ignored for images
+ * Password is only used for PDF files and ignored for images.
+ * `onProgress` only fires for images (Tesseract OCR) — PDF text extraction
+ * is synchronous-ish and doesn't provide meaningful intermediate progress.
  */
 export async function processFile(
   file: File,
-  password?: string
+  password?: string,
+  onProgress?: OcrProgressCallback
 ): Promise<OCRResult> {
   const fileName = file.name.toLowerCase();
 
@@ -152,7 +182,7 @@ export async function processFile(
   }
 
   // Assume it's an image — password is ignored
-  return processImageOCR(file);
+  return processImageOCR(file, onProgress);
 }
 
 /**
