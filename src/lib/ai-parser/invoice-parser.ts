@@ -1,5 +1,5 @@
 import type { StatementParseResult, StatementTransaction } from "@/types";
-import type { GeminiClient } from "./gemini-client";
+import type { GeminiClient, GeminiInvoicePart } from "./gemini-client";
 import type { AiInvoiceOutput } from "./schema";
 
 export interface AiParseResult extends StatementParseResult {
@@ -58,12 +58,41 @@ function sanitizeDocumentConfidence(value: unknown): number | undefined {
   return value;
 }
 
+/**
+ * Parseia um arquivo único com o Gemini. Retrocompat mantida.
+ * Para múltiplos arquivos no mesmo prompt (Approach C — multi-part), use a
+ * versão array (`parts: GeminiInvoicePart[]`).
+ */
 export async function parseFileWithAi(
   buffer: Buffer,
   mimeType: string,
   client: GeminiClient
+): Promise<AiParseResult>;
+export async function parseFileWithAi(
+  parts: GeminiInvoicePart[],
+  client: GeminiClient
+): Promise<AiParseResult>;
+export async function parseFileWithAi(
+  bufferOrParts: Buffer | GeminiInvoicePart[],
+  mimeTypeOrClient: string | GeminiClient,
+  maybeClient?: GeminiClient
 ): Promise<AiParseResult> {
-  const output = await client.generateInvoiceStructured(buffer, mimeType);
+  let client: GeminiClient;
+  let output: AiInvoiceOutput;
+
+  if (Array.isArray(bufferOrParts)) {
+    // parts[], client
+    client = mimeTypeOrClient as GeminiClient;
+    output = await client.generateInvoiceStructured(bufferOrParts);
+  } else {
+    // buffer, mimeType, client
+    client = maybeClient as GeminiClient;
+    output = await client.generateInvoiceStructured(
+      bufferOrParts,
+      mimeTypeOrClient as string
+    );
+  }
+
   const transactions = sanitize(output);
 
   const discarded = output.transactions.length - transactions.length;
