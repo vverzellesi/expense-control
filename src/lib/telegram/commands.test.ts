@@ -40,16 +40,8 @@ vi.mock("./client", () => ({
   downloadFileBuffer: vi.fn(),
 }))
 
-vi.mock("@/lib/ocr-parser", () => ({
-  processBufferOCR: vi.fn(),
-}))
-
-vi.mock("@/lib/statement-parser", () => ({
-  parseStatementText: vi.fn(),
-}))
-
-vi.mock("@/lib/notification-parser", () => ({
-  parseNotificationText: vi.fn(),
+vi.mock("@/lib/parse-pipeline", () => ({
+  parseFileForImport: vi.fn(),
 }))
 
 vi.mock("@/lib/dedup", async (importOriginal) => {
@@ -71,6 +63,14 @@ vi.mock("@/lib/import-service", () => ({
   importTransactions: vi.fn(),
 }))
 
+vi.mock("@/lib/rate-limit/ai-quota", () => ({
+  getUsage: vi.fn(),
+  hasQuota: vi.fn(),
+  increment: vi.fn(),
+  tryReserve: vi.fn(),
+  release: vi.fn(),
+}))
+
 import prisma from "@/lib/db"
 import { sendMessage, editMessageText, getFile, downloadFileBuffer } from "./client"
 import {
@@ -86,23 +86,21 @@ import {
   handlePhotoBackToSummary,
 } from "./commands"
 import type { TelegramMessage } from "./client"
-import { processBufferOCR } from "@/lib/ocr-parser"
-import { parseStatementText } from "@/lib/statement-parser"
-import { parseNotificationText } from "@/lib/notification-parser"
+import { parseFileForImport } from "@/lib/parse-pipeline"
 import { suggestCategory } from "@/lib/categorizer"
 import { filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
+import { getUsage } from "@/lib/rate-limit/ai-quota"
 
 const mockSendMessage = vi.mocked(sendMessage)
 const mockEditMessageText = vi.mocked(editMessageText)
 const mockGetFile = vi.mocked(getFile)
 const mockDownloadFileBuffer = vi.mocked(downloadFileBuffer)
-const mockProcessBufferOCR = vi.mocked(processBufferOCR)
-const mockParseStatementText = vi.mocked(parseStatementText)
-const mockParseNotificationText = vi.mocked(parseNotificationText)
+const mockParsePipeline = vi.mocked(parseFileForImport)
 const mockSuggestCategory = vi.mocked(suggestCategory)
 const mockFilterDuplicates = vi.mocked(filterDuplicates)
 const mockImportTransactions = vi.mocked(importTransactions)
+const mockGetUsage = vi.mocked(getUsage)
 const mockFindUniqueToken = vi.mocked(prisma.telegramLinkToken.findUnique)
 const mockFindUniqueLink = vi.mocked(prisma.telegramLink.findUnique)
 const mockTransaction = vi.mocked(prisma.$transaction)
@@ -294,23 +292,24 @@ describe("handlePhotoMessage", () => {
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake-image"))
 
-    mockProcessBufferOCR.mockResolvedValue({
-      text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234",
-      confidence: 85,
-    })
-
-    const transaction = {
-      date: new Date(2026, 2, 14),
-      description: "COMPRA",
-      amount: -50,
-      type: "EXPENSE" as const,
-      confidence: 85,
-    }
-
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [transaction],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 85,
     })
 
     mockSuggestCategory.mockResolvedValue(null)
@@ -338,21 +337,25 @@ describe("handlePhotoMessage", () => {
     await promise
 
     expect(mockGetFile).toHaveBeenCalledWith("large")
-    expect(mockProcessBufferOCR).toHaveBeenCalled()
+    expect(mockParsePipeline).toHaveBeenCalled()
   })
 
   it("handles no transactions found after OCR (empty text)", async () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "", confidence: 0 })
+    mockParsePipeline.mockResolvedValue({
+      kind: "error",
+      error: "no_transactions_found",
+      rawText: "",
+    })
     mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
 
     const promise = handlePhotoMessage(makePhotoMessage(), "user-1")
     await vi.advanceTimersByTimeAsync(3000)
     await promise
 
-    // With batch flow, empty OCR means 0 transactions, so it shows "Nenhuma transacao encontrada nas imagens"
+    // With batch flow, pipeline error means 0 transactions, so it shows "Nenhuma transacao encontrada nas imagens"
     const lastCall = mockSendMessage.mock.calls[mockSendMessage.mock.calls.length - 1] ||
                      mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
     expect(lastCall).toBeDefined()
@@ -362,9 +365,11 @@ describe("handlePhotoMessage", () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "some random text", confidence: 85 })
-    mockParseStatementText.mockReturnValue({ bank: "Unknown", transactions: [], averageConfidence: 0 })
-    mockParseNotificationText.mockReturnValue(null)
+    mockParsePipeline.mockResolvedValue({
+      kind: "error",
+      error: "no_transactions_found",
+      rawText: "some random text",
+    })
     mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
 
     const promise = handlePhotoMessage(makePhotoMessage(), "user-1")
@@ -387,11 +392,24 @@ describe("handlePhotoMessage", () => {
     setupSinglePhotoQueueMocks()
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({ unique: [], duplicateCount: 1 } as never)
@@ -526,14 +544,27 @@ describe("handlePhotoMessage - media group batching", () => {
     ] as never)
     vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
 
-    // Mock OCR + parse chain
+    // Mock pipeline
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({
@@ -569,7 +600,7 @@ describe("handlePhotoMessage - media group batching", () => {
 
     // Should not attempt to process photos
     expect(mockGetFile).not.toHaveBeenCalled()
-    expect(mockProcessBufferOCR).not.toHaveBeenCalled()
+    expect(mockParsePipeline).not.toHaveBeenCalled()
   })
 
   it("generates unique mediaGroupId for single photos (no media_group_id)", async () => {
@@ -584,11 +615,24 @@ describe("handlePhotoMessage - media group batching", () => {
     vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00\nCartao final 1234", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({
@@ -622,11 +666,24 @@ describe("handlePhotoMessage - media group batching", () => {
 
     mockGetFile.mockResolvedValue("photos/file_1.jpg")
     mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
-    mockProcessBufferOCR.mockResolvedValue({ text: "14/03\nCOMPRA R$ 50,00", confidence: 85 })
-    mockParseStatementText.mockReturnValue({
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
       bank: "Fatura C6",
-      transactions: [{ date: new Date(2026, 2, 14), description: "COMPRA", amount: -50, type: "EXPENSE" as const, confidence: 85 }],
-      averageConfidence: 85,
+      transactions: [
+        {
+          date: new Date(2026, 2, 14),
+          description: "COMPRA",
+          amount: -50,
+          type: "EXPENSE",
+          confidence: 85,
+        },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 85,
     })
     mockSuggestCategory.mockResolvedValue(null)
     mockFilterDuplicates.mockResolvedValue({
@@ -669,6 +726,290 @@ describe("handlePhotoMessage - media group batching", () => {
     expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-err", userId: "user-1" } })
     // Should send error message
     expect(mockSendMessage).toHaveBeenCalledWith(12345, expect.stringContaining("Erro ao processar"))
+  })
+
+  it("inclui linha '(IA · X/5 usos)' quando batch usou AI com sucesso", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-ai"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-ai", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "PAG*IFOOD", amount: 45, type: "EXPENSE", confidence: 1 },
+      ],
+      source: "ai",
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
+      confidence: 1,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PAG*IFOOD", amount: -45, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    mockGetUsage.mockResolvedValue({ used: 4, remaining: 1, limit: 5 })
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-ai" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Summary should have been sent via editMessageText (progress message)
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("✨")
+    expect(text).toContain("IA · 4/5")
+  })
+
+  it("AI sucesso: getUsage falhando é tolerado (best-effort) — resumo ainda sai", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-ai-getusage-err"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-ai-getusage-err", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "PAG*IFOOD", amount: 45, type: "EXPENSE", confidence: 1 },
+      ],
+      source: "ai",
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
+      confidence: 1,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PAG*IFOOD", amount: -45, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    // getUsage falha — getUsage é best-effort no summary
+    mockGetUsage.mockRejectedValue(new Error("DB down"))
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-ai" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Resumo AINDA deve sair (usando fallback da linha sem contador).
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("✨")
+    expect(text).not.toContain("Erro ao processar")
+  })
+
+  it("fallbackReason='quota_exhausted': mensagem específica '⚠️ Cota de IA esgotada'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-quota-exhausted"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-quota-exhausted", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: true,
+      aiAttempted: false,
+      fallbackReason: "quota_exhausted",
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-fb" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("Cota de IA esgotada")
+    expect(text).toContain("parser tradicional")
+  })
+
+  it("fallbackReason='disabled' (AI não configurada): NÃO diz 'cota esgotada' (só mensagem neutra)", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-disabled"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-disabled", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: false,
+      aiAttempted: false,
+      fallbackReason: "disabled",
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-dis" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    // Contrato crítico: quando AI não está configurada, não mentir sobre "cota esgotada".
+    expect(text).not.toContain("Cota de IA esgotada")
+    expect(text).not.toContain("IA indisponível")
+  })
+
+  it("fallbackReason='gate_rejected': mensagem específica 'IA não reconheceu'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-gate"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-gate", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "C6",
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+      source: "regex",
+      usedFallback: true,
+      aiEnabled: true,
+      aiAttempted: true,
+      fallbackReason: "gate_rejected",
+      confidence: 0.85,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "PIX", amount: 100, date: new Date(), categoryId: null, type: "INCOME", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-gate" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).toContain("IA não reconheceu")
+  })
+
+  it("não adiciona linha de IA quando source='notif'", async () => {
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-notif"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "large", mediaGroupId: "group-notif", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file_1.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "Nubank",
+      transactions: [
+        { date: new Date(), description: "CPG IFOOD", amount: 25, type: "EXPENSE", confidence: 0.9 },
+      ],
+      source: "notif",
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: false,
+      confidence: 0.9,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockResolvedValue({
+      unique: [{ description: "CPG IFOOD", amount: -25, date: new Date(), categoryId: null, type: "EXPENSE", selected: true, isInstallment: false, currentInstallment: null, totalInstallments: null }],
+      duplicateCount: 0,
+    } as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-notif" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    const editCalls = mockEditMessageText.mock.calls
+    const lastEdit = editCalls[editCalls.length - 1]
+    const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
+    expect(text).not.toContain("IA ·")
+    expect(text).not.toContain("parser tradicional")
   })
 })
 

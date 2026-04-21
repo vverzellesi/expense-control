@@ -15,9 +15,8 @@ import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
 import { suggestCategory, detectInstallment } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates, deduplicateTransactions } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
-import { processBufferOCR } from "@/lib/ocr-parser"
-import { parseStatementText } from "@/lib/statement-parser"
-import { parseNotificationText } from "@/lib/notification-parser"
+import { parseFileForImport } from "@/lib/parse-pipeline"
+import { getUsage } from "@/lib/rate-limit/ai-quota"
 import { formatCurrency } from "@/lib/utils"
 import {
   handleSummaryQuery,
@@ -677,6 +676,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Mapeia fallbackReason para mensagem user-facing do Telegram.
+ * - "disabled": null — AI não configurada, mensagem genérica é suficiente.
+ * - "quota_exhausted": aviso claro da cota mensal.
+ * - "quota_error" | "ai_error": aviso de indisponibilidade transitória.
+ * - "gate_rejected": IA não reconheceu o documento.
+ * - "pdf_encrypted": PDF criptografado (relevante pro fluxo web, raro no Telegram).
+ */
+function telegramFallbackMessage(
+  reason:
+    | "disabled"
+    | "quota_exhausted"
+    | "quota_error"
+    | "ai_error"
+    | "gate_rejected"
+    | "pdf_encrypted"
+): string | null {
+  switch (reason) {
+    case "disabled":
+      return null
+    case "quota_exhausted":
+      return "⚠️ Cota de IA esgotada este mês — usei parser tradicional."
+    case "quota_error":
+    case "ai_error":
+      return "⚠️ IA indisponível no momento — usei parser tradicional."
+    case "gate_rejected":
+      return "⚠️ IA não reconheceu o documento — usei parser tradicional."
+    case "pdf_encrypted":
+      return "⚠️ PDF protegido por senha — usei parser tradicional."
+  }
+}
+
 export async function handlePhotoMessage(
   message: TelegramMessage,
   userId: string
@@ -739,6 +770,19 @@ export async function handlePhotoMessage(
       totalInstallments: number | null
     }> = []
     let lastBank = ""
+    let batchUsedAi = false
+    // Primeiro fallbackReason observado no batch (prioridade temporal).
+    // Usado para compor a mensagem final com o motivo real (ex: "quota_exhausted"
+    // vs "disabled" — a mensagem muda e evita dizer "cota esgotada" quando a
+    // IA sequer está habilitada).
+    let batchFallbackReason:
+      | "disabled"
+      | "quota_exhausted"
+      | "quota_error"
+      | "ai_error"
+      | "gate_rejected"
+      | "pdf_encrypted"
+      | undefined = undefined
 
     // Send initial progress message
     const progressMsg = await sendMessage(chatId, `📸 Processando imagem 1 de ${totalPhotos}...`)
@@ -753,21 +797,29 @@ export async function handlePhotoMessage(
         if (!filePath) continue
         const buffer = await downloadFileBuffer(filePath)
 
-        // OCR
-        const ocrResult = await processBufferOCR(buffer)
-        if (!ocrResult.text || ocrResult.text.trim().length === 0) continue
+        // Parse via pipeline unificado (notif → AI → regex)
+        const parsed = await parseFileForImport({
+          buffer,
+          mimeType: "image/jpeg", // Telegram photos come as JPEG
+          filename: `telegram-${item.fileId}.jpg`,
+          userId,
+        })
 
-        // Parse
-        let parseResult = parseStatementText(ocrResult.text, ocrResult.confidence)
-        if (parseResult.transactions.length === 0) {
-          const notificationResult = parseNotificationText(ocrResult.text, ocrResult.confidence)
-          if (notificationResult) parseResult = notificationResult
+        if (parsed.kind === "error") {
+          // Tracking: se uma foto falhar, pula mas continua o batch.
+          console.warn(`Telegram photo parse failed: ${parsed.error}`)
+          continue
         }
 
-        if (parseResult.bank) lastBank = parseResult.bank
+        if (parsed.bank) lastBank = parsed.bank
+        if (parsed.source === "ai") batchUsedAi = true
+        // Captura o primeiro fallbackReason do batch (prioridade temporal).
+        if (parsed.fallbackReason && !batchFallbackReason) {
+          batchFallbackReason = parsed.fallbackReason
+        }
 
         // Categorize
-        for (const t of parseResult.transactions) {
+        for (const t of parsed.transactions) {
           const suggested = await suggestCategory(t.description, userId)
           const installment = detectInstallment(t.description)
 
@@ -852,10 +904,33 @@ export async function handlePhotoMessage(
 
     // Build summary
     const totalDupes = duplicateCount + inBatchDupes
-    const lines = [
-      `📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`,
-      `💰 Total: ${formatCurrency(total)}`,
-    ]
+    const lines: string[] = []
+
+    // Header com indicador de fonte. A mensagem de fallback AGORA usa
+    // `fallbackReason` estruturado ao invés de um boolean colapsado — permite
+    // distinguir "quota esgotada" de "AI desabilitada" de "erro transitório".
+    if (batchUsedAi && !batchFallbackReason) {
+      // Sucesso AI: mostrar contador de quota como feedback positivo.
+      // getUsage é best-effort — se o DB cair, não quebramos o resumo.
+      let usageLine = `✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA)`
+      try {
+        const usage = await getUsage(userId)
+        usageLine = `✨ ${lastBank || "Extrato"} — ${allTransactions.length} transações extraídas (IA · ${usage.used}/${usage.limit} usos neste mês)`
+      } catch (err) {
+        console.warn("getUsage falhou (non-fatal):", err instanceof Error ? err.message : String(err))
+      }
+      lines.push(usageLine)
+    } else if (batchFallbackReason) {
+      const msg = telegramFallbackMessage(batchFallbackReason)
+      if (msg) lines.push(msg)
+      lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas (revise com atenção)`)
+    } else {
+      // source=notif em todas as fotos, ou caminho sem AI habilitada e sem fallback registrado.
+      lines.push(`📊 ${lastBank || "Extrato"} — ${allTransactions.length} transações encontradas`)
+    }
+
+    lines.push(`💰 Total: ${formatCurrency(total)}`)
+
     if (totalDupes > 0) {
       lines.push(`⚠️ ${totalDupes} duplicata(s) removida(s)`)
     }

@@ -1,0 +1,27 @@
+{
+  "bank": "Nubank",
+  "documentType": "fatura_cartao",
+  "transactions": [
+    {
+      "description": "PAG*IFOOD",
+      "amount": 45.90,
+      "date": "2026-03-15",
+      "type": "EXPENSE",
+      "transactionKind": "CARTAO"
+    },
+    {
+      "description": "NETFLIX.COM 1/1",
+      "amount": 55.90,
+      "date": "2026-03-20",
+      "type": "EXPENSE",
+      "transactionKind": "CARTAO"
+    },
+    {
+      "description": "UBER TRIP 3/12",
+      "amount": 23.00,
+      "date": "2026-03-22",
+      "type": "EXPENSE",
+      "transactionKind": "CARTAO"
+    }
+  ]
+}

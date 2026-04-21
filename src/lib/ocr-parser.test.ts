@@ -153,3 +153,44 @@ describe("processFile", () => {
     expect(mockGetDocumentProxy).not.toHaveBeenCalled();
   });
 });
+
+describe("isPdfEncrypted", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retorna false para buffer não-PDF", async () => {
+    const { isPdfEncrypted } = await import("./ocr-parser");
+    const buffer = Buffer.from("not a pdf");
+    expect(await isPdfEncrypted(buffer)).toBe(false);
+    // Não chama getDocumentProxy pra evitar trabalho desnecessário
+    expect(mockGetDocumentProxy).not.toHaveBeenCalled();
+  });
+
+  it("retorna false para PDF não-criptografado", async () => {
+    mockGetDocumentProxy.mockResolvedValue(MOCK_PDF_PROXY as any);
+    const { isPdfEncrypted } = await import("./ocr-parser");
+    // Buffer começando com %PDF- para passar na heurística de header
+    const plain = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj");
+    expect(await isPdfEncrypted(plain)).toBe(false);
+    expect(mockGetDocumentProxy).toHaveBeenCalled();
+  });
+
+  it("retorna true para PDF criptografado (PasswordException)", async () => {
+    const passwordError = new Error("Password required");
+    Object.assign(passwordError, { name: "PasswordException", code: 1 });
+    mockGetDocumentProxy.mockRejectedValue(passwordError);
+
+    const { isPdfEncrypted } = await import("./ocr-parser");
+    const pdf = Buffer.from("%PDF-1.4\nencrypted content");
+    expect(await isPdfEncrypted(pdf)).toBe(true);
+  });
+
+  it("retorna false para erros inesperados (não bloquear AI)", async () => {
+    mockGetDocumentProxy.mockRejectedValue(new Error("Random unrelated error"));
+
+    const { isPdfEncrypted } = await import("./ocr-parser");
+    const pdf = Buffer.from("%PDF-1.4\nbroken content");
+    expect(await isPdfEncrypted(pdf)).toBe(false);
+  });
+});

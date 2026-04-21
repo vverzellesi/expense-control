@@ -184,3 +184,30 @@ export async function processFile(
   // Assume it's an image — password is ignored
   return processImageOCR(file, onProgress);
 }
+
+/**
+ * Detecta se um buffer é um PDF criptografado.
+ * Retorna false para buffers não-PDF (sem crash).
+ * Retorna true se o PDF precisa de senha pra abrir.
+ *
+ * Usado pelo parse-pipeline como preflight antes de enviar o arquivo
+ * para a IA — Gemini não aceita PDF com senha.
+ */
+export async function isPdfEncrypted(buffer: Buffer): Promise<boolean> {
+  // Heurística rápida: não começa com %PDF- → não é PDF
+  const header = buffer.subarray(0, 5).toString("ascii");
+  if (header !== "%PDF-") return false;
+
+  try {
+    const uint8Array = new Uint8Array(buffer);
+    await getDocumentProxy(uint8Array);
+    return false; // abriu sem erro → não está criptografado
+  } catch (error) {
+    if (error && typeof error === "object" && "name" in error) {
+      const pdfError = error as { name: string; code?: number };
+      if (pdfError.name === "PasswordException") return true;
+    }
+    // Erros inesperados: assumir não-criptografado pra não bloquear AI
+    return false;
+  }
+}
