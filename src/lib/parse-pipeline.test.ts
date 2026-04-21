@@ -507,6 +507,39 @@ describe("parseFileForImport", () => {
       expect(result.usedFallback).toBe(true);
     });
 
+    it("Imagem sem AI key + não-notif: reusa OCR do STEP 1 no STEP 3 (não chama processFile)", async () => {
+      // Regressão: sem este cache, imagem não-notif sem AI passava por 2 OCR
+      // tesseract passes e estourava o timeout de 60s da Vercel.
+      vi.mocked(geminiClientMod.createGeminiClient).mockReturnValue(null);
+      vi.mocked(ocrParser.processImageOCR).mockResolvedValue({
+        text: "EXTRATO COMPLETO",
+        confidence: 75,
+      });
+      vi.mocked(notifParser.parseNotificationText).mockReturnValue(null);
+      vi.mocked(statementParser.parseStatementText).mockReturnValue({
+        bank: "Itau",
+        averageConfidence: 0.75,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: -50, type: "EXPENSE", confidence: 0.75 },
+        ],
+      });
+
+      const result = await parseFileForImport({
+        buffer,
+        mimeType: "image/png",
+        filename: "extrato.png",
+        userId,
+      });
+
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("regex");
+      expect(result.fallbackReason).toBe("disabled");
+      // Chave do teste: processImageOCR chamado 1 vez, processFile NÃO chamado.
+      expect(ocrParser.processImageOCR).toHaveBeenCalledTimes(1);
+      expect(ocrParser.processFile).not.toHaveBeenCalled();
+    });
+
     it("Quota esgotada: fallbackReason='quota_exhausted', aiEnabled=true, aiAttempted=false", async () => {
       vi.mocked(aiQuota.tryReserve).mockResolvedValue(false);
       vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });

@@ -158,12 +158,18 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
     }
   }
 
+  // Cache do OCR leve do STEP 1 — reusado no STEP 3 pra evitar dupla tesseract
+  // em imagens. Sem esse cache, uma imagem de extrato (não-notif) sem AI_KEY
+  // passava por 2 OCR passes e estourava o timeout de 60s da Vercel.
+  let cachedImageOcr: { text: string; confidence: number } | null = null;
+
   // STEP 1: notification-parser rápido (só imagens)
   if (isImage(mimeType)) {
     try {
       const ocrLight = await processImageOCR(
         bufferToFile(buffer, input.filename, mimeType)
       );
+      cachedImageOcr = { text: ocrLight.text, confidence: ocrLight.confidence };
       const notifResult = parseNotificationText(ocrLight.text, ocrLight.confidence);
       if (notifResult && notifResult.transactions.length > 0) {
         const client = createGeminiClient();
@@ -285,10 +291,14 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   }
 
   try {
-    const ocrResult = await processFile(
-      bufferToFile(buffer, input.filename, mimeType),
-      password
-    );
+    // Reusa o OCR do STEP 1 se existir (imagem que não casou com notif).
+    // Para PDFs (ou se STEP 1 falhou), roda processFile completo.
+    const ocrResult = cachedImageOcr
+      ? cachedImageOcr
+      : await processFile(
+          bufferToFile(buffer, input.filename, mimeType),
+          password
+        );
 
     const statementResult = parseStatementText(ocrResult.text, ocrResult.confidence);
     if (statementResult.transactions.length > 0) {
