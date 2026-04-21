@@ -1872,7 +1872,7 @@ export default function ImportPage() {
                                 Estorno
                               </Badge>
                             )}
-                            {fileType === "ocr" && t.confidence !== undefined && (
+                            {fileType === "ocr" && parseSource !== "ai" && t.confidence !== undefined && (
                               getConfidenceBadge(t.confidence)
                             )}
                           </div>
@@ -2043,7 +2043,7 @@ export default function ImportPage() {
                       <TableHead>Descrição</TableHead>
                       <TableHead>Categoria</TableHead>
                       <TableHead>Tag</TableHead>
-                      {fileType === "ocr" && (
+                      {fileType === "ocr" && parseSource !== "ai" && (
                         <TableHead className="w-20">Confiança</TableHead>
                       )}
                       <TableHead className="text-right">Valor</TableHead>
@@ -2293,7 +2293,7 @@ export default function ImportPage() {
                             );
                           })()}
                         </TableCell>
-                        {fileType === "ocr" && (
+                        {fileType === "ocr" && parseSource !== "ai" && (
                           <TableCell>{getConfidenceBadge(t.confidence)}</TableCell>
                         )}
                         <TableCell
