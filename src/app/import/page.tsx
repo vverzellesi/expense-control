@@ -2041,12 +2041,12 @@ export default function ImportPage() {
                         <TableHead className="w-20">Tipo</TableHead>
                       )}
                       <TableHead>Descrição</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
                       <TableHead>Categoria</TableHead>
                       <TableHead>Tag</TableHead>
                       {fileType === "ocr" && parseSource !== "ai" && (
                         <TableHead className="w-20">Confiança</TableHead>
                       )}
-                      <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2218,6 +2218,17 @@ export default function ImportPage() {
                             </div>
                           )}
                         </TableCell>
+                        <TableCell
+                          className={`text-right font-medium whitespace-nowrap ${
+                            t.type === "INCOME"
+                              ? "text-green-600"
+                              : t.type === "TRANSFER"
+                              ? "text-gray-400"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {formatCurrency(t.amount)}
+                        </TableCell>
                         <TableCell>
                           <Select
                             value={t.categoryId || ""}
@@ -2296,17 +2307,6 @@ export default function ImportPage() {
                         {fileType === "ocr" && parseSource !== "ai" && (
                           <TableCell>{getConfidenceBadge(t.confidence)}</TableCell>
                         )}
-                        <TableCell
-                          className={`text-right font-medium ${
-                            t.type === "INCOME"
-                              ? "text-green-600"
-                              : t.type === "TRANSFER"
-                              ? "text-gray-400"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {formatCurrency(t.amount)}
-                        </TableCell>
                         <TableCell>
                           <Button
                             size="sm"
