@@ -15,7 +15,7 @@ import { parseCSV, detectBankFromContent } from "@/lib/csv-parser"
 import { suggestCategory, detectInstallment } from "@/lib/categorizer"
 import { findDuplicate, filterDuplicates, deduplicateTransactions } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
-import { parseFileForImport } from "@/lib/parse-pipeline"
+import { parseFileForImport, parseFilesForImport } from "@/lib/parse-pipeline"
 import { getUsage } from "@/lib/rate-limit/ai-quota"
 import { formatCurrency } from "@/lib/utils"
 import {
@@ -784,71 +784,146 @@ export async function handlePhotoMessage(
       | "pdf_encrypted"
       | undefined = undefined
 
+    // Approach C — Gemini Multi-Part: quando o usuário manda múltiplas fotos
+    // E a IA está habilitada, tratamos todas como UM único documento e
+    // consumimos 1 quota pro batch. Isso fecha o vazamento de quota em que
+    // cada foto consumia 1 uso mesmo sendo páginas de uma mesma fatura.
+    const aiEnabledEnv = (process.env.GEMINI_API_KEY ?? null) !== null
+    const useUnifiedMultiPart = queueItems.length >= 2 && aiEnabledEnv
+
     // Send initial progress message
-    const progressMsg = await sendMessage(chatId, `📸 Processando imagem 1 de ${totalPhotos}...`)
+    const progressInitial = useUnifiedMultiPart
+      ? `📸 Unificando ${totalPhotos} imagens em documento único...`
+      : `📸 Processando imagem 1 de ${totalPhotos}...`
+    const progressMsg = await sendMessage(chatId, progressInitial)
     const progressMessageId = progressMsg?.result?.message_id
 
-    for (let i = 0; i < queueItems.length; i++) {
-      const item = queueItems[i]
-
-      try {
-        // Download photo
-        const filePath = await getFile(item.fileId)
-        if (!filePath) continue
-        const buffer = await downloadFileBuffer(filePath)
-
-        // Parse via pipeline unificado (notif → AI → regex)
-        const parsed = await parseFileForImport({
-          buffer,
-          mimeType: "image/jpeg", // Telegram photos come as JPEG
-          filename: `telegram-${item.fileId}.jpg`,
-          userId,
+    if (useUnifiedMultiPart) {
+      // Download todos os buffers em paralelo (reduz latência).
+      const downloads = await Promise.all(
+        queueItems.map(async (item) => {
+          try {
+            const filePath = await getFile(item.fileId)
+            if (!filePath) return null
+            const buffer = await downloadFileBuffer(filePath)
+            return { buffer, item }
+          } catch (err) {
+            console.error(`Error downloading photo ${item.fileId}:`, err)
+            return null
+          }
         })
+      )
+      const ok = downloads.filter((d): d is { buffer: Buffer; item: typeof queueItems[number] } => d !== null)
 
-        if (parsed.kind === "error") {
-          // Tracking: se uma foto falhar, pula mas continua o batch.
-          console.warn(`Telegram photo parse failed: ${parsed.error}`)
-          continue
-        }
-
-        if (parsed.bank) lastBank = parsed.bank
-        if (parsed.source === "ai") batchUsedAi = true
-        // Captura o primeiro fallbackReason do batch (prioridade temporal).
-        if (parsed.fallbackReason && !batchFallbackReason) {
-          batchFallbackReason = parsed.fallbackReason
-        }
-
-        // Categorize
-        for (const t of parsed.transactions) {
-          const suggested = await suggestCategory(t.description, userId)
-          const installment = detectInstallment(t.description)
-
-          allTransactions.push({
-            description: t.description,
-            amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
-            date: t.date instanceof Date ? t.date : new Date(t.date),
-            categoryId: suggested?.id || null,
-            type: t.type || "EXPENSE",
-            selected: true,
-            isInstallment: installment.isInstallment,
-            currentInstallment: installment.currentInstallment || null,
-            totalInstallments: installment.totalInstallments || null,
-          })
-        }
-      } catch (error) {
-        console.error(`Error processing photo ${i + 1}:`, error)
-      }
-
-      // Update progress
-      if (progressMessageId && i < queueItems.length - 1) {
+      if (ok.length === 0) {
+        // Todas falharam no download — o bloco abaixo trata como "nada encontrado".
+      } else {
         try {
-          await editMessageText(
-            chatId,
-            progressMessageId,
-            `📸 Processando imagem ${i + 2} de ${totalPhotos}... (${allTransactions.length} transações)`
+          const parsed = await parseFilesForImport(
+            ok.map(({ buffer, item }) => ({
+              buffer,
+              mimeType: "image/jpeg",
+              filename: `telegram-${item.fileId}.jpg`,
+              userId,
+            }))
           )
-        } catch {
-          // Ignore edit errors (e.g., message not modified)
+
+          if (parsed.kind === "success") {
+            if (parsed.bank) lastBank = parsed.bank
+            if (parsed.source === "ai") batchUsedAi = true
+            if (parsed.fallbackReason && !batchFallbackReason) {
+              batchFallbackReason = parsed.fallbackReason
+            }
+
+            for (const t of parsed.transactions) {
+              const suggested = await suggestCategory(t.description, userId)
+              const installment = detectInstallment(t.description)
+
+              allTransactions.push({
+                description: t.description,
+                amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
+                date: t.date instanceof Date ? t.date : new Date(t.date),
+                categoryId: suggested?.id || null,
+                type: t.type || "EXPENSE",
+                selected: true,
+                isInstallment: installment.isInstallment,
+                currentInstallment: installment.currentInstallment || null,
+                totalInstallments: installment.totalInstallments || null,
+              })
+            }
+          } else {
+            console.warn(`Telegram unified batch parse failed: ${parsed.error}`)
+          }
+        } catch (err) {
+          console.error("Error processing unified batch:", err)
+        }
+      }
+    } else {
+      // Caminho legado (single image OU AI desabilitada): loop sequencial,
+      // cada foto é 1 chamada ao pipeline. Quando AI está desabilitada,
+      // nenhum uso de quota — então não há bom motivo pra unificar.
+      for (let i = 0; i < queueItems.length; i++) {
+        const item = queueItems[i]
+
+        try {
+          // Download photo
+          const filePath = await getFile(item.fileId)
+          if (!filePath) continue
+          const buffer = await downloadFileBuffer(filePath)
+
+          // Parse via pipeline unificado (notif → AI → regex)
+          const parsed = await parseFileForImport({
+            buffer,
+            mimeType: "image/jpeg", // Telegram photos come as JPEG
+            filename: `telegram-${item.fileId}.jpg`,
+            userId,
+          })
+
+          if (parsed.kind === "error") {
+            // Tracking: se uma foto falhar, pula mas continua o batch.
+            console.warn(`Telegram photo parse failed: ${parsed.error}`)
+            continue
+          }
+
+          if (parsed.bank) lastBank = parsed.bank
+          if (parsed.source === "ai") batchUsedAi = true
+          // Captura o primeiro fallbackReason do batch (prioridade temporal).
+          if (parsed.fallbackReason && !batchFallbackReason) {
+            batchFallbackReason = parsed.fallbackReason
+          }
+
+          // Categorize
+          for (const t of parsed.transactions) {
+            const suggested = await suggestCategory(t.description, userId)
+            const installment = detectInstallment(t.description)
+
+            allTransactions.push({
+              description: t.description,
+              amount: t.type === "EXPENSE" ? -Math.abs(t.amount) : Math.abs(t.amount),
+              date: t.date instanceof Date ? t.date : new Date(t.date),
+              categoryId: suggested?.id || null,
+              type: t.type || "EXPENSE",
+              selected: true,
+              isInstallment: installment.isInstallment,
+              currentInstallment: installment.currentInstallment || null,
+              totalInstallments: installment.totalInstallments || null,
+            })
+          }
+        } catch (error) {
+          console.error(`Error processing photo ${i + 1}:`, error)
+        }
+
+        // Update progress
+        if (progressMessageId && i < queueItems.length - 1) {
+          try {
+            await editMessageText(
+              chatId,
+              progressMessageId,
+              `📸 Processando imagem ${i + 2} de ${totalPhotos}... (${allTransactions.length} transações)`
+            )
+          } catch {
+            // Ignore edit errors (e.g., message not modified)
+          }
         }
       }
     }

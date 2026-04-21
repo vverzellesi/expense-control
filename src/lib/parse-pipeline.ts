@@ -113,6 +113,246 @@ function logParseResult(event: {
 }
 
 /**
+ * Versão multi-input do pipeline. Usada quando o usuário envia múltiplos
+ * arquivos que representam o MESMO documento (ex: várias fotos de uma mesma
+ * fatura). A IA roda UMA VEZ com todas as parts no mesmo prompt — consome
+ * apenas 1 quota para o batch inteiro.
+ *
+ * Comportamento:
+ *  - N == 1: comporta-se igual a `parseFileForImport` (compat total).
+ *  - N >= 2:
+ *    - Guards pré-IA rodam por arquivo (mime inválido, >50MB, PDF encriptado).
+ *    - STEP 1 (notif fast-path) é PULADO — só faz sentido para imagem única.
+ *    - STEP 2: se AI disponível e nenhum arquivo for PDF criptografado, reserva
+ *      quota 1x e chama AI com o array.
+ *    - STEP 3: se AI falhar/pular, cai em loop fallback (OCR+regex) arquivo-por-arquivo,
+ *      AGREGANDO transações de todos.
+ *    - O resultado é UM ParseResult único; fallbackReason = primeiro observado.
+ *
+ * PDFs criptografados em ANY arquivo: pulam a AI pro batch inteiro.
+ */
+export async function parseFilesForImport(
+  inputs: ParseInput[]
+): Promise<ParseResult> {
+  if (inputs.length === 0) {
+    return {
+      kind: "error",
+      error: "invalid_file",
+      message: "Nenhum arquivo fornecido",
+    };
+  }
+  if (inputs.length === 1) {
+    return parseFileForImport(inputs[0]);
+  }
+
+  const startedAt = Date.now();
+  const userId = inputs[0].userId;
+  const yearMonth = currentYearMonth();
+
+  // Guards pré-IA por arquivo
+  for (const inp of inputs) {
+    if (!VALID_MIMES.has(inp.mimeType)) {
+      return {
+        kind: "error",
+        error: "invalid_file",
+        message: `Tipo de arquivo não suportado: ${inp.filename}`,
+      };
+    }
+    if (inp.buffer.byteLength > MAX_BYTES) {
+      return {
+        kind: "error",
+        error: "invalid_file",
+        message: `Arquivo excede 50 MB: ${inp.filename}`,
+      };
+    }
+  }
+
+  // PREFLIGHT: se QUALQUER PDF for encriptado, pula a AI pro batch
+  let anyEncryptedPdf = false;
+  for (const inp of inputs) {
+    if (inp.mimeType === "application/pdf") {
+      try {
+        if (await isPdfEncrypted(inp.buffer)) {
+          anyEncryptedPdf = true;
+          break;
+        }
+      } catch {
+        // Se preflight quebrar, seguir assumindo não-criptografado (AI decide)
+      }
+    }
+  }
+
+  const client = !anyEncryptedPdf ? createGeminiClient() : null;
+  const aiEnabled = client !== null;
+
+  let fallbackReason: FallbackReason | null = null;
+  let aiAttempted = false;
+  let quotaReserved = false;
+
+  if (anyEncryptedPdf) {
+    fallbackReason = "pdf_encrypted";
+  } else if (!aiEnabled) {
+    fallbackReason = "disabled";
+  }
+
+  // STEP 2 MULTI-PART: reserva 1 quota, chama AI com array de parts
+  if (client) {
+    try {
+      quotaReserved = await tryReserve(userId, yearMonth);
+      if (!quotaReserved) {
+        fallbackReason = "quota_exhausted";
+      }
+    } catch (err) {
+      console.warn(
+        "tryReserve falhou (multi), caindo em fallback:",
+        err instanceof Error ? err.message : String(err)
+      );
+      quotaReserved = false;
+      fallbackReason = "quota_error";
+    }
+
+    if (quotaReserved) {
+      aiAttempted = true;
+      try {
+        const aiResult = await parseFileWithAi(
+          inputs.map((inp) => ({ buffer: inp.buffer, mimeType: inp.mimeType })),
+          client
+        );
+
+        const validDocType =
+          aiResult.documentType === "fatura_cartao" ||
+          aiResult.documentType === "extrato_bancario";
+
+        const confidenceOk =
+          aiResult.documentConfidence === undefined ||
+          aiResult.documentConfidence >= 0.5;
+
+        if (validDocType && aiResult.transactions.length > 0 && confidenceOk) {
+          logParseResult({
+            source: "ai",
+            documentType: aiResult.documentType,
+            txCount: aiResult.transactions.length,
+            latencyMs: Date.now() - startedAt,
+            mimeType: `multi(${inputs.length})`,
+            quotaReserved: true,
+          });
+          return {
+            kind: "success",
+            bank: aiResult.bank,
+            transactions: aiResult.transactions,
+            source: "ai",
+            usedFallback: false,
+            aiEnabled: true,
+            aiAttempted: true,
+            confidence: aiResult.averageConfidence,
+          };
+        }
+        fallbackReason = "gate_rejected";
+      } catch (err) {
+        console.warn(
+          "AI multi-part falhou, caindo em fallback por-arquivo:",
+          err instanceof Error ? err.message : String(err)
+        );
+        fallbackReason = "ai_error";
+      }
+    }
+  }
+
+  // STEP 3 FALLBACK: loop arquivo-por-arquivo. IMPORTANTE — a partir daqui,
+  // NÃO re-chamamos a IA por item (ela já foi tentada/pulada uma vez no batch).
+  // Portanto cada item roda apenas OCR + regex/notif, sem quota extra.
+  if (fallbackReason === null) {
+    fallbackReason = "ai_error";
+  }
+
+  const aggregatedTx: StatementParseResult["transactions"] = [];
+  let aggregatedBank = "";
+  let aggregatedConfidenceSum = 0;
+  let aggregatedConfidenceCount = 0;
+  let aggregatedRawText = "";
+
+  for (const inp of inputs) {
+    try {
+      // PDF criptografado + fallback: processFile pode lançar PdfPasswordError.
+      const ocrResult = await processFile(
+        bufferToFile(inp.buffer, inp.filename, inp.mimeType),
+        inp.password
+      );
+
+      const statementResult = parseStatementText(
+        ocrResult.text,
+        ocrResult.confidence
+      );
+      if (statementResult.transactions.length > 0) {
+        if (!aggregatedBank) aggregatedBank = statementResult.bank;
+        aggregatedTx.push(...statementResult.transactions);
+        aggregatedConfidenceSum += statementResult.averageConfidence;
+        aggregatedConfidenceCount++;
+        aggregatedRawText += ocrResult.text + "\n";
+        continue;
+      }
+
+      const notifResult = parseNotificationText(
+        ocrResult.text,
+        ocrResult.confidence
+      );
+      if (notifResult && notifResult.transactions.length > 0) {
+        if (!aggregatedBank) aggregatedBank = notifResult.bank;
+        aggregatedTx.push(...notifResult.transactions);
+        aggregatedConfidenceSum += notifResult.averageConfidence;
+        aggregatedConfidenceCount++;
+        aggregatedRawText += ocrResult.text + "\n";
+      }
+    } catch (err) {
+      if (err instanceof PdfPasswordError) {
+        return {
+          kind: "error",
+          error: err.needsPassword ? "needs_password" : "wrong_password",
+        };
+      }
+      // Erro de OCR em um item individual — pula e continua agregando.
+      console.warn(
+        `Erro processando ${inp.filename} no fallback multi:`,
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  if (aggregatedTx.length > 0) {
+    const avgConfidence =
+      aggregatedConfidenceCount > 0
+        ? aggregatedConfidenceSum / aggregatedConfidenceCount
+        : 0;
+    logParseResult({
+      source: "regex",
+      fallbackReason,
+      txCount: aggregatedTx.length,
+      latencyMs: Date.now() - startedAt,
+      mimeType: `multi(${inputs.length})`,
+      quotaReserved,
+    });
+    return {
+      kind: "success",
+      bank: aggregatedBank,
+      transactions: aggregatedTx,
+      source: "regex",
+      usedFallback: true,
+      aiEnabled,
+      aiAttempted,
+      fallbackReason,
+      confidence: avgConfidence,
+      rawText: aggregatedRawText || undefined,
+    };
+  }
+
+  return {
+    kind: "error",
+    error: "no_transactions_found",
+    rawText: aggregatedRawText || undefined,
+  };
+}
+
+/**
  * Pipeline unificado de extração de transações a partir de arquivos
  * (PDF, imagens de extratos, fotos de notificações bancárias).
  *

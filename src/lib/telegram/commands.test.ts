@@ -42,6 +42,7 @@ vi.mock("./client", () => ({
 
 vi.mock("@/lib/parse-pipeline", () => ({
   parseFileForImport: vi.fn(),
+  parseFilesForImport: vi.fn(),
 }))
 
 vi.mock("@/lib/dedup", async (importOriginal) => {
@@ -86,7 +87,7 @@ import {
   handlePhotoBackToSummary,
 } from "./commands"
 import type { TelegramMessage } from "./client"
-import { parseFileForImport } from "@/lib/parse-pipeline"
+import { parseFileForImport, parseFilesForImport } from "@/lib/parse-pipeline"
 import { suggestCategory } from "@/lib/categorizer"
 import { filterDuplicates } from "@/lib/dedup"
 import { importTransactions } from "@/lib/import-service"
@@ -97,6 +98,7 @@ const mockEditMessageText = vi.mocked(editMessageText)
 const mockGetFile = vi.mocked(getFile)
 const mockDownloadFileBuffer = vi.mocked(downloadFileBuffer)
 const mockParsePipeline = vi.mocked(parseFileForImport)
+const mockParseFilesForImport = vi.mocked(parseFilesForImport)
 const mockSuggestCategory = vi.mocked(suggestCategory)
 const mockFilterDuplicates = vi.mocked(filterDuplicates)
 const mockImportTransactions = vi.mocked(importTransactions)
@@ -1231,6 +1233,202 @@ describe("handlePhotoMessage - media group batching", () => {
     const text = (lastEdit?.[2] ?? mockSendMessage.mock.calls.at(-1)?.[1] ?? "") as string
     expect(text).not.toContain("IA ·")
     expect(text).not.toContain("parser tradicional")
+  })
+
+  // Approach C — Gemini Multi-Part: testa que múltiplas fotos + AI habilitada
+  // consomem 1 chamada ao Gemini (via parseFilesForImport) pro batch inteiro.
+  describe("Approach C — unified multi-part when N>=2 + AI enabled", () => {
+    let originalGeminiKey: string | undefined
+
+    beforeEach(() => {
+      originalGeminiKey = process.env.GEMINI_API_KEY
+      process.env.GEMINI_API_KEY = "test-key"
+    })
+
+    afterEach(() => {
+      if (originalGeminiKey === undefined) {
+        delete process.env.GEMINI_API_KEY
+      } else {
+        process.env.GEMINI_API_KEY = originalGeminiKey
+      }
+    })
+
+    it("batch com 3 imagens + AI habilitada: chama parseFilesForImport 1x com 3 inputs", async () => {
+      const msg = makePhotoMessage()
+      msg.media_group_id = "group-unified-3"
+
+      vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+      vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 3 } as never)
+      vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+        { id: "q1", fileId: "uni-a", mediaGroupId: "group-unified-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+        { id: "q2", fileId: "uni-b", mediaGroupId: "group-unified-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+        { id: "q3", fileId: "uni-c", mediaGroupId: "group-unified-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      ] as never)
+      vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 3 } as never)
+
+      mockGetFile.mockResolvedValue("photos/file.jpg")
+      mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake-img"))
+      mockParseFilesForImport.mockResolvedValue({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [
+          { date: new Date(), description: "IFOOD", amount: 30, type: "EXPENSE", confidence: 1 },
+          { date: new Date(), description: "UBER", amount: 18, type: "EXPENSE", confidence: 1 },
+          { date: new Date(), description: "SPOTIFY", amount: 22, type: "EXPENSE", confidence: 1 },
+        ],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+      mockSuggestCategory.mockResolvedValue(null)
+      mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+        unique: txs.map(t => ({ ...t, selected: true })),
+        duplicateCount: 0,
+      }) as never)
+      mockGetUsage.mockResolvedValue({ used: 1, remaining: 4, limit: 5 })
+      vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+      vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-uni" } as never)
+      mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+      mockEditMessageText.mockResolvedValue({ ok: true })
+
+      const promise = handlePhotoMessage(msg, "user-1")
+      await vi.advanceTimersByTimeAsync(3000)
+      await promise
+
+      // CHAVE: parseFilesForImport chamado EXATAMENTE 1 VEZ com 3 inputs
+      expect(mockParseFilesForImport).toHaveBeenCalledTimes(1)
+      const call = mockParseFilesForImport.mock.calls[0][0]
+      expect(call).toHaveLength(3)
+      expect(call[0]).toMatchObject({
+        mimeType: "image/jpeg",
+        userId: "user-1",
+      })
+      // E o caminho legado NÃO foi usado
+      expect(mockParsePipeline).not.toHaveBeenCalled()
+      // Downloads aconteceram (em paralelo) pros 3 arquivos
+      expect(mockGetFile).toHaveBeenCalledTimes(3)
+      expect(mockDownloadFileBuffer).toHaveBeenCalledTimes(3)
+      // Mensagem de progresso reflete unificação
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        12345,
+        expect.stringContaining("Unificando 3 imagens")
+      )
+      // Resumo final usa badge de AI + contador
+      const lastEdit = mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
+      const finalText = String(lastEdit?.[2] ?? "")
+      expect(finalText).toContain("✨")
+      expect(finalText).toContain("IA · 1/5")
+      expect(finalText).toContain("3 transações")
+    })
+
+    it("batch com 3 imagens mas AI desabilitada: mantém loop sequencial (não unifica)", async () => {
+      // Com AI desabilitada, não há por que unificar (não economiza quota).
+      delete process.env.GEMINI_API_KEY
+
+      const msg = makePhotoMessage()
+      msg.media_group_id = "group-no-ai-3"
+
+      vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+      vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 3 } as never)
+      vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+        { id: "q1", fileId: "na-a", mediaGroupId: "group-no-ai-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+        { id: "q2", fileId: "na-b", mediaGroupId: "group-no-ai-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+        { id: "q3", fileId: "na-c", mediaGroupId: "group-no-ai-3", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      ] as never)
+      vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 3 } as never)
+
+      mockGetFile.mockResolvedValue("photos/file.jpg")
+      mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+      mockParsePipeline.mockResolvedValue({
+        kind: "success",
+        bank: "C6",
+        transactions: [
+          { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+        ],
+        source: "regex",
+        usedFallback: true,
+        aiEnabled: false,
+        aiAttempted: false,
+        fallbackReason: "disabled",
+        confidence: 0.85,
+      })
+      mockSuggestCategory.mockResolvedValue(null)
+      mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+        unique: txs.map(t => ({ ...t, selected: true })),
+        duplicateCount: 0,
+      }) as never)
+      vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+      vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-na" } as never)
+      mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+      mockEditMessageText.mockResolvedValue({ ok: true })
+
+      const promise = handlePhotoMessage(msg, "user-1")
+      await vi.advanceTimersByTimeAsync(3000)
+      await promise
+
+      // CHAVE: parseFilesForImport NUNCA foi chamado
+      expect(mockParseFilesForImport).not.toHaveBeenCalled()
+      // Loop sequencial chamou parseFileForImport 3x
+      expect(mockParsePipeline).toHaveBeenCalledTimes(3)
+      // Mensagem de progresso é a tradicional
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        12345,
+        expect.stringContaining("Processando imagem 1 de 3")
+      )
+    })
+
+    it("batch com 1 imagem + AI habilitada: NÃO unifica (caminho legacy single)", async () => {
+      const msg = makePhotoMessage()
+      // Sem media_group_id: vira single_<message_id>
+
+      vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+      vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+      vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+        { id: "q1", fileId: "solo", mediaGroupId: "single_1", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      ] as never)
+      vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+      mockGetFile.mockResolvedValue("photos/file.jpg")
+      mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+      mockParsePipeline.mockResolvedValue({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [
+          { date: new Date(), description: "PAG", amount: 10, type: "EXPENSE", confidence: 1 },
+        ],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+      mockSuggestCategory.mockResolvedValue(null)
+      mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+        unique: txs.map(t => ({ ...t, selected: true })),
+        duplicateCount: 0,
+      }) as never)
+      mockGetUsage.mockResolvedValue({ used: 1, remaining: 4, limit: 5 })
+      vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+      vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-solo" } as never)
+      mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+      mockEditMessageText.mockResolvedValue({ ok: true })
+
+      const promise = handlePhotoMessage(msg, "user-1")
+      await vi.advanceTimersByTimeAsync(3000)
+      await promise
+
+      // CHAVE: parseFilesForImport NUNCA chamado (N<2 não justifica unificação)
+      expect(mockParseFilesForImport).not.toHaveBeenCalled()
+      // Caminho single usa parseFileForImport como sempre
+      expect(mockParsePipeline).toHaveBeenCalledTimes(1)
+      // Progress tradicional
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        12345,
+        expect.stringContaining("Processando imagem 1 de 1")
+      )
+    })
   })
 })
 

@@ -132,4 +132,30 @@ describe("parseFileWithAi", () => {
     const result = await parseFileWithAi(buffer, "application/pdf", client);
     expect(result.documentConfidence).toBeUndefined();
   });
+
+  describe("multi-part (Approach C)", () => {
+    it("aceita array de parts e passa pra client.generateInvoiceStructured como array", async () => {
+      const client = mockClient(loadFixture("nubank-fatura-sample-response.json"));
+      const parts = [
+        { buffer: Buffer.from("img-1"), mimeType: "image/jpeg" },
+        { buffer: Buffer.from("img-2"), mimeType: "image/jpeg" },
+      ];
+
+      const result = await parseFileWithAi(parts, client);
+
+      expect(result.bank).toBe("Nubank");
+      expect(client.generateInvoiceStructured).toHaveBeenCalledTimes(1);
+      expect(client.generateInvoiceStructured).toHaveBeenCalledWith(parts);
+    });
+
+    it("array de 1 input ainda funciona (coerência com N=1)", async () => {
+      const client = mockClient(loadFixture("nubank-fatura-sample-response.json"));
+      const parts = [{ buffer: Buffer.from("solo"), mimeType: "application/pdf" }];
+
+      const result = await parseFileWithAi(parts, client);
+
+      expect(result.transactions.length).toBeGreaterThan(0);
+      expect(client.generateInvoiceStructured).toHaveBeenCalledWith(parts);
+    });
+  });
 });
