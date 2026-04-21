@@ -725,12 +725,17 @@ export async function handlePhotoMessage(
   const mediaGroupId = message.media_group_id || `single_${message.message_id}`
 
   // Phase 1: Store file_id in queue
+  // `messageId` persiste a ordem original enviada pelo usuário — o Telegram
+  // garante message_id monotônico dentro de um chat, então ordenar por ele
+  // reconstrói a sequência correta das páginas do álbum (crítico pro caminho
+  // multi-part da IA, que trata as imagens como documento contínuo).
   await prisma.telegramPhotoQueue.create({
     data: {
       chatId: String(chatId),
       userId,
       mediaGroupId,
       fileId: largestPhoto.file_id,
+      messageId: message.message_id,
     },
   })
 
@@ -752,9 +757,18 @@ export async function handlePhotoMessage(
 
   // Phase 3: Process all photos in the batch
   try {
+    // Ordem: messageId primeiro (fonte autoritativa do Telegram, int monotônico
+    // por chat), createdAt como backup (entries muito antigas sem messageId),
+    // id como tiebreak final determinístico. Sem isso, batches multi-part
+    // podem receber páginas fora de ordem e o Gemini interpreta um "documento
+    // contínuo" embaralhado.
     const queueItems = await prisma.telegramPhotoQueue.findMany({
       where: { mediaGroupId, userId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [
+        { messageId: "asc" },
+        { createdAt: "asc" },
+        { id: "asc" },
+      ],
     })
 
     const totalPhotos = queueItems.length

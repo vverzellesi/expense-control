@@ -1061,4 +1061,122 @@ describe("parseFilesForImport", () => {
     expect(aiQuota.tryReserve).not.toHaveBeenCalled();
     expect(invoiceParser.parseFileWithAi).not.toHaveBeenCalled();
   });
+
+  it("AI + gate rejeita quando documentConfidence < 0.6 no multi-part (threshold mais alto que single)", async () => {
+    // Regressão P1: álbum com documentos heterogêneos tende a vir com
+    // confidence entre 0.5 e 0.6 (modelo tem incerteza sobre a coesão).
+    // Single-file aceita >= 0.5; multi-part usa >= 0.6 pra não mesclar
+    // bancos/tipos distintos.
+    vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+      bank: "Nubank",
+      documentType: "fatura_cartao",
+      documentConfidence: 0.55, // entre 0.5 e 0.6 — rejeitado no multi-part
+      averageConfidence: 1,
+      transactions: [
+        { date: new Date(), description: "X", amount: 5, type: "EXPENSE", confidence: 1 },
+      ],
+    });
+    vi.mocked(ocrParser.processFile).mockResolvedValue({ text: "EXTRATO", confidence: 85 });
+    vi.mocked(statementParser.parseStatementText).mockReturnValue({
+      bank: "C6",
+      averageConfidence: 0.85,
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+    });
+
+    const inputs = [1, 2].map((i) => ({
+      buffer: Buffer.from(`img-${i}`),
+      mimeType: "image/jpeg",
+      filename: `img-${i}.jpg`,
+      userId,
+    }));
+
+    const result = await parseFilesForImport(inputs);
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.fallbackReason).toBe("gate_rejected");
+    expect(result.source).toBe("regex");
+    // Fallback por-arquivo rodou e agregou
+    expect(result.transactions).toHaveLength(2);
+  });
+
+  it("AI + gate aceita quando documentConfidence >= 0.6 no multi-part", async () => {
+    vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue({
+      bank: "Nubank",
+      documentType: "fatura_cartao",
+      documentConfidence: 0.65,
+      averageConfidence: 1,
+      transactions: [
+        { date: new Date(), description: "X", amount: 5, type: "EXPENSE", confidence: 1 },
+      ],
+    });
+
+    const inputs = [1, 2].map((i) => ({
+      buffer: Buffer.from(`img-${i}`),
+      mimeType: "image/jpeg",
+      filename: `img-${i}.jpg`,
+      userId,
+    }));
+
+    const result = await parseFilesForImport(inputs);
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.source).toBe("ai");
+    expect(result.fallbackReason).toBeUndefined();
+  });
+
+  it("fallback com TODOS inputs falhando por erro interno de OCR: retorna 'internal' (não 'no_transactions_found')", async () => {
+    // Regressão P3: se o OCR/parser interno falhar em cada arquivo do batch,
+    // a função antes retornava 'no_transactions_found' — falso negativo de
+    // negócio que mascara problema de infra. Agora deve propagar 'internal'.
+    vi.mocked(invoiceParser.parseFileWithAi).mockRejectedValue(new Error("gemini down"));
+    vi.mocked(ocrParser.processFile).mockRejectedValue(new Error("tesseract crashed"));
+
+    const inputs = [1, 2, 3].map((i) => ({
+      buffer: Buffer.from(`img-${i}`),
+      mimeType: "image/jpeg",
+      filename: `img-${i}.jpg`,
+      userId,
+    }));
+
+    const result = await parseFilesForImport(inputs);
+    expect(result.kind).toBe("error");
+    if (result.kind !== "error") return;
+    expect(result.error).toBe("internal");
+    // Mensagem carrega o erro real pro diagnóstico
+    expect(result.message).toContain("tesseract");
+  });
+
+  it("fallback com parte dos inputs falhando mas um extraindo transações: success com as que deram certo", async () => {
+    // Contraponto do teste acima: se AO MENOS UM input extrair transações,
+    // não deve retornar 'internal' — o batch tem valor real, mesmo parcial.
+    vi.mocked(invoiceParser.parseFileWithAi).mockRejectedValue(new Error("gemini down"));
+    let callCount = 0;
+    vi.mocked(ocrParser.processFile).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) throw new Error("tesseract crashed");
+      return { text: "EXTRATO BOM", confidence: 85 };
+    });
+    vi.mocked(statementParser.parseStatementText).mockReturnValue({
+      bank: "C6",
+      averageConfidence: 0.85,
+      transactions: [
+        { date: new Date(), description: "PIX", amount: 100, type: "INCOME", confidence: 0.85 },
+      ],
+    });
+
+    const inputs = [1, 2].map((i) => ({
+      buffer: Buffer.from(`img-${i}`),
+      mimeType: "image/jpeg",
+      filename: `img-${i}.jpg`,
+      userId,
+    }));
+
+    const result = await parseFilesForImport(inputs);
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    // 1 input falhou, 1 extraiu — agregou o que deu
+    expect(result.transactions).toHaveLength(1);
+  });
 });

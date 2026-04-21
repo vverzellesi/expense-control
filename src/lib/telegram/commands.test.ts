@@ -1189,6 +1189,80 @@ describe("handlePhotoMessage - media group batching", () => {
     }
   })
 
+  it("Phase 1: persiste messageId do Telegram no create da queue (fonte de ordem estável)", async () => {
+    // Regressão P2: sem messageId persistido, o orderBy por createdAt pode
+    // empatar quando N webhooks chegam quase simultaneamente e entregar as
+    // páginas do álbum fora de ordem pro caminho multi-part.
+    const msg = makePhotoMessage()
+    msg.message_id = 42
+    msg.media_group_id = "group-order"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 0 } as never) // outro handler ganhou; só testamos create
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    expect(prisma.telegramPhotoQueue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          messageId: 42,
+          mediaGroupId: "group-order",
+        }),
+      })
+    )
+  })
+
+  it("Phase 3: orderBy usa messageId primeiro, createdAt e id como tiebreak", async () => {
+    // Regressão P2: ordem do álbum deve ser reconstruída por messageId
+    // (monotônico no Telegram) — createdAt e id são apenas tiebreaks.
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-order-check"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "a", mediaGroupId: "group-order-check", chatId: "12345", userId: "user-1", messageId: 10, claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 1 } as never)
+    mockGetFile.mockResolvedValue("photos/x.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline.mockResolvedValue({
+      kind: "success",
+      bank: "X",
+      transactions: [{ date: new Date(), description: "T", amount: 1, type: "EXPENSE", confidence: 1 }],
+      source: "ai",
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
+      confidence: 1,
+    })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+      unique: txs.map(t => ({ ...t, selected: true })),
+      duplicateCount: 0,
+    }) as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "p" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    expect(prisma.telegramPhotoQueue.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [
+          { messageId: "asc" },
+          { createdAt: "asc" },
+          { id: "asc" },
+        ],
+      })
+    )
+  })
+
   it("não adiciona linha de IA quando source='notif'", async () => {
     const msg = makePhotoMessage()
     msg.media_group_id = "group-notif"

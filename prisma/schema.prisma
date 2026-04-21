@@ -633,6 +633,11 @@ model TelegramPhotoQueue {
   userId        String
   mediaGroupId  String
   fileId        String
+  /// message_id do Telegram (int monotônico por chat). Fonte autoritativa
+  /// da ORDEM das páginas dentro do álbum — createdAt do DB pode empatar
+  /// quando N webhooks chegam quase simultaneamente. Opcional pra retrocompat
+  /// com entries criadas antes desta coluna existir.
+  messageId     Int?
   claimed       Boolean  @default(false)
   createdAt     DateTime @default(now())
 
@@ -640,6 +645,7 @@ model TelegramPhotoQueue {
 
   @@unique([mediaGroupId, fileId])
   @@index([mediaGroupId])
+  @@index([mediaGroupId, messageId])
   @@index([userId])
 }
 

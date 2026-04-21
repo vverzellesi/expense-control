@@ -223,9 +223,14 @@ export async function parseFilesForImport(
           aiResult.documentType === "fatura_cartao" ||
           aiResult.documentType === "extrato_bancario";
 
+        // Threshold mais alto que o single-file (0.5) porque em batches
+        // heterogêneos (álbum com docs diferentes) o modelo tende a devolver
+        // confidence intermediário. Rejeitar sub-0.6 aqui faz o fallback
+        // processar imagem por imagem, evitando mesclar bancos/docs distintos.
+        const MULTI_PART_CONFIDENCE_THRESHOLD = 0.6;
         const confidenceOk =
           aiResult.documentConfidence === undefined ||
-          aiResult.documentConfidence >= 0.5;
+          aiResult.documentConfidence >= MULTI_PART_CONFIDENCE_THRESHOLD;
 
         if (validDocType && aiResult.transactions.length > 0 && confidenceOk) {
           logParseResult({
@@ -270,6 +275,12 @@ export async function parseFilesForImport(
   let aggregatedConfidenceSum = 0;
   let aggregatedConfidenceCount = 0;
   let aggregatedRawText = "";
+  // Rastreia falhas internas de OCR/parse (não PdfPasswordError) pra
+  // distinguir "ausência real de transações" de "falha de infra que mascarou
+  // transações". Se TODOS os itens falharem assim, retornamos "internal"
+  // em vez de "no_transactions_found" (que seria falso negativo de negócio).
+  let internalFailures = 0;
+  let lastInternalError: string | undefined;
 
   for (const inp of inputs) {
     try {
@@ -310,10 +321,14 @@ export async function parseFilesForImport(
           error: err.needsPassword ? "needs_password" : "wrong_password",
         };
       }
-      // Erro de OCR em um item individual — pula e continua agregando.
+      // Erro de OCR em um item individual — registra pro diagnóstico final.
+      // Se pelo menos um outro item extrair transações, seguimos com sucesso.
+      // Se TODOS falharem assim, retornamos "internal" (não "no_transactions_found").
+      internalFailures++;
+      lastInternalError = err instanceof Error ? err.message : String(err);
       console.warn(
         `Erro processando ${inp.filename} no fallback multi:`,
-        err instanceof Error ? err.message : String(err)
+        lastInternalError
       );
     }
   }
@@ -342,6 +357,17 @@ export async function parseFilesForImport(
       fallbackReason,
       confidence: avgConfidence,
       rawText: aggregatedRawText || undefined,
+    };
+  }
+
+  // Se TODOS os itens falharam por erro interno (OCR quebrado, parser quebrado,
+  // lib indisponível), propaga como "internal" pra não mascarar problema de
+  // infra como se fosse "documento sem transações".
+  if (internalFailures === inputs.length) {
+    return {
+      kind: "error",
+      error: "internal",
+      message: lastInternalError ?? "Erro ao processar arquivos",
     };
   }
 
