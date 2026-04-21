@@ -158,13 +158,27 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
     }
   }
 
-  // Cache do OCR leve do STEP 1 — reusado no STEP 3 pra evitar dupla tesseract
-  // em imagens. Sem esse cache, uma imagem de extrato (não-notif) sem AI_KEY
-  // passava por 2 OCR passes e estourava o timeout de 60s da Vercel.
+  // Cliente AI resolvido uma vez. STEP 1 (notif tesseract) só vale a pena
+  // para imagens pequenas — notificações de push no Telegram/celular
+  // comprimem pra <500KB, enquanto screenshots de extrato em alta resolução
+  // passam disso. Rodar tesseract em imagem grande ANTES da AI adicionava
+  // 20-30s ao caminho e estourava o timeout de 60s da Vercel.
+  const client = !skipAiDueToEncryption ? createGeminiClient() : null;
+  const aiEnabled = client !== null;
+
+  // Imagens acima deste limite pulam STEP 1 quando AI está habilitada —
+  // AI é mais rápida e precisa que OCR+regex pra documentos grandes.
+  // Quando AI está desabilitada, STEP 1 sempre roda (fallback único).
+  const NOTIF_FAST_PATH_MAX_BYTES = 500 * 1024;
+  const runStep1 =
+    isImage(mimeType) &&
+    (!aiEnabled || buffer.byteLength <= NOTIF_FAST_PATH_MAX_BYTES);
+
+  // Cache do OCR leve — reusado no STEP 3 pra evitar dupla tesseract.
   let cachedImageOcr: { text: string; confidence: number } | null = null;
 
-  // STEP 1: notification-parser rápido (só imagens)
-  if (isImage(mimeType)) {
+  // STEP 1: notification-parser rápido (imagens pequenas ou AI desabilitada).
+  if (runStep1) {
     try {
       const ocrLight = await processImageOCR(
         bufferToFile(buffer, input.filename, mimeType)
@@ -172,7 +186,6 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
       cachedImageOcr = { text: ocrLight.text, confidence: ocrLight.confidence };
       const notifResult = parseNotificationText(ocrLight.text, ocrLight.confidence);
       if (notifResult && notifResult.transactions.length > 0) {
-        const client = createGeminiClient();
         logParseResult({
           source: "notif",
           txCount: notifResult.transactions.length,
@@ -186,7 +199,7 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
           transactions: notifResult.transactions,
           source: "notif",
           usedFallback: false,
-          aiEnabled: client !== null,
+          aiEnabled,
           aiAttempted: false,
           // fallbackReason UNDEFINED para notif — não é fallback, é uma via rápida.
           confidence: notifResult.averageConfidence,
@@ -199,8 +212,6 @@ export async function parseFileForImport(input: ParseInput): Promise<ParseResult
   }
 
   // STEP 2: AI — só roda se não for PDF criptografado, tiver key e reserva vier OK.
-  const client = !skipAiDueToEncryption ? createGeminiClient() : null;
-  const aiEnabled = createGeminiClient() !== null;
 
   // Determina fallbackReason inicial baseado em guards síncronos
   let fallbackReason: FallbackReason | null = null;

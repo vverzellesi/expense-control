@@ -507,6 +507,58 @@ describe("parseFileForImport", () => {
       expect(result.usedFallback).toBe(true);
     });
 
+    it("Imagem grande com AI habilitada: pula STEP 1 pra não estourar timeout", async () => {
+      // Regressão: imagem >500KB (típica de screenshot de extrato) fazia
+      // STEP 1 tesseract (~20s) ANTES da AI (~30s), estourando 60s da Vercel.
+      const bigBuffer = Buffer.alloc(600 * 1024, 0); // 600KB > NOTIF_FAST_PATH_MAX_BYTES
+      vi.mocked(invoiceParser.parseFileWithAi).mockResolvedValue(validAiResult());
+
+      const result = await parseFileForImport({
+        buffer: bigBuffer,
+        mimeType: "image/png",
+        filename: "extrato-grande.png",
+        userId,
+      });
+
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("ai");
+      // Chave: processImageOCR do STEP 1 foi pulado, AI rodou direto.
+      expect(ocrParser.processImageOCR).not.toHaveBeenCalled();
+      expect(invoiceParser.parseFileWithAi).toHaveBeenCalledTimes(1);
+    });
+
+    it("Imagem pequena com AI habilitada: mantém fast-path de STEP 1 (notif sem quota)", async () => {
+      // Telegram/celular comprime notificações pra <500KB, então STEP 1
+      // continua valendo pra não queimar quota em push notifications.
+      const smallBuffer = Buffer.alloc(100 * 1024, 0); // 100KB
+      vi.mocked(notifParser.parseNotificationText).mockReturnValue({
+        bank: "Nubank",
+        averageConfidence: 0.9,
+        transactions: [
+          { date: new Date(), description: "PIX", amount: -30, type: "EXPENSE", confidence: 0.9 },
+        ],
+      });
+      vi.mocked(ocrParser.processImageOCR).mockResolvedValue({
+        text: "Compra aprovada",
+        confidence: 80,
+      });
+
+      const result = await parseFileForImport({
+        buffer: smallBuffer,
+        mimeType: "image/png",
+        filename: "notif.png",
+        userId,
+      });
+
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success") return;
+      expect(result.source).toBe("notif");
+      expect(ocrParser.processImageOCR).toHaveBeenCalledTimes(1);
+      expect(invoiceParser.parseFileWithAi).not.toHaveBeenCalled();
+      expect(aiQuota.tryReserve).not.toHaveBeenCalled();
+    });
+
     it("Imagem sem AI key + não-notif: reusa OCR do STEP 1 no STEP 3 (não chama processFile)", async () => {
       // Regressão: sem este cache, imagem não-notif sem AI passava por 2 OCR
       // tesseract passes e estourava o timeout de 60s da Vercel.
