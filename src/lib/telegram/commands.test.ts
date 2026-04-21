@@ -966,6 +966,227 @@ describe("handlePhotoMessage - media group batching", () => {
     expect(text).toContain("IA não reconheceu")
   })
 
+  it("multi-imagem + AI habilitada: processa N fotos, agrega transações e mostra contador de uso", async () => {
+    // Regressão do caso reportado pelo usuário: antes da feature de AI, múltiplas
+    // imagens via Telegram rodavam "eternamente" (webhook síncrono vs timeout).
+    // Agora com AI on, o loop sequencial deve processar todas, agregar, e terminar
+    // com resumo único mostrando IA usada e contador de quota.
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-multi-ai"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 3 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "ai-a", mediaGroupId: "group-multi-ai", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q2", fileId: "ai-b", mediaGroupId: "group-multi-ai", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q3", fileId: "ai-c", mediaGroupId: "group-multi-ai", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 3 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "IFOOD", amount: 30, type: "EXPENSE", confidence: 1 }],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "UBER", amount: 18, type: "EXPENSE", confidence: 1 }],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "SPOTIFY", amount: 22, type: "EXPENSE", confidence: 1 }],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+      unique: txs.map(t => ({ ...t, selected: true })),
+      duplicateCount: 0,
+    }) as never)
+    mockGetUsage.mockResolvedValue({ used: 3, remaining: 2, limit: 5 })
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-multi-ai" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Todas as 3 fotos foram baixadas e parseadas (loop não travou)
+    expect(mockGetFile).toHaveBeenCalledTimes(3)
+    expect(mockParsePipeline).toHaveBeenCalledTimes(3)
+    // Progress inicial + 2 edits intermediários (não edita depois da última)
+    expect(mockSendMessage).toHaveBeenCalledWith(12345, expect.stringContaining("Processando imagem 1 de 3"))
+    const progressEdits = mockEditMessageText.mock.calls.filter(c => String(c[2] ?? "").includes("Processando imagem"))
+    expect(progressEdits).toHaveLength(2)
+    // Resumo final: 3 transações agregadas, badge AI + contador, queue limpa
+    const lastEdit = mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
+    const finalText = String(lastEdit?.[2] ?? "")
+    expect(finalText).toContain("✨")
+    expect(finalText).toContain("3 transações")
+    expect(finalText).toContain("IA · 3/5")
+    expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-multi-ai", userId: "user-1" } })
+  })
+
+  it("multi-imagem + AI: quota esgota no meio do batch, loop continua e resumo mostra fallback", async () => {
+    // Edge case importante: usuário manda 3 fotos, quota permite 1 uso, as outras
+    // 2 caem no parser tradicional. Loop NÃO deve abortar — cada foto é independente
+    // e o fallbackReason agregado é o primeiro observado (quota_exhausted).
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-multi-quota"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 3 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "mq-a", mediaGroupId: "group-multi-quota", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q2", fileId: "mq-b", mediaGroupId: "group-multi-quota", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q3", fileId: "mq-c", mediaGroupId: "group-multi-quota", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 3 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    mockParsePipeline
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "IFOOD", amount: 30, type: "EXPENSE", confidence: 1 }],
+        source: "ai",
+        usedFallback: false,
+        aiEnabled: true,
+        aiAttempted: true,
+        confidence: 1,
+      })
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "UBER", amount: 18, type: "EXPENSE", confidence: 0.8 }],
+        source: "regex",
+        usedFallback: true,
+        aiEnabled: true,
+        aiAttempted: false,
+        fallbackReason: "quota_exhausted",
+        confidence: 0.8,
+      })
+      .mockResolvedValueOnce({
+        kind: "success",
+        bank: "Nubank",
+        transactions: [{ date: new Date(), description: "SPOTIFY", amount: 22, type: "EXPENSE", confidence: 0.8 }],
+        source: "regex",
+        usedFallback: true,
+        aiEnabled: true,
+        aiAttempted: false,
+        fallbackReason: "quota_exhausted",
+        confidence: 0.8,
+      })
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+      unique: txs.map(t => ({ ...t, selected: true })),
+      duplicateCount: 0,
+    }) as never)
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-multi-quota" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+
+    const promise = handlePhotoMessage(msg, "user-1")
+    await vi.advanceTimersByTimeAsync(3000)
+    await promise
+
+    // Loop não abortou: 3 fotos processadas mesmo com mistura ai + fallback
+    expect(mockGetFile).toHaveBeenCalledTimes(3)
+    expect(mockParsePipeline).toHaveBeenCalledTimes(3)
+    // Resumo informa fallback (prioridade temporal do primeiro observado = quota_exhausted)
+    // e agrega as 3 transações (tanto as de AI quanto as de fallback).
+    const lastEdit = mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
+    const finalText = String(lastEdit?.[2] ?? "")
+    expect(finalText).toContain("Cota de IA esgotada")
+    expect(finalText).toContain("3 transações")
+    expect(finalText).not.toContain("IA · ") // não mostra contador quando tem fallbackReason
+    expect(prisma.telegramPhotoQueue.deleteMany).toHaveBeenCalledWith({ where: { mediaGroupId: "group-multi-quota", userId: "user-1" } })
+  })
+
+  it("multi-imagem: uma foto falhando (parse error) não aborta o batch — outras continuam", async () => {
+    // Garantia: se 1 de N fotos falhar no pipeline, o loop registra o erro e
+    // segue processando as demais. Usuário recebe resumo com as que sucederam.
+    const msg = makePhotoMessage()
+    msg.media_group_id = "group-partial-fail"
+
+    vi.mocked(prisma.telegramPhotoQueue.create).mockResolvedValue({} as never)
+    vi.mocked(prisma.telegramPhotoQueue.updateMany).mockResolvedValue({ count: 3 } as never)
+    vi.mocked(prisma.telegramPhotoQueue.findMany).mockResolvedValue([
+      { id: "q1", fileId: "pf-a", mediaGroupId: "group-partial-fail", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q2", fileId: "pf-b", mediaGroupId: "group-partial-fail", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+      { id: "q3", fileId: "pf-c", mediaGroupId: "group-partial-fail", chatId: "12345", userId: "user-1", claimed: true, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.telegramPhotoQueue.deleteMany).mockResolvedValue({ count: 3 } as never)
+
+    mockGetFile.mockResolvedValue("photos/file.jpg")
+    mockDownloadFileBuffer.mockResolvedValue(Buffer.from("fake"))
+    const okResult = {
+      kind: "success" as const,
+      bank: "Nubank",
+      transactions: [{ date: new Date(), description: "IFOOD", amount: 30, type: "EXPENSE" as const, confidence: 1 }],
+      source: "ai" as const,
+      usedFallback: false,
+      aiEnabled: true,
+      aiAttempted: true,
+      confidence: 1,
+    }
+    mockParsePipeline
+      .mockResolvedValueOnce(okResult)
+      .mockRejectedValueOnce(new Error("OCR falhou pra essa imagem"))
+      .mockResolvedValueOnce(okResult)
+    mockSuggestCategory.mockResolvedValue(null)
+    mockFilterDuplicates.mockImplementation(async (_userId, txs) => ({
+      unique: txs.map(t => ({ ...t, selected: true })),
+      duplicateCount: 0,
+    }) as never)
+    mockGetUsage.mockResolvedValue({ used: 2, remaining: 3, limit: 5 })
+    vi.mocked(prisma.telegramPendingImport.deleteMany).mockResolvedValue({ count: 0 } as never)
+    vi.mocked(prisma.telegramPendingImport.create).mockResolvedValue({ id: "pending-pf" } as never)
+    mockSendMessage.mockResolvedValue({ result: { message_id: 99 } })
+    mockEditMessageText.mockResolvedValue({ ok: true })
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    try {
+      const promise = handlePhotoMessage(msg, "user-1")
+      await vi.advanceTimersByTimeAsync(3000)
+      await promise
+
+      // Todas as 3 tentativas ocorreram, apesar do erro na 2ª
+      expect(mockParsePipeline).toHaveBeenCalledTimes(3)
+      // Resumo final mostra 2 transações (fotos 1 e 3), batch não foi abortado
+      const lastEdit = mockEditMessageText.mock.calls[mockEditMessageText.mock.calls.length - 1]
+      const finalText = String(lastEdit?.[2] ?? "")
+      expect(finalText).toContain("2 transações")
+      expect(finalText).not.toContain("Erro ao processar as imagens")
+      // Erro da foto 2 foi logado
+      expect(errSpy).toHaveBeenCalled()
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
   it("não adiciona linha de IA quando source='notif'", async () => {
     const msg = makePhotoMessage()
     msg.media_group_id = "group-notif"
