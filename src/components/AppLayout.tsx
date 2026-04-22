@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { Sidebar } from "@/components/Sidebar"
 import { MobileHeader } from "@/components/MobileHeader"
+import { SpacePermissionsProvider } from "@/contexts/SpacePermissionsContext"
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -23,21 +24,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen flex-col md:flex-row overflow-x-hidden">
-      {/* Mobile header - only visible on mobile */}
-      <MobileHeader onMenuToggle={() => setIsMobileMenuOpen(true)} />
+    <SpacePermissionsProvider>
+      <div className="flex h-screen flex-col md:flex-row overflow-x-hidden">
+        {/* Mobile header - only visible on mobile */}
+        <MobileHeader onMenuToggle={() => setIsMobileMenuOpen(true)} />
 
-      {/* Sidebar with mobile drawer support */}
-      <Sidebar
-        isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
-      />
+        {/* Sidebar with mobile drawer support */}
+        <Sidebar
+          isOpen={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+        />
 
-      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 md:p-6">
-        <div className="max-w-full overflow-x-hidden">
-          {children}
-        </div>
-      </main>
-    </div>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 md:p-6">
+          <div className="max-w-full overflow-x-hidden">
+            {children}
+          </div>
+        </main>
+      </div>
+    </SpacePermissionsProvider>
   )
 }

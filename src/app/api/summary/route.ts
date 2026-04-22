@@ -247,7 +247,7 @@ export async function GET(request: NextRequest) {
       // Query 7: Bill payments for 6 months (for partial payment adjustments)
       billPayments,
     ] = await Promise.all([
-      // Query 1: All transactions for 6 months with category and installment info
+      // Query 1: transactions de 6 meses — select enxuto pros cálculos internos.
       prisma.transaction.findMany({
         where: {
           ...ctx.ownerFilter,
@@ -257,20 +257,29 @@ export async function GET(request: NextRequest) {
           },
           deletedAt: null,
         },
-        include: {
-          category: true,
-          installment: true,
+        select: {
+          date: true,
+          amount: true,
+          type: true,
+          isFixed: true,
+          isInstallment: true,
+          categoryId: true,
           investmentTransaction: { select: { id: true } },
+          category: { select: { name: true, color: true } },
         },
       }),
 
-      // Query 2: Active budgets with category
+      // Query 2: budgets ativos com só nome/cor da categoria.
       prisma.budget.findMany({
         where: { ...ctx.ownerFilter, isActive: true },
-        include: { category: true },
+        select: {
+          categoryId: true,
+          amount: true,
+          category: { select: { name: true, color: true } },
+        },
       }),
 
-      // Query 3: Fixed expenses (distinct by description)
+      // Query 3: despesas fixas distintas — campos usados pelo dashboard.
       prisma.transaction.findMany({
         where: {
           ...ctx.ownerFilter,
@@ -279,13 +288,16 @@ export async function GET(request: NextRequest) {
           deletedAt: null,
           investmentTransaction: null,
         },
-        include: {
-          category: true,
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          category: { select: { color: true } },
         },
         distinct: ["description"],
       }),
 
-      // Query 4: Future grouped installments (next 3 months)
+      // Query 4: parcelas agrupadas futuras (próximos 3 meses).
       prisma.transaction.findMany({
         where: {
           ...ctx.ownerFilter,
@@ -297,16 +309,21 @@ export async function GET(request: NextRequest) {
           },
           deletedAt: null,
         },
-        include: {
-          category: true,
-          installment: true,
+        select: {
+          id: true,
+          date: true,
+          description: true,
+          amount: true,
+          currentInstallment: true,
+          totalInstallments: true,
+          category: { select: { color: true } },
         },
         orderBy: {
           date: "asc",
         },
       }),
 
-      // Query 5: Standalone installments for projection
+      // Query 5: parcelas standalone (sem agrupamento) — base pra projeção.
       prisma.transaction.findMany({
         where: {
           ...ctx.ownerFilter,
@@ -316,8 +333,13 @@ export async function GET(request: NextRequest) {
           currentInstallment: { not: null },
           deletedAt: null,
         },
-        include: {
-          category: true,
+        select: {
+          id: true,
+          date: true,
+          description: true,
+          amount: true,
+          currentInstallment: true,
+          totalInstallments: true,
         },
       }),
 
@@ -641,12 +663,13 @@ export async function GET(request: NextRequest) {
         // Only include if within the date range (after current month, before futureDate)
         if (futureInstallmentDate > endDate && futureInstallmentDate <= futureDate) {
           projectedInstallments.push({
-            ...t,
             id: `${t.id}-projected-${i}`,
             date: futureInstallmentDate,
             description: `${t.description} (${t.currentInstallment + i}/${t.totalInstallments})`,
+            amount: t.amount,
             currentInstallment: t.currentInstallment + i,
-            installment: null,
+            totalInstallments: t.totalInstallments,
+            category: null,
           });
         }
       }
