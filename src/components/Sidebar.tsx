@@ -76,7 +76,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   });
 
   useEffect(() => {
+    // Debounce: só refetcha se passou mais de 30s desde a última chamada.
+    // Evita manter a DB acordada com polling em background — ela pode
+    // suspender livremente enquanto a aba está oculta.
+    let lastFetchAt = 0;
+    const MIN_INTERVAL_MS = 30_000;
+
     async function fetchAlerts() {
+      lastFetchAt = Date.now();
       try {
         const now = new Date();
         const res = await fetch(
@@ -90,9 +97,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     }
 
     fetchAlerts();
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    function handleVisibilityChange() {
+      if (!document.hidden && Date.now() - lastFetchAt > MIN_INTERVAL_MS) {
+        fetchAlerts();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   // Prevent body scroll when mobile drawer is open

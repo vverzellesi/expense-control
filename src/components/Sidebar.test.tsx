@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 
 // Mock next-auth/react
 vi.mock('next-auth/react', () => ({
@@ -113,5 +113,88 @@ describe('Sidebar', () => {
     expect(screen.getAllByText('Dashboard').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Investimentos').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Projeção').length).toBeGreaterThan(0)
+  })
+
+  describe('alerts fetching', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('does not poll /api/summary on a timer (DB compute protection)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        json: () => Promise.resolve({ budgetAlerts: [] }),
+      })
+      global.fetch = fetchMock as unknown as typeof fetch
+
+      render(<Sidebar />)
+
+      // Initial mount triggers one fetch
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+
+      // Advance well past the old 5-minute polling interval
+      await act(async () => {
+        vi.advanceTimersByTime(30 * 60 * 1000)
+      })
+
+      // Still only the initial call — no background polling
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('refetches alerts when the tab becomes visible again', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        json: () => Promise.resolve({ budgetAlerts: [] }),
+      })
+      global.fetch = fetchMock as unknown as typeof fetch
+
+      render(<Sidebar />)
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+
+      // Simulate tab hidden then visible after debounce window
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => true,
+      })
+      document.dispatchEvent(new Event('visibilitychange'))
+
+      await act(async () => {
+        vi.advanceTimersByTime(60 * 1000)
+      })
+
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => false,
+      })
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    })
+
+    it('does not refetch on visibilitychange within the 30s debounce window', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        json: () => Promise.resolve({ budgetAlerts: [] }),
+      })
+      global.fetch = fetchMock as unknown as typeof fetch
+
+      render(<Sidebar />)
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+
+      // Tab becomes visible immediately (well within 30s debounce)
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => false,
+      })
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+
+      // Debounce prevents a second fetch
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
   })
 })
