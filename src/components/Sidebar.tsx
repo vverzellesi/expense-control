@@ -85,12 +85,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     async function fetchAlerts() {
       lastFetchAt = Date.now();
       try {
-        const now = new Date();
-        const res = await fetch(
-          `/api/summary?month=${now.getMonth() + 1}&year=${now.getFullYear()}`
-        );
+        const res = await fetch("/api/alerts/count");
         const data = await res.json();
-        setAlertCount(data.budgetAlerts?.length || 0);
+        setAlertCount(data.alertCount ?? 0);
       } catch (error) {
         console.error("Error fetching alerts:", error);
       }

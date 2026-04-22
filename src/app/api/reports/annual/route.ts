@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
           },
           investmentTransaction: null,
         },
+        select: { date: true, amount: true, type: true },
       }),
       prisma.transaction.findMany({
         where: {
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
           },
           investmentTransaction: null,
         },
+        select: { date: true, amount: true, type: true },
       }),
     ]);
 

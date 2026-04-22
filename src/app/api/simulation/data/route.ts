@@ -43,19 +43,35 @@ export async function GET() {
       where: { ...ctx.ownerFilter, isActive: true },
     });
 
-    const recurringWithLatestAmount = await Promise.all(
-      activeRecurring.map(async (recurring) => {
-        const latestTransaction = await prisma.transaction.findFirst({
-          where: { ...ctx.ownerFilter, recurringExpenseId: recurring.id },
-          orderBy: { date: "desc" },
-          select: { amount: true },
-        });
-        return {
-          ...recurring,
-          effectiveAmount: latestTransaction?.amount ?? recurring.defaultAmount,
-        };
-      })
-    );
+    // Busca o valor mais recente de cada recurring numa query só (evita N+1).
+    const recurringIds = activeRecurring.map((r) => r.id);
+    const latestByRecurring =
+      recurringIds.length > 0
+        ? await prisma.transaction.findMany({
+            where: {
+              ...ctx.ownerFilter,
+              recurringExpenseId: { in: recurringIds },
+            },
+            // id tiebreaker garante ordem determinística quando 2 transactions
+            // do mesmo recurring caem na mesma data.
+            orderBy: [{ date: "desc" }, { id: "desc" }],
+            distinct: ["recurringExpenseId"],
+            select: { recurringExpenseId: true, amount: true },
+          })
+        : [];
+
+    const latestAmountByRecurring = new Map<string, number>();
+    for (const t of latestByRecurring) {
+      if (t.recurringExpenseId) {
+        latestAmountByRecurring.set(t.recurringExpenseId, t.amount);
+      }
+    }
+
+    const recurringWithLatestAmount = activeRecurring.map((recurring) => ({
+      ...recurring,
+      effectiveAmount:
+        latestAmountByRecurring.get(recurring.id) ?? recurring.defaultAmount,
+    }));
 
     // 3. Future installments (next 12 months) - grouped
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);

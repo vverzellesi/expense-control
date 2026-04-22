@@ -61,7 +61,7 @@ describe('Sidebar', () => {
     vi.clearAllMocks()
     mockUseSpacePermissions.mockReturnValue(mockPermissions)
     global.fetch = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ budgetAlerts: [] }),
+      json: () => Promise.resolve({ alertCount: 0 }),
     })
   })
 
@@ -126,7 +126,7 @@ describe('Sidebar', () => {
 
     it('does not poll /api/summary on a timer (DB compute protection)', async () => {
       const fetchMock = vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ budgetAlerts: [] }),
+        json: () => Promise.resolve({ alertCount: 0 }),
       })
       global.fetch = fetchMock as unknown as typeof fetch
 
@@ -146,7 +146,7 @@ describe('Sidebar', () => {
 
     it('refetches alerts when the tab becomes visible again', async () => {
       const fetchMock = vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ budgetAlerts: [] }),
+        json: () => Promise.resolve({ alertCount: 0 }),
       })
       global.fetch = fetchMock as unknown as typeof fetch
 
@@ -177,7 +177,7 @@ describe('Sidebar', () => {
 
     it('does not refetch on visibilitychange within the 30s debounce window', async () => {
       const fetchMock = vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ budgetAlerts: [] }),
+        json: () => Promise.resolve({ alertCount: 0 }),
       })
       global.fetch = fetchMock as unknown as typeof fetch
 

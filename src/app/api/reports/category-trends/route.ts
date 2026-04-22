@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
           lte: new Date(year, 11, 31, 23, 59, 59, 999),
         },
       },
-      include: {
-        category: true,
+      select: {
+        date: true,
+        amount: true,
+        categoryId: true,
+        category: { select: { name: true, color: true } },
       },
     });
 
