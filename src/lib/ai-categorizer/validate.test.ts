@@ -61,4 +61,9 @@ describe("validateOutput", () => {
     expect(validateOutput({ resultados: [] }, items, cats)).toBeNull();
     expect(validateOutput({ results: "c1" }, items, cats)).toBeNull();
   });
+
+  it("aceita variação de caixa nas chaves e na confiança", () => {
+    const v = validateOutput({ results: [{ item: "I1", category: "C2", confidence: "High" }] }, ["i1"], cats);
+    expect(v!.get("i1")).toEqual({ kind: "categorize", categoryKey: "c2" });
+  });
 });

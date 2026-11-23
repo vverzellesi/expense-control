@@ -61,6 +61,22 @@ describe("callAnthropic", () => {
     expect(err.fatal).toBe(true);
   });
 
+  it("timeout também cobre a leitura do corpo da resposta", async () => {
+    const fetchImpl = async (_url: string, init: RequestInit) =>
+      ({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((_resolve, reject) => {
+            init.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          }),
+      }) as unknown as Response;
+    const err = await codeOf(
+      callAnthropic({}, { apiKey: KEY, timeoutMs: 10, fetchImpl: fetchImpl as unknown as typeof fetch })
+    );
+    expect(err.code).toBe("timeout");
+  });
+
   it("falha de rede vira código sem a mensagem original", async () => {
     const fetchImpl = async () => {
       throw new Error("connect failed to host with " + KEY);

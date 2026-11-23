@@ -22,6 +22,16 @@ const resultSchema = z.object({
 });
 type ParsedResult = z.infer<typeof resultSchema>;
 
+/** A caixa dos valores de enum não é garantida pelo provedor; as chaves são minúsculas. */
+function normalizeEntry(entry: unknown): unknown {
+  if (entry === null || typeof entry !== "object") return entry;
+  const out: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
+  for (const field of ["item", "category", "confidence"]) {
+    if (typeof out[field] === "string") out[field] = (out[field] as string).trim().toLowerCase();
+  }
+  return out;
+}
+
 function itemKeyOf(entry: unknown): string | null {
   if (entry === null || typeof entry !== "object") return null;
   const item = (entry as { item?: unknown }).item;
@@ -39,7 +49,8 @@ export function validateOutput(
 
   const known = new Set(itemKeys);
   const seen = new Map<string, Array<ParsedResult | null>>();
-  for (const entry of envelope.data.results) {
+  for (const rawEntry of envelope.data.results) {
+    const entry = normalizeEntry(rawEntry);
     const itemKey = itemKeyOf(entry);
     if (itemKey === null || !known.has(itemKey)) continue;
     const parsed = resultSchema.safeParse(entry);

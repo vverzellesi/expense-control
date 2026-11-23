@@ -32,9 +32,16 @@ describe("minimizeDescription", () => {
     expect(minimizeDescription("LOJA EXEMPLO 12/03/2026")).toBe("LOJA EXEMPLO");
   });
 
-  it("preserva números curtos, como parcela e filial", () => {
-    expect(minimizeDescription("LOJA EXEMPLO 3/10")).toBe("LOJA EXEMPLO 3/10");
+  it("preserva números curtos, como filial", () => {
     expect(minimizeDescription("LOJA EXEMPLO 0123")).toBe("LOJA EXEMPLO 0123");
+  });
+
+  it("remove dia/mês, marcador de parcela e valores com centavos", () => {
+    expect(minimizeDescription("LOJA EXEMPLO 12/03")).toBe("LOJA EXEMPLO");
+    expect(minimizeDescription("LOJA EXEMPLO 3/10")).toBe("LOJA EXEMPLO");
+    expect(minimizeDescription("LOJA EXEMPLO R$ 37,42")).toBe("LOJA EXEMPLO");
+    expect(minimizeDescription("LOJA EXEMPLO 1.234,56")).toBe("LOJA EXEMPLO");
+    expect(minimizeDescription("LOJA EXEMPLO 12.345.678,90")).toBe("LOJA EXEMPLO");
   });
 
   it("remove caracteres de controle", () => {
@@ -58,6 +65,11 @@ describe("minimizeDescription", () => {
     expect(minimizeDescription("TED PESSOA EXEMPLO")).toBeNull();
     expect(minimizeDescription("TRANSFERENCIA PESSOA EXEMPLO")).toBeNull();
     expect(minimizeDescription("PIXEL STUDIO EXEMPLO")).toBe("PIXEL STUDIO EXEMPLO");
+  });
+
+  it("deixa fora carteira de pagamento entre pessoas", () => {
+    expect(minimizeDescription("PICPAY*PESSOA EXEMPLO")).toBeNull();
+    expect(minimizeDescription("PIC PAY *PESSOA EXEMPLO")).toBeNull();
   });
 
   it("conta letras acentuadas", () => {

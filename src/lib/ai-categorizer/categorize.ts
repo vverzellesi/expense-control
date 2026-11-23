@@ -152,8 +152,10 @@ export async function categorizeUncategorized(
   const apiKey = options.apiKey?.trim() || null;
   if (mode === "apply" && !apiKey) return result("desligado");
 
-  const maxCalls = Math.max(0, Math.min(Math.floor(options.maxCalls ?? DEFAULT_MAX_CALLS_PER_RUN), MAX_CALLS_CEILING));
-  const batchSize = Math.max(1, Math.min(Math.floor(options.batchSize ?? MAX_BATCH_SIZE), MAX_BATCH_SIZE));
+  const whole = (value: number | undefined, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : fallback;
+  const maxCalls = Math.max(0, Math.min(whole(options.maxCalls, DEFAULT_MAX_CALLS_PER_RUN), MAX_CALLS_CEILING));
+  const batchSize = Math.max(1, Math.min(whole(options.batchSize, MAX_BATCH_SIZE), MAX_BATCH_SIZE));
 
   try {
     const rows = await db.transaction.findMany({
@@ -228,6 +230,21 @@ export async function categorizeUncategorized(
         continue;
       }
 
+      // A categoria pode ter sido apagada ou movida para um espaço durante a chamada.
+      const chosenIds = new Set<string>();
+      verdicts.forEach((v) => {
+        const id = v.kind === "categorize" ? keyToId.get(v.categoryKey) : undefined;
+        if (id) chosenIds.add(id);
+      });
+      const personalNow = new Set<string>();
+      if (chosenIds.size > 0) {
+        const still = await db.category.findMany({
+          where: { id: { in: Array.from(chosenIds) }, userId: ownerUserId, spaceId: null },
+          select: { id: true },
+        });
+        still.forEach((c) => personalNow.add(c.id));
+      }
+
       for (const { key, source } of batch) {
         const verdict = verdicts.get(key);
         if (!verdict || verdict.kind === "discard") {
@@ -247,23 +264,24 @@ export async function categorizeUncategorized(
           counts.discarded++;
           continue;
         }
+        if (!personalNow.has(categoryId)) {
+          counts.conflicts++;
+          continue;
+        }
         try {
+          // Repete o filtro de seleção inteiro: vínculo, conta e escopo podem ter mudado sem tocar no updatedAt.
           const updated = await db.transaction.updateMany({
-            where: {
-              id: source.id,
-              userId: ownerUserId,
-              spaceId: null,
-              deletedAt: null,
-              type: "EXPENSE",
-              categoryId: null,
-              categorySource: null,
-              updatedAt: source.updatedAt,
-            },
+            where: { ...selectionWhere(ownerUserId), id: source.id, updatedAt: source.updatedAt },
             data: { categoryId, categorySource: "ai" },
           });
           if (updated.count === 1) counts.categorized++;
           else counts.conflicts++;
-        } catch {
+        } catch (error) {
+          // Categoria apagada entre a leitura e a escrita (chave estrangeira): conflito do item.
+          if ((error as { code?: unknown } | null)?.code === "P2003") {
+            counts.conflicts++;
+            continue;
+          }
           return result("erro", "db_write_failed");
         }
       }

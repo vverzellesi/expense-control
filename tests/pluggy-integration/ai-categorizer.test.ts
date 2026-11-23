@@ -100,6 +100,44 @@ beforeEach(async () => {
       origin: owner.originName,
     },
   });
+
+  // Lançamento movido para um espaço compartilhado.
+  await applyBatch(db, owner, [rec({ externalId: "c_space", description: "LOJA DO ESPACO" })]);
+  const space = await db.space.create({ data: { name: "Espaço Teste", createdBy: owner.userId } });
+  await db.transaction.update({ where: { id: (await tx("LOJA DO ESPACO")).id }, data: { spaceId: space.id } });
+
+  // Vínculo em revisão apontando para um lançamento: fora.
+  const reviewTx = await db.transaction.create({
+    data: {
+      userId: owner.userId,
+      description: "LOJA EM REVISAO",
+      amount: -10,
+      date: noonUtc("2026-03-10"),
+      type: "EXPENSE",
+      origin: owner.originName,
+    },
+  });
+  await db.pluggyTransactionLink.create({
+    data: {
+      accountLinkId: owner.accountLinkId,
+      externalId: "c_review",
+      transactionId: reviewTx.id,
+      disposition: "needs_review",
+      reasonCode: "possible_duplicate",
+      sourceStatus: "POSTED",
+      sourceDate: noonUtc("2026-03-10"),
+      ledgerDate: noonUtc("2026-03-10"),
+      sourceAmountCents: 1000,
+      currencyCode: "BRL",
+      direction: "DEBIT",
+      sourceDescription: "LOJA EM REVISAO",
+      lastSeenAt: new Date(),
+    },
+  });
+
+  // Outro dono com cartão Pluggy próprio.
+  const otherOwner = await createOwner(db, { originName: "Cartão De Outro" });
+  await applyBatch(db, otherOwner, [rec({ externalId: "x_1", description: "LOJA DE OUTRO DONO" })]);
 });
 
 describe("categorização por IA em Postgres real", () => {
@@ -153,5 +191,23 @@ describe("categorização por IA em Postgres real", () => {
     const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
     expect(r.counts.conflicts).toBe(1);
     expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
+  });
+
+  it("cartão desativado durante a chamada não recebe escrita (a escrita repete a seleção)", async () => {
+    const p = provider(async () => {
+      await db.pluggyAccountLink.update({ where: { id: owner.accountLinkId }, data: { enabled: false } });
+    });
+    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
+    expect(r.counts).toMatchObject({ categorized: 0, conflicts: 1 });
+    expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
+  });
+
+  it("categoria apagada durante a chamada vira conflito, sem derrubar a execução", async () => {
+    const p = provider(async () => {
+      await db.category.delete({ where: { id: foodId } });
+    });
+    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
+    expect(r).toMatchObject({ state: "ok", error: null });
+    expect(r.counts).toMatchObject({ categorized: 0, conflicts: 1 });
   });
 });
