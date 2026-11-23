@@ -35,7 +35,7 @@ describe("toBusinessDate (fuso America/Sao_Paulo)", () => {
     }
   });
 
-  it.each(["", "ontem", "2026-02-30", "2026-13-01"])("recusa %j", (input) => {
+  it.each(["", "ontem", "2026-02-30", "2026-13-01", "2026-11-20 10:00", "11/20/2026", "2026-11-20T10:00:00 BRT"])("recusa %j", (input) => {
     expect(toBusinessDate(input)).toBeNull();
   });
 });

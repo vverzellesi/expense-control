@@ -28,7 +28,7 @@ function loadPluggyEnv(): void {
     const name = match[1];
     if (!(REQUIRED_VARS as readonly string[]).includes(name) || process.env[name]) continue;
     let value = match[2].trim();
-    const quoted = /^(["'])(.*)\1$/.exec(value);
+    const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/.exec(value);
     value = quoted ? quoted[2] : value.replace(/\s+#.*$/, "").trim();
     if (value) process.env[name] = value;
   }

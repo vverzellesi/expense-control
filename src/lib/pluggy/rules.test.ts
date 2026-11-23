@@ -1,55 +1,73 @@
 import { describe, expect, it } from "vitest";
-import { classifyPluggyTransaction, compileExcludePatterns, matchesUserExclusion } from "./rules";
+import {
+  applyBatchRules,
+  classifyPluggyTransaction,
+  compileExcludePatterns,
+  matchUserPattern,
+  type BatchEntry,
+} from "./rules";
+import type { MappedPluggyTransaction } from "./types";
 
-// Padrões e descrições sintéticos.
+// Padrões, descrições e ids 100% sintéticos.
+
 describe("compileExcludePatterns", () => {
-  it("aceita literal e regex e ignora entradas inválidas", () => {
+  it("aceita literal e regex com ação e ignora entradas inválidas", () => {
     const compiled = compileExcludePatterns([
-      { pattern: "texto exemplo" },
-      { pattern: "/^LOJA\\s+TESTE/i", accountType: "CREDIT" },
-      { pattern: "/[unclosed/" }, // regex inválida
-      { pattern: "/(a+)+$/" }, // grupo quantificado: risco de retrocesso catastrófico
-      { pattern: "/(x|y){2,}/" },
-      { pattern: "/(a)\\1/" }, // referência para trás
-      { pattern: "x".repeat(201) },
-      { pattern: "   " },
-      { pattern: "ok", accountType: "INVESTMENT" },
-      { pattern: 42 },
+      { pattern: "texto exemplo", action: "exclude" },
+      { pattern: "/^LOJA\\s+TESTE/i", accountType: "CREDIT", action: "transfer" },
+      { pattern: "sem ação" },
+      { pattern: "ação errada", action: "delete" },
+      { pattern: "/[unclosed/", action: "exclude" },
+      { pattern: "/(a+)+$/", action: "exclude" }, // grupo quantificado
+      { pattern: "/(x|y){2,}/", action: "exclude" },
+      { pattern: "/(a)\\1/", action: "exclude" }, // referência para trás
+      { pattern: "/.*.*Z/", action: "exclude" }, // dois quantificadores ilimitados
+      { pattern: "/A+B{3,}/", action: "exclude" },
+      { pattern: "x".repeat(201), action: "exclude" },
+      { pattern: "   ", action: "exclude" },
+      { pattern: "ok", accountType: "INVESTMENT", action: "exclude" },
+      { pattern: 42, action: "exclude" },
       null,
       "string solta",
     ]);
-    expect(compiled.matchers).toHaveLength(2);
-    expect(compiled.rejected).toBe(10);
+    expect(compiled.matchers.map((m) => m.action)).toEqual(["exclude", "transfer"]);
+    expect(compiled.rejected).toBe(14);
   });
 
   it("entrada que não é lista vira lista vazia", () => {
     expect(compileExcludePatterns(undefined)).toEqual({ matchers: [], rejected: 0 });
-    expect(compileExcludePatterns({ pattern: "x" })).toEqual({ matchers: [], rejected: 0 });
+    expect(compileExcludePatterns({ pattern: "x", action: "exclude" })).toEqual({ matchers: [], rejected: 0 });
   });
 
   it("literal ignora maiúsculas, acentos e espaços repetidos; não é regex", () => {
-    const compiled = compileExcludePatterns([{ pattern: "transferência   exemplo" }, { pattern: "a.b" }]);
-    expect(matchesUserExclusion("TRANSFERENCIA EXEMPLO 123", "BANK", compiled)).toBe(true);
-    expect(matchesUserExclusion("axb", "BANK", compiled)).toBe(false);
-    expect(matchesUserExclusion("loja a.b", "BANK", compiled)).toBe(true);
+    const compiled = compileExcludePatterns([
+      { pattern: "transferência   exemplo", action: "exclude" },
+      { pattern: "a.b", action: "transfer" },
+    ]);
+    expect(matchUserPattern("TRANSFERENCIA EXEMPLO 123", "BANK", compiled)).toBe("exclude");
+    expect(matchUserPattern("axb", "BANK", compiled)).toBeNull();
+    expect(matchUserPattern("loja a.b", "BANK", compiled)).toBe("transfer");
   });
 
   it("respeita o tipo de conta do padrão", () => {
-    const compiled = compileExcludePatterns([{ pattern: "/^LOJA TESTE/", accountType: "CREDIT" }]);
-    expect(matchesUserExclusion("LOJA TESTE 1", "CREDIT", compiled)).toBe(true);
-    expect(matchesUserExclusion("LOJA TESTE 1", "BANK", compiled)).toBe(false);
+    const compiled = compileExcludePatterns([{ pattern: "/^LOJA TESTE/", accountType: "CREDIT", action: "exclude" }]);
+    expect(matchUserPattern("LOJA TESTE 1", "CREDIT", compiled)).toBe("exclude");
+    expect(matchUserPattern("LOJA TESTE 1", "BANK", compiled)).toBeNull();
   });
 
   it("regex permitida roda rápido em descrição longa", () => {
-    const compiled = compileExcludePatterns([{ pattern: "/A+B+C+$/" }]);
+    const compiled = compileExcludePatterns([{ pattern: "/^A+B[0-9]{2}$/", action: "exclude" }]);
+    expect(compiled.matchers).toHaveLength(1);
     const started = Date.now();
-    expect(matchesUserExclusion("A".repeat(5000) + "X", "BANK", compiled)).toBe(false);
+    expect(matchUserPattern("A".repeat(5000) + "X", "BANK", compiled)).toBeNull();
     expect(Date.now() - started).toBeLessThan(200);
   });
 });
 
 describe("classifyPluggyTransaction", () => {
   const none = compileExcludePatterns([]);
+  const card = (description: string, operationType?: string | null) =>
+    classifyPluggyTransaction({ accountType: "CREDIT", direction: "CREDIT", description, operationType }, none);
 
   it("conta: débito é despesa, crédito é receita, transferência própria é TRANSFER", () => {
     expect(classifyPluggyTransaction({ accountType: "BANK", direction: "DEBIT", description: "LOJA EXEMPLO" }, none)).toEqual({
@@ -63,52 +81,233 @@ describe("classifyPluggyTransaction", () => {
     ).toBe("TRANSFER");
   });
 
-  it("cartão: estorno é INCOME, pagamento é excluído, outro crédito vai para revisão", () => {
-    expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "CREDIT", description: "ESTORNO LOJA EXEMPLO" }, none)).toEqual({
-      type: "INCOME",
-      creditKind: "refund",
-      preDisposition: null,
+  it("cartão, operationType PAGAMENTO_FATURA: excluído, salvo parcelamento de compra", () => {
+    expect(card("CREDITO EXEMPLO", "PAGAMENTO_FATURA")).toEqual({
+      type: "TRANSFER",
+      creditKind: "bill_payment",
+      preDisposition: { disposition: "excluded", reasonCode: "bill_payment_credit" },
     });
-    for (const description of ["PAGAMENTO DE FATURA", "PAGAMENTO RECEBIDO", "PAGTO FATURA CARTAO", "INCLUSAO DE PAGAMENTO"]) {
-      expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "CREDIT", description }, none)).toEqual({
-        type: "TRANSFER",
-        creditKind: "bill_payment",
-        preDisposition: { disposition: "excluded", reasonCode: "bill_payment_credit" },
-      });
+    expect(card("PARCELAMENTO DE COMPRA EXEMPLO", "PAGAMENTO_FATURA")).toEqual({
+      type: "INCOME",
+      creditKind: "other",
+      preDisposition: { disposition: "needs_review", reasonCode: "purchase_installment_plan" },
+    });
+  });
+
+  it("cartão, operationType ESTORNO: estorno mesmo com descrição em inglês ou neutra", () => {
+    for (const description of ["SAMPLE STORE REFUND", "AJUSTE EXEMPLO"]) {
+      expect(card(description, "ESTORNO")).toEqual({ type: "INCOME", creditKind: "refund", preDisposition: null });
     }
-    expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "CREDIT", description: "AJUSTE EXEMPLO" }, none)).toEqual({
+  });
+
+  it("cartão sem operationType conclusivo cai na descrição", () => {
+    expect(card("ESTORNO LOJA EXEMPLO", "OUTROS").creditKind).toBe("refund");
+    expect(card("SAMPLE STORE REFUND", null).creditKind).toBe("refund");
+    for (const description of ["PAGAMENTO DE FATURA", "PAGAMENTO RECEBIDO", "PAGTO FATURA CARTAO"]) {
+      expect(card(description, "OUTROS").preDisposition).toEqual({ disposition: "excluded", reasonCode: "bill_payment_credit" });
+    }
+    expect(card("AJUSTE EXEMPLO", "OUTROS")).toEqual({
       type: "INCOME",
       creditKind: "unknown",
       preDisposition: { disposition: "needs_review", reasonCode: "credit_unknown" },
     });
-  });
-
-  it("estorno e pagamento juntos são ambíguos e vão para revisão", () => {
-    const result = classifyPluggyTransaction(
-      { accountType: "CREDIT", direction: "CREDIT", description: "ESTORNO PAGAMENTO FATURA" },
-      none
-    );
-    expect(result.creditKind).toBe("unknown");
-    expect(result.preDisposition).toEqual({ disposition: "needs_review", reasonCode: "credit_unknown" });
+    // estorno e pagamento juntos são ambíguos
+    expect(card("ESTORNO PAGAMENTO FATURA").preDisposition).toEqual({ disposition: "needs_review", reasonCode: "credit_unknown" });
   });
 
   it("débito no cartão com texto de estorno continua despesa", () => {
-    const result = classifyPluggyTransaction({ accountType: "CREDIT", direction: "DEBIT", description: "ESTORNO EXEMPLO" }, none);
-    expect(result).toEqual({ type: "EXPENSE", creditKind: null, preDisposition: null });
+    expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "DEBIT", description: "ESTORNO EXEMPLO" }, none)).toEqual({
+      type: "EXPENSE",
+      creditKind: null,
+      preDisposition: null,
+    });
   });
 
-  it("rotativo vai para revisão", () => {
-    for (const accountType of ["CREDIT", "BANK"] as const) {
-      expect(
-        classifyPluggyTransaction({ accountType, direction: "DEBIT", description: "SALDO ROTATIVO" }, none).preDisposition
-      ).toEqual({ disposition: "needs_review", reasonCode: "carryover" });
+  it("encargos são despesa mesmo com texto de rotativo; só saldo transportado vai para revisão", () => {
+    for (const description of ["IOF ROTATIVO EXEMPLO", "JUROS ROTATIVO", "ENCARGOS ROTATIVO", "MULTA ATRASO", "TARIFA EXEMPLO", "ANUIDADE EXEMPLO"]) {
+      expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "DEBIT", description }, none)).toEqual({
+        type: "EXPENSE",
+        creditKind: null,
+        preDisposition: null,
+      });
+    }
+    for (const description of ["SALDO ROTATIVO", "SALDO ANTERIOR"]) {
+      expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "DEBIT", description }, none).preDisposition).toEqual({
+        disposition: "needs_review",
+        reasonCode: "carryover",
+      });
     }
   });
 
-  it("padrão do usuário tem prioridade sobre as demais regras", () => {
-    const patterns = compileExcludePatterns([{ pattern: "saldo rotativo" }]);
+  it("padrão do usuário: exclude exclui, transfer vira TRANSFER sem destino prévio", () => {
+    const patterns = compileExcludePatterns([
+      { pattern: "saldo rotativo", action: "exclude" },
+      { pattern: "ajuste exemplo", action: "transfer" },
+    ]);
     expect(
       classifyPluggyTransaction({ accountType: "CREDIT", direction: "DEBIT", description: "SALDO ROTATIVO" }, patterns).preDisposition
     ).toEqual({ disposition: "excluded", reasonCode: "user_pattern" });
+    expect(classifyPluggyTransaction({ accountType: "CREDIT", direction: "CREDIT", description: "AJUSTE EXEMPLO" }, patterns)).toEqual({
+      type: "TRANSFER",
+      creditKind: "other",
+      preDisposition: null,
+    });
+    expect(classifyPluggyTransaction({ accountType: "BANK", direction: "DEBIT", description: "AJUSTE EXEMPLO" }, patterns)).toEqual({
+      type: "TRANSFER",
+      creditKind: null,
+      preDisposition: null,
+    });
+  });
+});
+
+// ------------------------------------------------------------- regras de lote
+
+let seq = 0;
+function entry(
+  accountId: string,
+  overrides: Partial<MappedPluggyTransaction>,
+  extra: Partial<BatchEntry> = {}
+): BatchEntry {
+  seq++;
+  const mapped: MappedPluggyTransaction = {
+    externalId: "tx_test_" + String(seq).padStart(3, "0"),
+    providerId: null,
+    accountType: accountId.startsWith("card") ? "CREDIT" : "BANK",
+    sourceStatus: "POSTED",
+    sourceDate: "2026-03-10",
+    purchaseDate: null,
+    ledgerDate: overrides.sourceDate ?? "2026-03-10",
+    description: "LOJA EXEMPLO",
+    amountCents: 1000,
+    currencyCode: "BRL",
+    direction: "DEBIT",
+    type: "EXPENSE",
+    creditKind: null,
+    billId: null,
+    installmentNumber: null,
+    totalInstallments: null,
+    preDisposition: null,
+    ...overrides,
+  };
+  return { accountId, itemId: "item_test_1", mapped, ...extra };
+}
+
+const fee = (accountId: string, o: Partial<MappedPluggyTransaction> = {}) =>
+  entry(accountId, { description: "TARIFA MENSAL EXEMPLO", amountCents: 2990, ...o });
+const feeRefund = (accountId: string, o: Partial<MappedPluggyTransaction> = {}) =>
+  entry(accountId, {
+    description: "ESTORNO TARIFA EXEMPLO",
+    amountCents: 2990,
+    direction: "CREDIT",
+    type: "INCOME",
+    creditKind: accountId.startsWith("card") ? "refund" : null,
+    ...o,
+  });
+const billCredit = (o: Partial<MappedPluggyTransaction> = {}) =>
+  entry("card_test_1", {
+    description: "PAGAMENTO RECEBIDO",
+    amountCents: 150000,
+    direction: "CREDIT",
+    type: "TRANSFER",
+    creditKind: "bill_payment",
+    preDisposition: { disposition: "excluded", reasonCode: "bill_payment_credit" },
+    ...o,
+  });
+const bankDebit = (o: Partial<MappedPluggyTransaction> = {}, extra: Partial<BatchEntry> = {}) =>
+  entry("bank_test_1", { description: "PAGAMENTO FATURA CARTAO", amountCents: 150000, type: "TRANSFER", ...o }, extra);
+
+const reasons = (list: MappedPluggyTransaction[]) => list.map((m) => m.preDisposition?.reasonCode ?? null);
+
+describe("applyBatchRules - estorno integral de tarifa", () => {
+  it("tarifa e estorno de mesmo valor na mesma fatura se anulam", () => {
+    const list = [
+      fee("card_test_1", { billId: "bill_test_1" }),
+      feeRefund("card_test_1", { billId: "bill_test_1", sourceDate: "2026-03-25" }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual(["offsetting_refund", "offsetting_refund"]);
+  });
+
+  it("tarifa sem par continua despesa", () => {
+    const list = [fee("card_test_1"), entry("card_test_1", {})];
+    expect(reasons(applyBatchRules(list))).toEqual([null, null]);
+  });
+
+  it("valor, conta ou fatura diferentes não pareiam", () => {
+    const list = [
+      fee("card_test_1", { billId: "bill_test_1" }),
+      feeRefund("card_test_1", { billId: "bill_test_2" }),
+      feeRefund("card_test_2"),
+      feeRefund("card_test_1", { amountCents: 2991 }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual([null, null, null, null]);
+  });
+
+  it("sem billId vale a janela de 35 dias", () => {
+    const inside = applyBatchRules([fee("bank_test_1", { sourceDate: "2026-03-01" }), feeRefund("bank_test_1", { sourceDate: "2026-04-05" })]);
+    expect(reasons(inside)).toEqual(["offsetting_refund", "offsetting_refund"]);
+    const outside = applyBatchRules([fee("bank_test_1", { sourceDate: "2026-03-01" }), feeRefund("bank_test_1", { sourceDate: "2026-04-06" })]);
+    expect(reasons(outside)).toEqual([null, null]);
+  });
+
+  it("um para um com valores repetidos: dois débitos e um estorno anulam só um par", () => {
+    const list = [
+      fee("card_test_1", { sourceDate: "2026-04-10" }),
+      fee("card_test_1", { sourceDate: "2026-03-10" }),
+      feeRefund("card_test_1", { sourceDate: "2026-03-12" }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual([null, "offsetting_refund", "offsetting_refund"]);
+  });
+});
+
+describe("applyBatchRules - débito do pagamento de fatura", () => {
+  it("débito na conta com o mesmo valor do crédito de pagamento, até 4 dias, é excluído", () => {
+    const list = [billCredit({ sourceDate: "2026-03-10" }), bankDebit({ sourceDate: "2026-03-07" })];
+    const result = applyBatchRules(list);
+    expect(reasons(result)).toEqual(["bill_payment_credit", "bill_payment_debit"]);
+    expect(result[1].preDisposition).toEqual({ disposition: "excluded", reasonCode: "bill_payment_debit" });
+  });
+
+  it("5 dias de diferença, outro item ou outro valor não pareiam", () => {
+    const list = [
+      billCredit({ sourceDate: "2026-03-10" }),
+      bankDebit({ sourceDate: "2026-03-15" }),
+      bankDebit({ sourceDate: "2026-03-10" }, { itemId: "item_test_2" }),
+      bankDebit({ sourceDate: "2026-03-10", amountCents: 150001 }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual(["bill_payment_credit", null, null, null]);
+  });
+
+  it("um para um com valores repetidos: dois créditos e três débitos excluem só dois", () => {
+    const list = [
+      billCredit({ sourceDate: "2026-03-10" }),
+      billCredit({ sourceDate: "2026-04-10" }),
+      bankDebit({ sourceDate: "2026-03-09" }),
+      bankDebit({ sourceDate: "2026-03-10" }),
+      bankDebit({ sourceDate: "2026-04-11" }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual([
+      "bill_payment_credit",
+      "bill_payment_credit",
+      null,
+      "bill_payment_debit",
+      "bill_payment_debit",
+    ]);
+  });
+
+  it("prefere o débito com cara de pagamento de fatura", () => {
+    const list = [
+      billCredit({ sourceDate: "2026-03-10" }),
+      bankDebit({ sourceDate: "2026-03-10", description: "PIX ENVIADO EXEMPLO", type: "EXPENSE" }),
+      bankDebit({ sourceDate: "2026-03-08" }),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual(["bill_payment_credit", null, "bill_payment_debit"]);
+  });
+
+  it("débito já com destino prévio não é tocado e a entrada não é alterada", () => {
+    const debit = bankDebit({ preDisposition: { disposition: "excluded", reasonCode: "user_pattern" } });
+    const list = [billCredit(), debit];
+    const snapshot = JSON.stringify(list);
+    expect(reasons(applyBatchRules(list))).toEqual(["bill_payment_credit", "user_pattern"]);
+    expect(JSON.stringify(list)).toBe(snapshot);
   });
 });

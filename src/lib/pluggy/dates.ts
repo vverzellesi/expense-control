@@ -15,6 +15,8 @@ const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const UTC_MIDNIGHT = /^(\d{4}-\d{2}-\d{2})T00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)$/;
 // Data e hora sem fuso: hora de parede, vale o dia escrito.
 const FLOATING = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+// Instante ISO com fuso explícito; outros formatos seriam lidos no fuso do processo.
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 
 const formatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: BUSINESS_TIME_ZONE,
@@ -48,6 +50,7 @@ export function toBusinessDate(value: string): string | null {
   const floating = FLOATING.exec(trimmed);
   if (floating) return toBusinessDate(floating[1]);
 
+  if (!ISO_WITH_OFFSET.test(trimmed)) return null;
   const ms = Date.parse(trimmed);
   if (Number.isNaN(ms)) return null;
   return formatter.format(new Date(ms));

@@ -1,7 +1,8 @@
-import { detectInstallment } from "@/lib/categorizer";
 import { toBusinessDate } from "@/lib/pluggy/dates";
 import { mapPluggyTransaction } from "@/lib/pluggy/mapper";
+import { applyBatchRules, type BatchEntry } from "@/lib/pluggy/rules";
 import type {
+  MappedPluggyTransaction,
   PluggyAccount,
   PluggyBill,
   PluggyItem,
@@ -33,6 +34,8 @@ export interface ProbeData {
 
 const SAMPLE_LIMIT = 15;
 const SHAPE_LIMIT = 5;
+/** Tolerância, em reais, para considerar o resíduo da fatura zero. */
+const RESIDUAL_TOLERANCE = 0.05;
 
 type Counter = Map<string, number>;
 
@@ -47,35 +50,34 @@ function counterTable(title: string, counter: Counter, sortByKey = true): string
   return ["", "| " + title + " | Quantidade |", "|---|---|", ...entries.map(([k, v]) => "| " + k + " | " + v + " |")];
 }
 
-/** Forma da descrição: letras viram "a", dígitos viram "9". */
+/** Forma da descrição: cada sequência de letras vira "a" e de dígitos vira "9" (esconde o tamanho das palavras). */
 export function descriptionShape(description: string): string {
   return description
     .trim()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[A-Za-z]/g, "a")
-    .replace(/\d/g, "9")
+    .replace(/[A-Za-z]+/g, "a")
+    .replace(/\d+/g, "9")
+    .replace(/\s+/g, " ")
     .slice(0, 60);
 }
 
-function dateShape(value: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return "só data";
-  const time = /T(\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/.exec(value);
-  if (!time) return "outro formato";
-  return "T" + time[1] + (time[2] ?? " (sem fuso)");
+/** Faixa do formato de data: poucas categorias, sem listar cada horário. */
+export function dateBucket(value: string): string {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return "só data";
+  if (/T03:00(?::00(?:\.0+)?)?Z$/.test(trimmed) || /T00:00(?::00(?:\.0+)?)?-03:?00$/.test(trimmed)) {
+    return "meia-noite de São Paulo";
+  }
+  if (/T00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)?$/.test(trimmed)) return "meia-noite UTC ou sem fuso";
+  if (/T\d{2}:\d{2}/.test(trimmed)) return "com horário";
+  return "outros";
 }
 
 function daysBetween(fromMs: number, isoDate: string): number | null {
   const at = Date.parse(isoDate);
   if (Number.isNaN(at)) return null;
   return Math.round((at - fromMs) / 86_400_000);
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function keysOf(objects: Array<Record<string, unknown> | null | undefined>): string {
@@ -86,6 +88,41 @@ function keysOf(objects: Array<Record<string, unknown> | null | undefined>): str
 
 function accountType(account: PluggyAccount): "BANK" | "CREDIT" | null {
   return account.type === "BANK" || account.type === "CREDIT" ? account.type : null;
+}
+
+/** Valor do registro na moeda da conta, em reais (positivo). */
+function amountInAccount(tx: PluggyTransaction, account: PluggyAccount): number {
+  const sameCurrency = tx.currencyCode.toUpperCase() === account.currencyCode.toUpperCase();
+  const value = !sameCurrency && typeof tx.amountInAccountCurrency === "number" ? tx.amountInAccountCurrency : tx.amount;
+  return Math.abs(value);
+}
+
+/** Mapeia todas as contas e aplica as regras de lote do item inteiro. */
+function previewMapping(data: ProbeData): { mapped: Map<number, MappedPluggyTransaction[]>; errors: Map<number, number> } {
+  const batch: BatchEntry[] = [];
+  const owners: number[] = [];
+  const errors = new Map<number, number>();
+  data.accounts.forEach((entry, accountIndex) => {
+    const type = accountType(entry.account);
+    if (!type) return;
+    for (const tx of entry.transactions ?? []) {
+      try {
+        const mapped = mapPluggyTransaction(tx, { type, currencyCode: entry.account.currencyCode });
+        batch.push({ accountId: entry.account.id, itemId: data.item.id, operationType: tx.operationType, mapped });
+        owners.push(accountIndex);
+      } catch {
+        errors.set(accountIndex, (errors.get(accountIndex) ?? 0) + 1);
+      }
+    }
+  });
+  const result = applyBatchRules(batch);
+  const mapped = new Map<number, MappedPluggyTransaction[]>();
+  result.forEach((item, index) => {
+    const owner = owners[index];
+    if (!mapped.has(owner)) mapped.set(owner, []);
+    mapped.get(owner)!.push(item);
+  });
+  return { mapped, errors };
 }
 
 function itemSection(item: PluggyItem, generatedAt: Date, detailed: boolean): string[] {
@@ -108,9 +145,13 @@ function itemSection(item: PluggyItem, generatedAt: Date, detailed: boolean): st
   return lines;
 }
 
-function transactionSection(data: ProbeAccountData, detailed: boolean): string[] {
+function transactionSection(
+  data: ProbeAccountData,
+  mapped: MappedPluggyTransaction[] | undefined,
+  mappingErrors: number,
+  detailed: boolean
+): string[] {
   const lines: string[] = [];
-  const type = accountType(data.account);
   if (data.transactionsError) {
     lines.push("- transações: leitura falhou (" + data.transactionsError + ")");
     return lines;
@@ -125,23 +166,17 @@ function transactionSection(data: ProbeAccountData, detailed: boolean): string[]
   const byDirection: Counter = new Map();
   const byMonth: Counter = new Map();
   const sign: Counter = new Map();
-  const dateShapes: Counter = new Map();
+  const dateBuckets: Counter = new Map();
   const currencies: Counter = new Map();
-  const mappedTypes: Counter = new Map();
-  const dispositions: Counter = new Map();
-  const creditKinds: Counter = new Map();
+  const operationTypes: Counter = new Map();
   const providerIds = new Set<string>();
   let withProviderId = 0;
   let withMetadata = 0;
   let withBillId = 0;
   let withPurchaseDate = 0;
   let withMetaInstallment = 0;
-  let withDescInstallment = 0;
-  let installmentAgree = 0;
-  let installmentDisagree = 0;
   let withAmountInAccountCurrency = 0;
   let withCreatedAt = 0;
-  let mappingErrors = 0;
   const installmentShapes: string[] = [];
 
   for (const tx of txs) {
@@ -150,8 +185,9 @@ function transactionSection(data: ProbeAccountData, detailed: boolean): string[]
     const day = toBusinessDate(tx.date);
     bump(byMonth, day ? day.slice(0, 7) : "data inválida");
     bump(sign, tx.type + " / " + (tx.amount > 0 ? "positivo" : tx.amount < 0 ? "negativo" : "zero"));
-    bump(dateShapes, dateShape(tx.date));
+    bump(dateBuckets, dateBucket(tx.date));
     bump(currencies, tx.currencyCode);
+    bump(operationTypes, tx.type + " / " + (tx.operationType ?? "sem operationType"));
     if (tx.providerId && tx.providerId.trim()) {
       withProviderId++;
       providerIds.add(tx.providerId.trim());
@@ -163,32 +199,13 @@ function transactionSection(data: ProbeAccountData, detailed: boolean): string[]
     if (meta?.billId) withBillId++;
     if (meta?.purchaseDate) withPurchaseDate++;
     const metaInstallment = Number.isInteger(meta?.installmentNumber) && Number.isInteger(meta?.totalInstallments);
-    const detected = detectInstallment(tx.description);
     if (metaInstallment) withMetaInstallment++;
-    if (detected.isInstallment) withDescInstallment++;
-    if (metaInstallment && detected.isInstallment) {
-      const same =
-        detected.currentInstallment === meta!.installmentNumber &&
-        detected.totalInstallments === meta!.totalInstallments;
-      if (same) installmentAgree++;
-      else installmentDisagree++;
-    }
-    if ((metaInstallment || detected.isInstallment) && installmentShapes.length < SHAPE_LIMIT) {
-      const metaText = metaInstallment ? meta!.installmentNumber + "/" + meta!.totalInstallments : "sem metadado";
+    if (metaInstallment && installmentShapes.length < SHAPE_LIMIT) {
       installmentShapes.push(
-        "metadado " + metaText + "; descrição " + (detected.isInstallment ? "com" : "sem") + " marcador; forma: " +
-          descriptionShape(tx.description)
+        "metadado " + meta!.installmentNumber + "/" + meta!.totalInstallments +
+          (meta!.purchaseDate ? ", com data da compra" : ", sem data da compra") +
+          "; forma da descrição: " + descriptionShape(tx.description)
       );
-    }
-    if (type) {
-      try {
-        const mapped = mapPluggyTransaction(tx, { type, currencyCode: data.account.currencyCode });
-        bump(mappedTypes, mapped.type);
-        bump(dispositions, mapped.preDisposition ? mapped.preDisposition.disposition + " / " + mapped.preDisposition.reasonCode : "sem destino prévio");
-        bump(creditKinds, mapped.creditKind ?? "null");
-      } catch {
-        mappingErrors++;
-      }
     }
   }
 
@@ -206,33 +223,81 @@ function transactionSection(data: ProbeAccountData, detailed: boolean): string[]
   lines.push(...counterTable("Status", byStatus));
   lines.push(...counterTable("Direção (type)", byDirection));
   lines.push(...counterTable("Direção / sinal de amount", sign));
-  lines.push(...counterTable("Formato da data", dateShapes, false));
+  lines.push(...counterTable("Direção / operationType", operationTypes));
+  lines.push(...counterTable("Formato da data", dateBuckets, false));
   lines.push(...counterTable("Moeda da transação", currencies));
   lines.push(...counterTable("Mês (São Paulo)", byMonth));
   lines.push("", "Parcelas:");
   lines.push("- com número/total no metadado: " + withMetaInstallment);
-  lines.push("- com marcador na descrição: " + withDescInstallment);
-  lines.push("- metadado e descrição concordam: " + installmentAgree + "; discordam: " + installmentDisagree);
   for (const shape of installmentShapes) lines.push("  - " + shape);
-  if (type) {
-    lines.push("", "Prévia do mapeamento (sem padrões do usuário):");
+
+  if (mapped) {
+    const mappedTypes: Counter = new Map();
+    const dispositions: Counter = new Map();
+    const creditKinds: Counter = new Map();
+    let installmentsFromMapping = 0;
+    for (const item of mapped) {
+      bump(mappedTypes, item.type);
+      bump(
+        dispositions,
+        item.preDisposition ? item.preDisposition.disposition + " / " + item.preDisposition.reasonCode : "sem destino prévio"
+      );
+      bump(creditKinds, item.creditKind ?? "null");
+      if (item.installmentNumber !== null) installmentsFromMapping++;
+    }
+    lines.push("", "Prévia do mapeamento (sem padrões do usuário, pendentes importados, regras de lote aplicadas):");
     lines.push(...counterTable("Tipo mapeado", mappedTypes));
     lines.push(...counterTable("Destino prévio", dispositions, false));
     lines.push(...counterTable("creditKind", creditKinds));
+    lines.push("- parcelas reconhecidas pelo mapeamento: " + installmentsFromMapping);
     lines.push("- registros que o mapeamento recusou: " + mappingErrors);
   }
 
   if (detailed && txs.length) {
-    lines.push("", "Amostras reais (detalhado):", "", "| Data | Status | Tipo | Valor | Moeda | Descrição | Parcela |", "|---|---|---|---|---|---|---|");
+    lines.push("", "Amostras reais (detalhado):", "", "| Data | Status | Tipo | operationType | Valor | Moeda | Descrição | Parcela |", "|---|---|---|---|---|---|---|---|");
     for (const tx of txs.slice(0, SAMPLE_LIMIT)) {
       const meta = tx.creditCardMetadata;
       const installment = meta?.installmentNumber ? meta.installmentNumber + "/" + (meta.totalInstallments ?? "?") : "";
       lines.push(
-        "| " + [tx.date, tx.status, tx.type, String(tx.amount), tx.currencyCode, tx.description.replace(/\|/g, "/"), installment].join(" | ") + " |"
+        "| " +
+          [tx.date, tx.status, tx.type, tx.operationType ?? "", String(tx.amount), tx.currencyCode, tx.description.replace(/\|/g, "/"), installment].join(" | ") +
+          " |"
       );
     }
   }
   return lines;
+}
+
+interface BillCheck {
+  dueDate: string;
+  total: number;
+  debits: number;
+  credits: number;
+  residual: number | null;
+}
+
+/**
+ * Conferência de fatura: total(n) = total(n−1) + débitos(n) − créditos(n) + resíduo(n).
+ * Débitos e créditos são as transações com o billId da fatura, em valor absoluto.
+ */
+export function billChecks(data: ProbeAccountData): BillCheck[] {
+  const bills = [...(data.bills ?? [])].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const sums = new Map<string, { debits: number; credits: number }>();
+  for (const tx of data.transactions ?? []) {
+    const billId = tx.creditCardMetadata?.billId;
+    if (!billId) continue;
+    const sum = sums.get(billId) ?? { debits: 0, credits: 0 };
+    const value = amountInAccount(tx, data.account);
+    if (tx.type === "DEBIT") sum.debits += value;
+    else sum.credits += value;
+    sums.set(billId, sum);
+  }
+  return bills.map((bill, index) => {
+    const sum = sums.get(bill.id) ?? { debits: 0, credits: 0 };
+    const previous = index > 0 ? bills[index - 1].totalAmount : null;
+    const residual = previous === null ? null : bill.totalAmount - previous - sum.debits + sum.credits;
+    return { dueDate: bill.dueDate, total: bill.totalAmount, debits: sum.debits, credits: sum.credits, residual };
+  });
 }
 
 function billSection(data: ProbeAccountData, detailed: boolean): string[] {
@@ -248,39 +313,35 @@ function billSection(data: ProbeAccountData, detailed: boolean): string[] {
   lines.push("- campos vistos: " + keysOf(bills as Array<Record<string, unknown>>));
   const dueDates = bills.map((bill) => bill.dueDate).sort();
   lines.push("- vencimentos: " + dueDates[0] + " a " + dueDates[dueDates.length - 1]);
-  lines.push("- formato de dueDate: " + Array.from(new Set(bills.map((bill) => dateShape(bill.dueDate)))).join(", "));
+  lines.push("- formato de dueDate: " + Array.from(new Set(bills.map((bill) => dateBucket(bill.dueDate)))).join(", "));
   lines.push("- moedas: " + Array.from(new Set(bills.map((bill) => bill.totalAmountCurrencyCode ?? "não informada"))).join(", "));
-  lines.push("- totalAmount inteiro: " + bills.filter((bill) => Number.isInteger(bill.totalAmount)).length + " de " + bills.length);
 
-  // Unidade de totalAmount: compara com a soma das transações ligadas pelo billId.
-  const sums = new Map<string, number>();
-  for (const tx of data.transactions ?? []) {
-    const billId = tx.creditCardMetadata?.billId;
-    if (!billId) continue;
-    const signed = tx.type === "DEBIT" ? Math.abs(tx.amount) : -Math.abs(tx.amount);
-    sums.set(billId, (sums.get(billId) ?? 0) + signed);
+  const checks = billChecks(data);
+  const signs: Counter = new Map();
+  for (const check of checks) {
+    if (check.residual === null) continue;
+    const sign =
+      check.residual < -RESIDUAL_TOLERANCE ? "negativo" : check.residual > RESIDUAL_TOLERANCE ? "positivo" : "zero";
+    bump(signs, sign);
   }
-  const ratios: number[] = [];
-  for (const bill of bills) {
-    const sum = sums.get(bill.id);
-    if (sum && Math.abs(sum) > 0.009) ratios.push(bill.totalAmount / sum);
-  }
-  const ratioMedian = median(ratios);
-  lines.push("- faturas com transações ligadas por billId: " + ratios.length);
-  if (ratioMedian !== null) {
-    lines.push("- razão totalAmount / soma das transações (mediana): " + ratioMedian.toFixed(3));
-    lines.push("  - perto de 1 (reais): " + ratios.filter((r) => r > 0.95 && r < 1.05).length + "; perto de 100 (centavos): " + ratios.filter((r) => r > 95 && r < 105).length);
-  }
+  lines.push("", "Conferência: total(n) = total(n−1) + débitos(n) − créditos(n) + resíduo(n), tolerância R$ 0,05.");
+  lines.push(...counterTable("Sinal do resíduo", signs));
+  lines.push("- primeira fatura sem anterior para comparar: 1");
   if (detailed) {
-    lines.push("", "| Vencimento | totalAmount | Moeda |", "|---|---|---|");
-    for (const bill of bills.slice(0, SAMPLE_LIMIT)) {
-      lines.push("| " + bill.dueDate + " | " + bill.totalAmount + " | " + (bill.totalAmountCurrencyCode ?? "") + " |");
+    lines.push("", "| Vencimento | Total | Débitos | Créditos | Resíduo |", "|---|---|---|---|---|");
+    for (const check of checks) {
+      lines.push(
+        "| " +
+          [check.dueDate, check.total.toFixed(2), check.debits.toFixed(2), check.credits.toFixed(2), check.residual === null ? "-" : check.residual.toFixed(2)].join(" | ") +
+          " |"
+      );
     }
   }
   return lines;
 }
 
 export function buildProbeReport(data: ProbeData, options: { detailed: boolean }): string {
+  const preview = previewMapping(data);
   const lines = [
     "# Sonda Pluggy (somente leitura)",
     "",
@@ -297,7 +358,8 @@ export function buildProbeReport(data: ProbeData, options: { detailed: boolean }
       "### Conta " + (index + 1) + " — " + account.type + (account.subtype ? " / " + account.subtype : "") + ", moeda " + account.currencyCode,
       ""
     );
-    lines.push(...transactionSection(entry, options.detailed));
+    const mapped = accountType(account) ? preview.mapped.get(index) ?? [] : undefined;
+    lines.push(...transactionSection(entry, mapped, preview.errors.get(index) ?? 0, options.detailed));
     lines.push(...billSection(entry, options.detailed));
   });
   lines.push("");

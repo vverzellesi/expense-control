@@ -133,6 +133,28 @@ describe("PluggyClient - autenticação", () => {
     expect(env.authCount).toBe(2);
   });
 
+  it("401 de chave antiga não derruba a chave já renovada por outra requisição", async () => {
+    let firstCall = true;
+    let releaseFirst: () => void = () => {};
+    const env = setup(async (_url, init) => {
+      const key = (init.headers as Record<string, string>)["X-API-KEY"];
+      if (firstCall) {
+        firstCall = false;
+        await new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        });
+        return json(401, {});
+      }
+      return key.endsWith("-1") ? json(401, {}) : json(200, itemBody);
+    });
+    const slow = env.client.getItem(ITEM_ID); // receberá 401 com a chave 1, depois
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await env.client.getItem(ITEM_ID); // 401 com a chave 1, renova para a 2
+    releaseFirst();
+    await slow; // o 401 atrasado não pode invalidar a chave 2
+    expect(env.authCount).toBe(2);
+  });
+
   it("credenciais recusadas no /auth viram erro http sem retry", async () => {
     const fetchMock = vi.fn(async () => json(401, { message: "invalid" }));
     const client = new PluggyClient({
@@ -264,6 +286,24 @@ describe("PluggyClient - faturas paginadas por página", () => {
     const error = await captureError(env.client.listBills(ACCOUNT_ID));
     expect(error.path).toBe("/bills");
     expect(error.status).toBe(404);
+  });
+
+  it("resposta sem totalPages é recusada (não assume página única)", async () => {
+    const env = setup(() => json(200, { results: [bill("bill_1")] }));
+    const error = await captureError(env.client.listBills(ACCOUNT_ID));
+    expect(error.kind).toBe("schema");
+  });
+
+  it("item repetido entre páginas é erro", async () => {
+    const env = setup(() => json(200, { page: 1, totalPages: 2, total: 2, results: [bill("bill_1")] }));
+    const error = await captureError(env.client.listBills(ACCOUNT_ID));
+    expect(error.kind).toBe("pagination");
+  });
+
+  it("total informado diferente do lido é erro", async () => {
+    const env = setup(() => json(200, { page: 1, totalPages: 1, total: 3, results: [bill("bill_1")] }));
+    const error = await captureError(env.client.listBills(ACCOUNT_ID));
+    expect(error.kind).toBe("pagination");
   });
 });
 

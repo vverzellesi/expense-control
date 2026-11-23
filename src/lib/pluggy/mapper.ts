@@ -1,5 +1,4 @@
-import { detectInstallment } from "@/lib/categorizer";
-import { toBusinessDate } from "./dates";
+import { addMonthsToDate, toBusinessDate } from "./dates";
 import {
   classifyPluggyTransaction,
   compileExcludePatterns,
@@ -14,7 +13,7 @@ import type {
 
 /**
  * Tradução pura de um registro da Pluggy para a forma MappedPluggyTransaction
- * (contrato v2). Sem banco, sem relógio e sem depender do fuso do processo.
+ * (contrato v2 + emendas). Sem banco, sem relógio e sem depender do fuso do processo.
  */
 
 export interface MapperAccount {
@@ -25,6 +24,11 @@ export interface MapperAccount {
 
 export interface MapperOptions {
   excludePatterns?: ExcludePattern[] | CompiledExcludePatterns;
+  /**
+   * Pendentes (no cartão: ainda não faturados) entram como lançamento provisório.
+   * Padrão true. Com false, PENDING vira preDisposition pending.
+   */
+  importPending?: boolean;
 }
 
 export class PluggyMappingError extends Error {
@@ -36,6 +40,11 @@ export class PluggyMappingError extends Error {
 }
 
 const LEDGER_CURRENCY = "BRL";
+const MAX_INSTALLMENTS = 48;
+
+// Fallback de parcela pela descrição: só com marcador explícito ("PARCELA 2/5",
+// "PARC 3 DE 4"). Números soltos ("10/12") não contam.
+const EXPLICIT_INSTALLMENT = /\bPARC(?:ELA)?\.?\s*(\d{1,2})\s*(?:\/|DE\b)\s*(\d{1,2})\b/i;
 
 function isCompiled(value: MapperOptions["excludePatterns"]): value is CompiledExcludePatterns {
   return !!value && !Array.isArray(value) && Array.isArray((value as CompiledExcludePatterns).matchers);
@@ -48,15 +57,18 @@ function cleanId(value: string | null | undefined): string | null {
 }
 
 /**
- * Única escolha da data do razão (Transaction.date). Hoje = data do registro;
- * fica isolada para ser ajustada depois da sonda com dados reais.
+ * Única escolha da data do razão (Transaction.date). Parcela com data de compra:
+ * data da compra + (N−1) meses, sem transbordo de fim de mês (mesma convenção das
+ * projeções e do histórico). Demais casos: data do registro.
  */
 export function resolveLedgerDate(input: {
   sourceDate: string;
   purchaseDate: string | null;
-  accountType: PluggyAccountType;
   installmentNumber: number | null;
 }): string {
+  if (input.purchaseDate && input.installmentNumber !== null && input.installmentNumber >= 1) {
+    return addMonthsToDate(input.purchaseDate, input.installmentNumber - 1);
+  }
   return input.sourceDate;
 }
 
@@ -78,28 +90,43 @@ function resolveAmount(
   return { amount: tx.amount, currencyCode: txCurrency, inLedgerCurrency: false };
 }
 
+function validInstallment(n: number, t: number): boolean {
+  return Number.isInteger(n) && Number.isInteger(t) && t >= 2 && t <= MAX_INSTALLMENTS && n >= 1 && n <= t;
+}
+
+/**
+ * Parcelas: com creditCardMetadata presente, vale só o metadado (sem números = à vista;
+ * números inconsistentes = revisão). Sem metadado, e só em cartão, a descrição conta
+ * apenas com marcador explícito de parcela.
+ */
 function resolveInstallment(
   tx: PluggyTransaction,
   accountType: PluggyAccountType,
   description: string
-): { installmentNumber: number | null; totalInstallments: number | null } {
+): { installmentNumber: number | null; totalInstallments: number | null; invalid: boolean } {
+  const none = { installmentNumber: null, totalInstallments: null, invalid: false };
   const meta = tx.creditCardMetadata;
-  const n = meta?.installmentNumber;
-  const t = meta?.totalInstallments;
-  if (Number.isInteger(n) && Number.isInteger(t)) {
-    if (t! >= 2 && n! >= 1 && n! <= t!) return { installmentNumber: n!, totalInstallments: t! };
-    if (t === 1 && n === 1) return { installmentNumber: null, totalInstallments: null };
+  if (meta) {
+    const n = meta.installmentNumber;
+    const t = meta.totalInstallments;
+    const hasN = n !== null && n !== undefined;
+    const hasT = t !== null && t !== undefined;
+    if (!hasN && !hasT) return none;
+    if (hasN && hasT) {
+      if (validInstallment(n!, t!)) return { installmentNumber: n!, totalInstallments: t!, invalid: false };
+      if (t === 1 && n === 1) return none;
+    }
+    return { ...none, invalid: true };
   }
   if (accountType === "CREDIT") {
-    const detected = detectInstallment(description);
-    if (detected.isInstallment && detected.currentInstallment && detected.totalInstallments) {
-      return {
-        installmentNumber: detected.currentInstallment,
-        totalInstallments: detected.totalInstallments,
-      };
+    const match = EXPLICIT_INSTALLMENT.exec(description);
+    if (match) {
+      const n = Number(match[1]);
+      const t = Number(match[2]);
+      if (validInstallment(n, t)) return { installmentNumber: n, totalInstallments: t, invalid: false };
     }
   }
-  return { installmentNumber: null, totalInstallments: null };
+  return none;
 }
 
 export function mapPluggyTransaction(
@@ -113,28 +140,34 @@ export function mapPluggyTransaction(
   const sourceDate = toBusinessDate(tx.date);
   if (!sourceDate) throw new PluggyMappingError("data do registro inválida");
 
+  const importPending = options.importPending ?? true;
   const meta = tx.creditCardMetadata ?? null;
   const purchaseDate = meta?.purchaseDate ? toBusinessDate(meta.purchaseDate) : null;
   const description = tx.description.trim();
+  // Sinal varia por tipo de conta (conta: débito negativo; cartão: débito positivo):
+  // a direção vem só de type e o valor é sempre absoluto.
   const { amount, currencyCode, inLedgerCurrency } = resolveAmount(tx, account);
   const amountCents = Math.round(Math.abs(amount) * 100);
-  const { installmentNumber, totalInstallments } = resolveInstallment(tx, account.type, description);
+  const installment = resolveInstallment(tx, account.type, description);
+  const { installmentNumber, totalInstallments } = installment;
 
   const patterns = isCompiled(options.excludePatterns)
     ? options.excludePatterns
     : compileExcludePatterns(options.excludePatterns ?? []);
   const classification = classifyPluggyTransaction(
-    { accountType: account.type, direction: tx.type, description },
+    { accountType: account.type, direction: tx.type, description, operationType: tx.operationType },
     patterns
   );
 
   let preDisposition = classification.preDisposition;
-  if (tx.status === "PENDING") {
+  if (tx.status === "PENDING" && !importPending) {
     preDisposition = { disposition: "pending", reasonCode: "pending" };
   } else if (!inLedgerCurrency) {
     preDisposition = { disposition: "needs_review", reasonCode: "foreign_currency" };
   } else if (amountCents === 0) {
     preDisposition = { disposition: "needs_review", reasonCode: "zero_amount" };
+  } else if (!preDisposition && installment.invalid) {
+    preDisposition = { disposition: "needs_review", reasonCode: "invalid_installment" };
   }
 
   return {
@@ -144,7 +177,7 @@ export function mapPluggyTransaction(
     sourceStatus: tx.status,
     sourceDate,
     purchaseDate,
-    ledgerDate: resolveLedgerDate({ sourceDate, purchaseDate, accountType: account.type, installmentNumber }),
+    ledgerDate: resolveLedgerDate({ sourceDate, purchaseDate, installmentNumber }),
     description,
     amountCents,
     currencyCode,

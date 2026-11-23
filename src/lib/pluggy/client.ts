@@ -243,6 +243,8 @@ export class PluggyClient {
   ): Promise<z.infer<S>[]> {
     const schema = pagedResponseSchema(itemSchemaForPage);
     const results: z.infer<S>[] = [];
+    const seenIds = new Set<string>();
+    let expectedTotal: number | undefined;
     for (let page = 1; ; page++) {
       if (page > this.maxPages) {
         throw new PluggyApiError("pagination", "GET", path, null, "limite de páginas excedido");
@@ -252,10 +254,20 @@ export class PluggyClient {
         path,
         query: { ...query, page: page > 1 ? String(page) : undefined },
         schema,
-      })) as { results: z.infer<S>[]; totalPages?: number };
-      results.push(...response.results);
-      const totalPages = response.totalPages ?? 1;
-      if (page >= totalPages) break;
+      })) as { results: Array<z.infer<S> & { id: string }>; totalPages: number; total?: number };
+      for (const entry of response.results) {
+        // Paginação por posição: item repetido indica que a lista mudou durante a leitura.
+        if (seenIds.has(entry.id)) {
+          throw new PluggyApiError("pagination", "GET", path, null, "item repetido entre páginas");
+        }
+        seenIds.add(entry.id);
+        results.push(entry);
+      }
+      if (response.total !== undefined) expectedTotal = response.total;
+      if (page >= response.totalPages) break;
+    }
+    if (expectedTotal !== undefined && results.length !== expectedTotal) {
+      throw new PluggyApiError("pagination", "GET", path, null, "contagem divergente do total informado");
     }
     return results;
   }
@@ -303,13 +315,15 @@ export class PluggyClient {
     for (;;) {
       const headers: Record<string, string> = { Accept: "application/json" };
       if (spec.body !== undefined) headers["Content-Type"] = "application/json";
-      if (authenticated) headers["X-API-KEY"] = await this.getApiKey();
+      const sentKey = authenticated ? await this.getApiKey() : null;
+      if (sentKey !== null) headers["X-API-KEY"] = sentKey;
 
       const response = await this.send(url, method, path, headers, spec.body);
 
       if (response.status === 401 && authenticated && !reauthenticated) {
         reauthenticated = true;
-        this.invalidateApiKey();
+        // Só invalida se ninguém renovou a chave enquanto esta requisição estava em voo.
+        if (this.apiKey === sentKey) this.invalidateApiKey();
         continue;
       }
 

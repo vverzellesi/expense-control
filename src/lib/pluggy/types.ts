@@ -54,6 +54,8 @@ export const transactionSchema = z.looseObject({
   type: z.enum(["DEBIT", "CREDIT"]),
   status: z.enum(["PENDING", "POSTED"]),
   providerId: nullableString,
+  /** Classificação do provedor (ex.: PAGAMENTO_FATURA, ESTORNO, OUTROS). */
+  operationType: nullableString,
   createdAt: nullableString,
   creditCardMetadata: creditCardMetadataSchema.nullable().optional(),
 });
@@ -67,12 +69,12 @@ export const billSchema = z.looseObject({
 });
 export type PluggyBill = z.infer<typeof billSchema>;
 
-/** Listas paginadas por número de página (/accounts, /bills). */
+/** Listas paginadas por número de página (/accounts, /bills); sem totalPages a resposta é recusada. */
 export function pagedResponseSchema<T extends z.ZodTypeAny>(item: T) {
   return z.looseObject({
     results: z.array(item),
     page: z.number().int().optional(),
-    totalPages: z.number().int().optional(),
+    totalPages: z.number().int().min(0),
     total: z.number().int().optional(),
   });
 }
@@ -98,14 +100,18 @@ export interface TransactionListResult {
   coverage: TransactionCoverage;
 }
 
+export type UserPatternAction = "exclude" | "transfer";
+
 /**
- * Padrão de exclusão do usuário (vem de Settings, chave pluggy.excludePatterns).
+ * Padrão do usuário (vem de Settings, chave pluggy.excludePatterns).
  * Texto literal por padrão, comparado sem diferenciar maiúsculas nem acentos;
  * "/expressão/" ou "/expressão/i" é tratado como regex (com limites, ver rules.ts).
+ * action: "exclude" → excluded/user_pattern; "transfer" → tipo TRANSFER.
  */
 export interface ExcludePattern {
   pattern: string;
   accountType?: PluggyAccountType;
+  action: UserPatternAction;
 }
 
 /** Fronteira entre mapeamento e persistência (contrato v2). Não mudar nomes nem tipos. */
