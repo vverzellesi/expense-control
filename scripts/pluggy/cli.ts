@@ -75,7 +75,7 @@ export interface ScriptDatabase {
 export async function openDatabase(): Promise<ScriptDatabase> {
   const prod = hasFlag("prod");
   const variable = prod ? "DATABASE_URL_PROD" : "DATABASE_URL";
-  loadEnvVars([variable]);
+  loadEnvVars(["DATABASE_URL", "DATABASE_URL_PROD"]);
   const url = process.env[variable]?.trim();
   if (!url) fail("Falta " + variable + " no ambiente ou no .env. Nada foi feito.");
   let host = "";
@@ -84,6 +84,9 @@ export async function openDatabase(): Promise<ScriptDatabase> {
   } catch {
     fail(variable + " não é uma URL válida. Nada foi feito.");
   }
+  if (!prod && sameDatabase(url, process.env.DATABASE_URL_PROD)) {
+    fail("DATABASE_URL aponta para o mesmo banco de DATABASE_URL_PROD. Para produção, use --prod de forma explícita. Nada foi feito.");
+  }
   process.env.DATABASE_URL = url;
   const label = prod ? "produção (DATABASE_URL_PROD)" : "DATABASE_URL";
   if (host.endsWith(".neon.tech")) {
@@ -91,6 +94,20 @@ export async function openDatabase(): Promise<ScriptDatabase> {
     return { db: prisma, label, prod };
   }
   return { db: new PrismaClient({ datasourceUrl: url }), label, prod };
+}
+
+/** Mesmo host e mesmo banco (sem olhar usuário, senha ou parâmetros). */
+export function sameDatabase(a: string, b: string | undefined): boolean {
+  if (!b) return false;
+  try {
+    const left = new URL(a);
+    const right = new URL(b.trim());
+    // Neon: o pooler e o endpoint direto do mesmo banco diferem só no sufixo -pooler.
+    const host = (u: URL) => u.hostname.toLowerCase().replace("-pooler.", ".");
+    return host(left) === host(right) && left.pathname === right.pathname;
+  } catch {
+    return false;
+  }
 }
 
 export function requireOwner(): string {

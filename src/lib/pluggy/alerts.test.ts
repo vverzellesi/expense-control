@@ -65,6 +65,12 @@ describe("sendSyncAlert", () => {
     expect((await sendSyncAlert(fakeDb("chat_test_1") as never, "user_test_1", warning, { send: rejected })).sent).toBe(false);
   });
 
+  it("envio travado desiste depois do limite", async () => {
+    const hung = vi.fn(() => new Promise(() => undefined));
+    const result = await sendSyncAlert(fakeDb("chat_test_1") as never, "user_test_1", warning, { send: hung, timeoutMs: 20 });
+    expect(result).toEqual({ sent: false, reason: "send_failed" });
+  });
+
   it("run ok sem revisão nova não consulta o banco", async () => {
     const db = fakeDb("chat_test_1");
     const send = vi.fn();

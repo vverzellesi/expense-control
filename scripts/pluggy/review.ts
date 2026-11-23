@@ -5,10 +5,13 @@
  * Uso (da raiz do repositório):
  *   npx tsx --tsconfig tsconfig.json scripts/pluggy/review.ts [--prod]
  *       Lista os itens em revisão.
- *   ... review.ts --id <vínculo> --action create --type EXPENSE|INCOME|TRANSFER [--category <id>] [--apply]
- *       Cria o lançamento (categoria informada, ou sugerida pelas regras do dono).
+ *   ... review.ts --id <vínculo> --action create --type EXPENSE|INCOME|TRANSFER [--category <id>] [--amount 12.34] [--apply]
+ *       Cria o lançamento (categoria informada, ou sugerida pelas regras do dono). Registro em
+ *       moeda estrangeira exige --amount com o valor em reais. Parcela entra como lançamento avulso.
  *   ... review.ts --id <vínculo> --action link --transaction <id> [--apply]
  *       Vincula a um lançamento já existente do mesmo origin, ainda sem vínculo.
+ *   ... review.ts --id <vínculo> --action restore [--apply]
+ *       Restaura o lançamento já vinculado que foi apagado (ex.: exclusion_reverted).
  *   ... review.ts --id <vínculo> --action ignore [--apply]
  *       Ignora o registro de vez (não volta para revisão nas próximas sincronizações).
  *
@@ -40,31 +43,43 @@ function formatDay(date: Date): string {
   return d + "/" + m + "/" + y;
 }
 
-function printLink(link: LinkWithAccount, index?: number): void {
+function printLink(link: LinkWithAccount, index?: number, local?: { deleted: boolean } | null): void {
   const cents = link.direction === "DEBIT" ? -link.sourceAmountCents : link.sourceAmountCents;
   const installment = link.installmentNumber ? " (" + link.installmentNumber + "/" + link.totalInstallments + ")" : "";
+  const amount = link.currencyCode === "BRL" ? formatCurrency(cents / 100) : link.currencyCode + " " + (cents / 100).toFixed(2);
   console.log(
     (index !== undefined ? String(index + 1).padStart(3) + ". " : "") +
-      formatDay(link.ledgerDate) + "  " + formatCurrency(cents / 100).padStart(14) + "  " +
+      formatDay(link.ledgerDate) + "  " + amount.padStart(14) + "  " +
       link.accountLink.accountType + " → " + link.accountLink.origin.name + "  [" + (link.reasonCode ?? "—") + "]"
   );
-  console.log("       " + link.sourceDescription + installment + "  vínculo: " + link.id);
+  const attached = link.transactionId
+    ? "  lançamento vinculado " + (local === undefined ? "" : local === null ? "(não encontrado)" : local.deleted ? "(apagado)" : "(ativo)")
+    : "";
+  console.log("       " + link.sourceDescription + installment + "  vínculo: " + link.id + attached);
 }
 
 async function listPending(target: ScriptDatabase, owner: string): Promise<void> {
   const links = await target.db.pluggyTransactionLink.findMany({
-    where: { disposition: "needs_review", transactionId: null, accountLink: { userId: owner } },
+    where: { disposition: "needs_review", accountLink: { userId: owner } },
     include: { accountLink: { include: { origin: true } } },
     orderBy: [{ ledgerDate: "asc" }, { id: "asc" }],
   });
+  const ids = links.map((l) => l.transactionId).filter((id): id is string => !!id);
+  const locals = new Map(
+    (await target.db.transaction.findMany({ where: { id: { in: ids }, userId: owner }, select: { id: true, deletedAt: true } })).map((t) => [
+      t.id,
+      { deleted: t.deletedAt !== null },
+    ])
+  );
   console.log("Banco: " + target.label);
   console.log("Itens em revisão: " + links.length + "\n");
-  links.forEach((link, index) => printLink(link, index));
+  links.forEach((link, index) => printLink(link, index, link.transactionId ? locals.get(link.transactionId) ?? null : undefined));
 }
 
 type Action =
-  | { kind: "create"; type: "EXPENSE" | "INCOME" | "TRANSFER"; categoryId: string | null }
+  | { kind: "create"; type: "EXPENSE" | "INCOME" | "TRANSFER"; categoryId: string | null; amountCents: number | null }
   | { kind: "link"; transactionId: string }
+  | { kind: "restore" }
   | { kind: "ignore" };
 
 function parseAction(): Action {
@@ -72,15 +87,23 @@ function parseAction(): Action {
   if (action === "create") {
     const type = argValue("type");
     if (type !== "EXPENSE" && type !== "INCOME" && type !== "TRANSFER") abort("--type precisa ser EXPENSE, INCOME ou TRANSFER.");
-    return { kind: "create", type, categoryId: argValue("category") ?? null };
+    const amount = argValue("amount");
+    let amountCents: number | null = null;
+    if (amount !== undefined) {
+      if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(amount)) abort("--amount precisa ser um valor positivo em reais, como 12.34.");
+      amountCents = Math.round(Number(amount) * 100);
+      if (amountCents <= 0) abort("--amount precisa ser maior que zero.");
+    }
+    return { kind: "create", type, categoryId: argValue("category") ?? null, amountCents };
   }
   if (action === "link") {
     const transactionId = argValue("transaction");
     if (!transactionId) abort("Informe --transaction <id>.");
     return { kind: "link", transactionId };
   }
+  if (action === "restore") return { kind: "restore" };
   if (action === "ignore") return { kind: "ignore" };
-  return abort("--action precisa ser create, link ou ignore.");
+  return abort("--action precisa ser create, link, restore ou ignore.");
 }
 
 async function loadReviewLink(client: Prisma.TransactionClient | ScriptDatabase["db"], owner: string, id: string) {
@@ -89,7 +112,7 @@ async function loadReviewLink(client: Prisma.TransactionClient | ScriptDatabase[
     include: { accountLink: { include: { origin: true } } },
   });
   if (!link) abort("Vínculo não encontrado entre os do dono.");
-  if (link.disposition !== "needs_review" || link.transactionId !== null) abort("Este vínculo não está mais em revisão.");
+  if (link.disposition !== "needs_review") abort("Este vínculo não está mais em revisão.");
   return link;
 }
 
@@ -98,13 +121,21 @@ async function resolve(target: ScriptDatabase, owner: string, id: string, apply:
   const preview = await loadReviewLink(target.db, owner, id);
   console.log("Banco: " + target.label);
   printLink(preview);
+  if (action.kind === "create" && preview.currencyCode !== "BRL" && action.amountCents === null) {
+    abort("Registro em moeda estrangeira: informe --amount com o valor em reais.");
+  }
+  if (action.kind === "create" && preview.installmentNumber) {
+    console.log("Atenção: parcela entra como lançamento avulso, sem grupo nem projeções das próximas parcelas.");
+  }
   console.log(
     "\nAção: " +
       (action.kind === "create"
         ? "criar lançamento " + action.type + (action.categoryId ? " com a categoria informada" : " com categoria sugerida pelas regras")
         : action.kind === "link"
           ? "vincular ao lançamento existente informado"
-          : "ignorar de vez")
+          : action.kind === "restore"
+            ? "restaurar o lançamento vinculado"
+            : "ignorar de vez")
   );
   if (!apply) {
     console.log("Simulação: nada foi gravado. Use --apply para gravar.");
@@ -123,6 +154,23 @@ async function resolve(target: ScriptDatabase, owner: string, id: string, apply:
       if (action.kind === "ignore") {
         await tx.pluggyTransactionLink.update({ where: { id: link.id }, data: { ...MANUAL_IGNORE } });
         return;
+      }
+
+      if (action.kind === "restore") {
+        if (!link.transactionId) abort("Este vínculo não tem lançamento para restaurar.");
+        const restored = await tx.transaction.updateMany({
+          where: { id: link.transactionId, userId: owner, spaceId: null, deletedAt: { not: null } },
+          data: { deletedAt: null },
+        });
+        if (restored.count !== 1) abort("O lançamento vinculado não está apagado (ou não é pessoal do dono).");
+        // adopted: a sincronização nunca apaga sozinha um lançamento adotado.
+        await tx.pluggyTransactionLink.update({ where: { id: link.id }, data: { disposition: "adopted", reasonCode: MANUAL_REASON } });
+        return;
+      }
+
+      if (action.kind === "create" && link.transactionId) {
+        const current = await tx.transaction.findFirst({ where: { id: link.transactionId, userId: owner, deletedAt: null }, select: { id: true } });
+        if (current) abort("Este vínculo já tem lançamento ativo: use link, restore ou ignore.");
       }
 
       if (action.kind === "link") {
@@ -159,7 +207,7 @@ async function resolve(target: ScriptDatabase, owner: string, id: string, apply:
       const cents = signedCents({
         type: action.type,
         direction: link.direction as "DEBIT" | "CREDIT",
-        amountCents: link.sourceAmountCents,
+        amountCents: action.amountCents ?? link.sourceAmountCents,
       });
       const created = await tx.transaction.create({
         data: {

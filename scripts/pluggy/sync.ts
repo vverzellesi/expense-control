@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 import { describeSyncError, runPluggySync, type SyncReport } from "@/lib/pluggy/sync";
 import { ALERT_LABELS } from "@/lib/pluggy/alerts";
 import {
+  abort,
   assertPersonalPath,
   confirmTyped,
   fail,
@@ -22,11 +23,14 @@ import {
   openDatabase,
   requireOwner,
   saoPauloStamp,
+  ScriptAbort,
   writePersonalReport,
 } from "./cli";
 
 const REQUIRED_VARS = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_OWNER_USER_ID"] as const;
 const PROD_CONFIRMATION = "GRAVAR EM PRODUCAO";
+/** A primeira gravação pode ter centenas de registros: lease mais longo que o do cron. */
+const SCRIPT_LEASE_TTL_MS = 30 * 60 * 1000;
 
 const DESTINATION_LABELS: Record<string, string> = {
   created: "criados",
@@ -88,6 +92,14 @@ function buildSyncReport(report: SyncReport, label: string): string {
   lines.push("- valor de projeção corrigido pela fonte: " + c.projectionAmountCorrected);
   lines.push("- criados antes e agora excluídos pela fonte: " + c.reclassifiedExcluded);
   lines.push("- de fatura que a Pluggy não listou (unknown_bill): " + c.unknownBill);
+  lines.push("- fora da janela e de fatura que a Pluggy não listou (histórico antigo): " + c.outsideWindowUnknownBill);
+  const ai = report.checks.ai;
+  if (ai) {
+    lines.push(
+      "- categorização por IA: " + ai.state + (ai.error ? " (" + ai.error + ")" : "") + " | elegíveis: " + ai.counts.selected +
+        " | categorizados: " + ai.counts.categorized + " | abstenções: " + ai.counts.abstained + " | chamadas: " + ai.counts.calls
+    );
+  }
   lines.push("- estornos lançados como receita: " + c.refundsAsIncome);
   lines.push("- provisórios que sumiram: " + c.provisionalVanished + " (lançamentos removidos: " + c.provisionalTransactionsDeleted + ")");
   lines.push("- já importados que sumiram da fonte: " + c.missingUpstream);
@@ -180,11 +192,11 @@ async function main(): Promise<void> {
   try {
     if (apply && target.prod) {
       const ok = await confirmTyped('Gravar em produção. Para confirmar, digite "' + PROD_CONFIRMATION + '": ', PROD_CONFIRMATION);
-      if (!ok) fail("Confirmação não conferiu. Nada foi feito.");
+      if (!ok) abort("Confirmação não conferiu. Nada foi feito.");
     }
     const report = await runPluggySync(
       { db: target.db, env: { ...process.env, PLUGGY_OWNER_USER_ID: owner } },
-      { mode: apply ? "apply" : "simulate", trigger: "manual", ignoreEnabledFlag: true }
+      { mode: apply ? "apply" : "simulate", trigger: "manual", ignoreEnabledFlag: true, leaseTtlMs: SCRIPT_LEASE_TTL_MS }
     );
     writePersonalReport(relativePath, buildSyncReport(report, target.label));
     const c = report.counts;
@@ -203,7 +215,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("sync.ts falhou: " + describeSyncError(error));
+  console.error(error instanceof ScriptAbort ? error.message : "sync.ts falhou: " + describeSyncError(error));
   process.exit(1);
 });
 

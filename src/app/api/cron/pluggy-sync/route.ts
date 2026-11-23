@@ -24,8 +24,10 @@ function respond(status: number, body: Record<string, unknown> = {}) {
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
-  if (!secret || !isPluggySyncConfigured(process.env)) return respond(503, { status: "disabled" });
+  if (!secret) return respond(503, { status: "disabled" });
+  // Autentica antes de dizer se a integração está ligada.
   if (!isAuthorizedCronRequest(request.headers.get("authorization"), secret)) return respond(401);
+  if (!isPluggySyncConfigured(process.env)) return respond(503, { status: "disabled" });
 
   try {
     const report = await runPluggySync({ db: prisma }, { mode: "apply", trigger: "cron" });

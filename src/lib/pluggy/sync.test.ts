@@ -122,7 +122,7 @@ function fakeClient(overrides: Partial<Record<"getItem" | "listAccounts" | "list
   };
 }
 
-function fakeDb(options: { links?: LinkFixture[]; patterns?: string | null; reviewIds?: string[] } = {}) {
+function fakeDb(options: { links?: LinkFixture[]; patterns?: string | null; reviewIds?: string[]; knownIds?: string[] } = {}) {
   const links = options.links ?? [bankLink, cardLink];
   const txClient = { pluggyAccountLink: { update: vi.fn() } };
   const db = {
@@ -145,7 +145,10 @@ function fakeDb(options: { links?: LinkFixture[]; patterns?: string | null; revi
     },
     pluggySyncLease: { findUnique: vi.fn().mockResolvedValue(null) },
     pluggyTransactionLink: {
-      findMany: vi.fn().mockResolvedValue((options.reviewIds ?? []).map((externalId) => ({ externalId }))),
+      findMany: vi.fn().mockResolvedValue([
+        ...(options.reviewIds ?? []).map((externalId) => ({ externalId, disposition: "needs_review" })),
+        ...(options.knownIds ?? []).map((externalId) => ({ externalId, disposition: "created" })),
+      ]),
       count: vi.fn().mockResolvedValue(3),
     },
     telegramLink: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -226,8 +229,20 @@ beforeEach(() => {
   storeMocks.reconcileUnseenLinks.mockResolvedValue(noUnseen);
 });
 
+const aiOff = () =>
+  vi.fn().mockResolvedValue({
+    state: "desligado",
+    mode: "apply",
+    model: "modelo_test",
+    counts: { selected: 0, unminimizable: 0, planned: 0, sent: 0, categorized: 0, abstained: 0, lowConfidence: 0, discarded: 0, conflicts: 0, notSent: 0, calls: 0 },
+    error: null,
+  });
+
 const run = (db: unknown, extra: Partial<Parameters<typeof runPluggySync>[0]> = {}, mode: "apply" | "simulate" = "apply") =>
-  runPluggySync({ db: db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn().mockResolvedValue(undefined), ...extra }, { mode, trigger: "cron" });
+  runPluggySync(
+    { db: db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn().mockResolvedValue(undefined), categorize: aiOff(), ...extra },
+    { mode, trigger: "cron" }
+  );
 
 // ------------------------------------------------------------------ testes
 
@@ -377,7 +392,8 @@ describe("runPluggySync — falhas de leitura", () => {
 
   it("lease perdido entre contas para tudo", async () => {
     const { db } = fakeDb();
-    leaseMocks.renewPluggyLease.mockResolvedValue(false);
+    // Renova antes do store e antes do reconcile: perde na segunda renovação.
+    leaseMocks.renewPluggyLease.mockResolvedValueOnce(true).mockResolvedValue(false);
     const report = await run(db);
     expect(storeMocks.processPluggyRecords).toHaveBeenCalledTimes(1);
     expect(report.checks.alerts.lease_lost).toBe(1);
@@ -511,6 +527,102 @@ describe("runPluggySync — conferências e alertas", () => {
     const report = await run(db);
     expect(report.checks.alerts).toEqual({ coverage_truncated: 1 });
     expect(storeMocks.reconcileUnseenLinks.mock.calls[0][1].readFrom).toBe("2026-09-01");
+  });
+});
+
+describe("runPluggySync — registros já vinculados fora da janela", () => {
+  it("vão sempre para o store, para o reconcile não os tratar como sumidos", async () => {
+    const { db } = fakeDb({ knownIds: ["tx_test_b3", "tx_test_c0"] });
+    const report = await run(db);
+    expect(storeInput("link_test_bank").records.map((r) => r.externalId)).toContain("tx_test_b3");
+    expect(storeInput("link_test_card").records.map((r) => r.externalId)).toContain("tx_test_c0");
+    expect(report.counts.outsideWindow).toBe(0);
+  });
+
+  it("o lease é renovado antes do store e do reconcile de cada conta, inclusive a primeira", async () => {
+    const { db } = fakeDb();
+    await run(db);
+    expect(leaseMocks.renewPluggyLease).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("runPluggySync — alertas persistentes", () => {
+  it("aviso que só se repete não reenvia o alerta; aumento reenvia", async () => {
+    storeMocks.reconcileUnseenLinks.mockResolvedValue({ ...noUnseen, missingUpstream: 2 });
+    const same = fakeDb();
+    same.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { missing_upstream: 4 } } });
+    const alert = vi.fn().mockResolvedValue(undefined);
+    const report = await run(same.db, { alert });
+    expect(report.status).toBe("warning");
+    expect(report.checks.alerts.missing_upstream).toBe(4);
+    expect(alert).not.toHaveBeenCalled();
+
+    const grew = fakeDb();
+    grew.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { missing_upstream: 1 } } });
+    const alert2 = vi.fn().mockResolvedValue(undefined);
+    await run(grew.db, { alert: alert2 });
+    expect(alert2).toHaveBeenCalledWith(grew.db, OWNER, { status: "warning", newNeedsReview: 0, alerts: { missing_upstream: 4 } });
+  });
+
+  it("aviso não persistente (item parado) alerta todo dia", async () => {
+    const { db } = fakeDb();
+    db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { item_stale: 1 } } });
+    const alert = vi.fn().mockResolvedValue(undefined);
+    const client = fakeClient({ getItem: vi.fn().mockResolvedValue({ ...healthyItem, lastUpdatedAt: "2026-11-19T00:00:00.000Z" }) });
+    await run(db, { alert, client: client as never });
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("runPluggySync — categorização por IA", () => {
+  it("simulação não chama a IA", async () => {
+    const { db } = fakeDb();
+    const categorize = aiOff();
+    const report = await run(db, { categorize }, "simulate");
+    expect(categorize).not.toHaveBeenCalled();
+    expect(report.checks.ai).toBeNull();
+  });
+
+  it("gravação chama uma vez, depois de fechar o run e liberar o lease, e registra só contagens", async () => {
+    const { db } = fakeDb();
+    const order: string[] = [];
+    db.pluggySyncRun.update.mockImplementation(async (args: { data: { status?: string } }) => {
+      order.push(args.data.status ? "close_run" : "ai_checks");
+      return {};
+    });
+    leaseMocks.releasePluggyLease.mockImplementation(async () => {
+      order.push("release");
+      return true;
+    });
+    const categorize = vi.fn(async () => {
+      order.push("ai");
+      return {
+        state: "ok",
+        mode: "apply",
+        model: "modelo_test",
+        counts: { selected: 3, unminimizable: 0, planned: 3, sent: 3, categorized: 2, abstained: 1, lowConfidence: 0, discarded: 0, conflicts: 0, notSent: 0, calls: 1 },
+        error: null,
+      };
+    });
+    const report = await run(db, { categorize: categorize as never, env: { ...env, ANTHROPIC_API_KEY: "chave_test" } });
+
+    expect(categorize).toHaveBeenCalledTimes(1);
+    expect(categorize).toHaveBeenCalledWith(db, expect.objectContaining({ mode: "apply", ownerUserId: OWNER, apiKey: "chave_test" }));
+    expect(order).toEqual(["close_run", "release", "ai", "ai_checks"]);
+    expect(report.checks.ai).toEqual({ state: "ok", counts: expect.objectContaining({ categorized: 2, calls: 1 }), error: null });
+    const persisted = JSON.stringify(db.pluggySyncRun.update.mock.calls[1][0].data.checks);
+    expect(persisted).toContain('"categorized":2');
+    expect(persisted).not.toContain("chave_test");
+  });
+
+  it("erro da IA não altera o status do run", async () => {
+    const { db } = fakeDb();
+    const categorize = vi.fn().mockRejectedValue(new Error("falhou com LOJA EXEMPLO"));
+    const report = await run(db, { categorize });
+    expect(report.status).toBe("ok");
+    expect(db.pluggySyncRun.update.mock.calls[0][0].data.status).toBe("ok");
+    expect(report.checks.ai).toMatchObject({ state: "erro", error: "unexpected:Error" });
+    expect(JSON.stringify(report.checks)).not.toContain("LOJA EXEMPLO");
   });
 });
 

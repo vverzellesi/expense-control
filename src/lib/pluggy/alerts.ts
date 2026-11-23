@@ -85,6 +85,9 @@ export function buildAlertMessage(summary: AlertSummary): string | null {
 
 export type SendFn = (chatId: string, text: string) => Promise<unknown>;
 
+/** O cron espera o alerta: um Telegram travado não pode segurar a rota. */
+export const ALERT_SEND_TIMEOUT_MS = 10_000;
+
 export interface SendAlertResult {
   sent: boolean;
   reason: "not_needed" | "telegram_not_configured" | "owner_not_linked" | "send_failed" | null;
@@ -97,7 +100,7 @@ export async function sendSyncAlert(
   db: Pick<PrismaClient, "telegramLink">,
   ownerUserId: string,
   summary: AlertSummary,
-  deps: { send?: SendFn; env?: Record<string, string | undefined> } = {}
+  deps: { send?: SendFn; env?: Record<string, string | undefined>; timeoutMs?: number } = {}
 ): Promise<SendAlertResult> {
   const text = buildAlertMessage(summary);
   if (!text) return { sent: false, reason: "not_needed" };
@@ -107,7 +110,13 @@ export async function sendSyncAlert(
     const link = await db.telegramLink.findUnique({ where: { userId: ownerUserId }, select: { chatId: true } });
     if (!link) return { sent: false, reason: "owner_not_linked" };
     const send: SendFn = deps.send ?? ((chatId, body) => sendMessage(chatId, body));
-    const response = (await send(link.chatId, text)) as { ok?: boolean } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout")), deps.timeoutMs ?? ALERT_SEND_TIMEOUT_MS);
+    });
+    const response = (await Promise.race([send(link.chatId, text), timeout]).finally(() => clearTimeout(timer))) as
+      | { ok?: boolean }
+      | undefined;
     if (response && typeof response === "object" && response.ok === false) return { sent: false, reason: "send_failed" };
     return { sent: true, reason: null };
   } catch {

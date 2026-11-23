@@ -144,6 +144,8 @@ describe("runPluggySync em Postgres real", () => {
     // b1, c1, c7, c3 (provisório) e c5 (parcela 1/3) criados; b2 e c2 excluídos; c4 em revisão; c6 antes do corte.
     expect(first.counts.destinations).toMatchObject({ created: 5, excluded: 2, needs_review: 1, before_cutoff: 1 });
     expect(first.counts.unknownBill).toBe(0);
+    // Sem ANTHROPIC_API_KEY a categorização fica desligada e nada muda.
+    expect(first.checks.ai?.state).toBe("desligado");
     expect(first.counts.reasons).toMatchObject({
       bill_payment_debit: 1,
       bill_payment_credit: 1,

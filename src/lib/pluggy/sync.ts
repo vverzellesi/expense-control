@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { sendSyncAlert, shouldAlert, type AlertSummary } from "./alerts";
+import { categorizeUncategorized, categorizerConfigFromEnv, type CategorizeCounts, type CategorizeResult } from "@/lib/ai-categorizer";
+import { sendSyncAlert, type AlertSummary } from "./alerts";
 import { createPluggyClientFromEnv, PluggyApiError, type PluggyClient } from "./client";
 import { toBusinessDate } from "./dates";
 import { acquirePluggyLease, assertPluggyLeaseHeld, lockUserForPluggy, PluggyLeaseLostError, releasePluggyLease, renewPluggyLease } from "./lease";
@@ -60,6 +61,18 @@ const ERROR_CODES = new Set([
   "unexpected",
 ]);
 
+/**
+ * Avisos que descrevem um estado que persiste entre execuções (histórico inteiro relido
+ * todo dia). Continuam no run, mas só geram alerta quando aumentam em relação ao run anterior.
+ */
+const PERSISTENT_ALERTS = new Set([
+  "missing_upstream",
+  "bill_residue_negative",
+  "coverage_truncated",
+  "user_patterns_invalid",
+  "user_patterns_rejected",
+]);
+
 export type PluggyReader = Pick<PluggyClient, "getItem" | "listAccounts" | "listTransactions" | "listBills">;
 
 export interface SyncDeps {
@@ -69,6 +82,8 @@ export interface SyncDeps {
   env?: Record<string, string | undefined>;
   now?: () => Date;
   alert?: (db: PrismaClient, ownerUserId: string, summary: AlertSummary) => Promise<unknown>;
+  /** Categorização por IA no fim da gravação; padrão: categorizeUncategorized. */
+  categorize?: typeof categorizeUncategorized;
 }
 
 export interface RunSyncOptions {
@@ -78,6 +93,8 @@ export interface RunSyncOptions {
   ignoreEnabledFlag?: boolean;
   /** Pendentes do cartão entram como lançamento provisório (padrão: true). */
   importPending?: boolean;
+  /** Validade do lease; scripts usam mais que o cron (primeira gravação longa). */
+  leaseTtlMs?: number;
 }
 
 type DestinationKey = RecordOutcome;
@@ -112,6 +129,8 @@ export interface SyncCounts {
   reclassifiedExcluded: number;
   /** Registros com billId fora do mapa de faturas lido (needs_review / unknown_bill). */
   unknownBill: number;
+  /** Fora da janela, de fatura que /bills não lista (histórico antigo; só informativo). */
+  outsideWindowUnknownBill: number;
   refundsAsIncome: number;
   provisionalVanished: number;
   provisionalTransactionsDeleted: number;
@@ -142,6 +161,8 @@ export interface SyncChecks {
   items: ItemCheck[];
   accounts: AccountCheck[];
   userPatterns: { configured: number; rejected: number; invalid: boolean };
+  /** Categorização por IA depois da gravação (só contagens e estado). */
+  ai: { state: CategorizeResult["state"]; counts: CategorizeCounts; error: string | null } | null;
 }
 
 export interface SyncDecision {
@@ -233,6 +254,7 @@ export function emptyCounts(): SyncCounts {
     projectionAmountCorrected: 0,
     reclassifiedExcluded: 0,
     unknownBill: 0,
+    outsideWindowUnknownBill: 0,
     refundsAsIncome: 0,
     provisionalVanished: 0,
     provisionalTransactionsDeleted: 0,
@@ -242,7 +264,7 @@ export function emptyCounts(): SyncCounts {
 }
 
 function emptyChecks(): SyncChecks {
-  return { alerts: {}, items: [], accounts: [], userPatterns: { configured: 0, rejected: 0, invalid: false } };
+  return { alerts: {}, items: [], accounts: [], userPatterns: { configured: 0, rejected: 0, invalid: false }, ai: null };
 }
 
 function addAlert(checks: SyncChecks, code: string, count = 1): void {
@@ -254,6 +276,17 @@ export function statusFromAlerts(alerts: Record<string, number>): SyncStatus {
   const codes = Object.keys(alerts).filter((code) => alerts[code] > 0);
   if (codes.some((code) => ERROR_CODES.has(code))) return "error";
   return codes.length > 0 ? "warning" : "ok";
+}
+
+/** Alertas a enviar: os persistentes só quando aumentaram em relação ao run anterior. */
+export function freshAlerts(current: Record<string, number>, previous: Record<string, number> | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [code, count] of Object.entries(current)) {
+    if (count <= 0) continue;
+    if (PERSISTENT_ALERTS.has(code) && previous && (previous[code] ?? 0) >= count) continue;
+    out[code] = count;
+  }
+  return out;
 }
 
 const ITEM_STATUS_FORMAT = /^[A-Z_]{1,40}$/;
@@ -414,8 +447,9 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
 
   let leaseToken: string | null = null;
   let runId: string | null = null;
+  const leaseTtlMs = options.leaseTtlMs ?? SYNC_LEASE_TTL_MS;
   if (mode === "apply") {
-    leaseToken = await acquirePluggyLease(db, ownerUserId, SYNC_LEASE_TTL_MS);
+    leaseToken = await acquirePluggyLease(db, ownerUserId, leaseTtlMs);
     if (!leaseToken) return skipped(mode, trigger, "lease_busy", startedAt);
   }
 
@@ -449,7 +483,11 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
       report.runId = runId;
     }
 
-    await syncAccounts({ deps, env, options, ownerUserId, links, leaseToken, report, errors, startedAt });
+    const renew = async () => {
+      if (mode !== "apply") return;
+      if (!(await renewPluggyLease(db, ownerUserId, leaseToken!, leaseTtlMs))) throw new PluggyLeaseLostError();
+    };
+    await syncAccounts({ deps, env, options, ownerUserId, links, leaseToken, report, errors, startedAt, renew });
   } catch (error) {
     const code = error instanceof PluggyLeaseLostError ? "lease_lost" : "unexpected";
     addAlert(report.checks, code);
@@ -476,20 +514,78 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
     } finally {
       if (leaseToken) await releasePluggyLease(db, ownerUserId, leaseToken).catch(() => undefined);
     }
-    const summary: AlertSummary = {
-      status: report.status,
-      newNeedsReview: report.counts.newNeedsReview,
-      alerts: report.checks.alerts,
-    };
-    if (shouldAlert(summary)) {
-      const send = deps.alert ?? ((client, owner, s) => sendSyncAlert(client, owner, s));
-      // Falha no envio não muda o resultado do run.
-      await Promise.resolve()
-        .then(() => send(db, ownerUserId, summary))
-        .catch(() => undefined);
-    }
+
+    // Categorização por IA: depois de fechar o run e liberar o lease; nunca muda o resultado.
+    await runCategorizer(deps, env, ownerUserId, report);
+
+    await sendAlertIfNeeded(deps, ownerUserId, report);
   }
   return report;
+}
+
+async function runCategorizer(
+  deps: SyncDeps,
+  env: Record<string, string | undefined>,
+  ownerUserId: string,
+  report: SyncReport
+): Promise<void> {
+  const categorize = deps.categorize ?? categorizeUncategorized;
+  try {
+    const ai = await categorize(deps.db, { mode: "apply", ownerUserId, ...categorizerConfigFromEnv(env) });
+    report.checks.ai = { state: ai.state, counts: ai.counts, error: ai.error };
+  } catch (error) {
+    report.checks.ai = { state: "erro", counts: emptyAiCounts(), error: describeSyncError(error) };
+  }
+  if (!report.runId) return;
+  await deps.db.pluggySyncRun
+    .update({ where: { id: report.runId }, data: { checks: toJson(report.checks) } })
+    .catch(() => undefined);
+}
+
+function emptyAiCounts(): CategorizeCounts {
+  return {
+    selected: 0,
+    unminimizable: 0,
+    planned: 0,
+    sent: 0,
+    categorized: 0,
+    abstained: 0,
+    lowConfidence: 0,
+    discarded: 0,
+    conflicts: 0,
+    notSent: 0,
+    calls: 0,
+  };
+}
+
+async function sendAlertIfNeeded(deps: SyncDeps, ownerUserId: string, report: SyncReport): Promise<void> {
+  // Falha em qualquer passo do alerta não muda o resultado do run.
+  try {
+    let previous: Record<string, number> | null = null;
+    const hasPersistent = Object.keys(report.checks.alerts).some((code) => PERSISTENT_ALERTS.has(code));
+    if (hasPersistent) {
+      const last = await deps.db.pluggySyncRun.findFirst({
+        where: {
+          userId: ownerUserId,
+          status: { in: ["ok", "warning", "error"] },
+          ...(report.runId ? { NOT: { id: report.runId } } : {}),
+        },
+        orderBy: { startedAt: "desc" },
+        select: { checks: true },
+      });
+      const alerts = (last?.checks as { alerts?: Record<string, number> } | null)?.alerts;
+      previous = alerts && typeof alerts === "object" ? alerts : {};
+    }
+    const alerts = freshAlerts(report.checks.alerts, previous);
+    const status = report.status === "skipped" ? "ok" : report.status;
+    const needed = status === "error" || report.counts.newNeedsReview > 0 || Object.keys(alerts).length > 0;
+    if (!needed) return;
+    const summary: AlertSummary = { status, newNeedsReview: report.counts.newNeedsReview, alerts };
+    const send = deps.alert ?? ((client, owner, s) => sendSyncAlert(client, owner, s));
+    await send(deps.db, ownerUserId, summary);
+  } catch {
+    // engolido de propósito
+  }
 }
 
 interface SyncContext {
@@ -502,6 +598,8 @@ interface SyncContext {
   report: SyncReport;
   errors: string[];
   startedAt: Date;
+  /** Renova o lease (só em gravação); lança PluggyLeaseLostError se ele foi perdido. */
+  renew: () => Promise<void>;
 }
 
 async function syncAccounts(ctx: SyncContext): Promise<void> {
@@ -635,12 +733,7 @@ async function syncAccounts(ctx: SyncContext): Promise<void> {
   });
 
   const upperDay = businessDayKey(startedAt);
-  let first = true;
   for (const read of usable) {
-    if (mode === "apply" && !first) {
-      if (!(await renewPluggyLease(db, ownerUserId, ctx.leaseToken!, SYNC_LEASE_TTL_MS))) throw new PluggyLeaseLostError();
-    }
-    first = false;
     try {
       await processAccount(ctx, read, upperDay);
     } catch (error) {
@@ -666,17 +759,22 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
     cutoffBillDueDay: link.cutoffBillDueDate ? businessDayKey(link.cutoffBillDueDate) : null,
     billDueDates: dueDates,
   };
-  const window = read.mapped.filter((record) => isInReadWindow(record, windowSpec));
-  const outsideWindow = read.mapped.length - window.length;
-
-  const before = await db.pluggyTransactionLink.findMany({
-    where: { accountLinkId: link.id, disposition: "needs_review" },
-    select: { externalId: true },
+  // Registro que já tem vínculo vai sempre para o store, mesmo fora da janela: senão o
+  // reconcile o trataria como sumido (ex.: provisório do dia do fechamento que virou POSTED
+  // numa fatura que /bills ainda não lista).
+  const knownLinks = await db.pluggyTransactionLink.findMany({
+    where: { accountLinkId: link.id },
+    select: { externalId: true, disposition: true },
   });
-  const previouslyInReview = new Set(before.map((row) => row.externalId));
+  const known = new Set(knownLinks.map((row) => row.externalId));
+  const previouslyInReview = new Set(knownLinks.filter((row) => row.disposition === "needs_review").map((row) => row.externalId));
+  const window = read.mapped.filter((record) => isInReadWindow(record, windowSpec) || known.has(record.externalId));
+  const outsideWindow = read.mapped.length - window.length;
+  const inWindow = new Set(window);
+  const outsideWindowUnknownBill = dueDates
+    ? read.mapped.filter((r) => r.billId && !dueDates.has(r.billId) && !inWindow.has(r)).length
+    : 0;
 
-  // Janela por data: na conta corrente é o corte; no cartão com corte por fatura é só um
-  // limite largo (link.ts usa 45 dias antes do vencimento de corte) e quem corta é a fatura.
   const input: ProcessPluggyRecordsInput = {
     mode,
     ownerUserId,
@@ -688,6 +786,7 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
     // Cartão: corte por fatura, com o vencimento de TODAS as faturas da mesma leitura de /bills.
     billDueDates: dueDates ? Object.fromEntries(dueDates) : undefined,
   };
+  await ctx.renew();
   const batch: BatchResult = await processPluggyRecords(db, input);
 
   // Invariante: todo registro lido termina com um destino.
@@ -707,6 +806,7 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
     if (known > 0) addAlert(checks, "empty_read");
     unseen = { missingUpstream: 0, missingByDisposition: {}, provisionalVanished: 0, provisionalTransactionsDeleted: 0, pendingVanished: 0 };
   } else {
+    await ctx.renew();
     unseen = await reconcileUnseenLinks(db, {
       mode,
       ownerUserId,
@@ -763,6 +863,7 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   // Total no run; alerta só para os novos (os já em revisão são reavaliados a cada execução).
   const unknownBill = batch.results.filter((r) => r.outcome === "needs_review" && r.reasonCode === "unknown_bill");
   counts.unknownBill += unknownBill.length;
+  counts.outsideWindowUnknownBill += outsideWindowUnknownBill;
   addAlert(checks, "unknown_bill", unknownBill.filter((r) => !previouslyInReview.has(r.externalId)).length);
   counts.provisionalVanished += unseen.provisionalVanished;
   counts.provisionalTransactionsDeleted += unseen.provisionalTransactionsDeleted;

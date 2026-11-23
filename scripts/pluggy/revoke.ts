@@ -17,11 +17,12 @@
 import { createPluggyClientFromEnv, missingPluggyEnv, PluggyApiError } from "@/lib/pluggy/client";
 import { acquirePluggyLease, lockUserForPluggy, releasePluggyLease } from "@/lib/pluggy/lease";
 import { describeSyncError } from "@/lib/pluggy/sync";
-import { confirmTyped, fail, hasFlag, loadEnvVars, openDatabase, requireOwner } from "./cli";
+import { abort, confirmTyped, fail, hasFlag, loadEnvVars, openDatabase, requireOwner, ScriptAbort } from "./cli";
 
 const PLUGGY_VARS = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_ITEM_ID"] as const;
 const CONFIRMATION = "APAGAR CONEXAO";
-const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+/** Um pouco mais que o lease do cron (10 min): um lease órfão expira antes de desistir. */
+const WAIT_TIMEOUT_MS = 11 * 60 * 1000;
 const POLL_MS = 5_000;
 const REVOKE_LEASE_TTL_MS = 5 * 60 * 1000;
 
@@ -56,7 +57,7 @@ async function main(): Promise<void> {
     }
 
     const confirmed = await confirmTyped('Para confirmar, digite "' + CONFIRMATION + '": ', CONFIRMATION);
-    if (!confirmed) fail("Confirmação não conferiu. Nada foi feito.");
+    if (!confirmed) abort("Confirmação não conferiu. Nada foi feito.");
 
     await target.db.$transaction(async (tx) => {
       await lockUserForPluggy(tx, owner);
@@ -69,7 +70,7 @@ async function main(): Promise<void> {
     while (!token) {
       token = await acquirePluggyLease(target.db, owner, REVOKE_LEASE_TTL_MS);
       if (token) break;
-      if (Date.now() > deadline) fail("Uma sincronização segue em andamento após 10 minutos. O item NÃO foi apagado; rode de novo.");
+      if (Date.now() > deadline) abort("Uma sincronização segue em andamento após 11 minutos. O item NÃO foi apagado; rode de novo.");
       await sleep(POLL_MS);
     }
     console.log("2/4 nenhuma sincronização em andamento.");
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
       console.log("3/4 item apagado na Pluggy.");
       try {
         await client.getItem(itemId);
-        fail("4/4 o item ainda aparece na Pluggy. Confira no painel e rode de novo.");
+        abort("4/4 o item ainda aparece na Pluggy. Confira no painel e rode de novo.");
       } catch (error) {
         if (error instanceof PluggyApiError && error.kind === "http" && error.status === 404) {
           console.log("4/4 conferido: o item não existe mais.");
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("revoke.ts falhou: " + describeSyncError(error));
+  console.error(error instanceof ScriptAbort ? error.message : "revoke.ts falhou: " + describeSyncError(error));
   process.exit(1);
 });
 

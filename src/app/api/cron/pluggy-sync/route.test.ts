@@ -72,6 +72,12 @@ describe("GET /api/cron/pluggy-sync", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("sem o segredo, não revela se a integração está ligada", async () => {
+    configured();
+    vi.stubEnv("PLUGGY_SYNC_ENABLED", "false");
+    expect((await GET(request({ authorization: "Bearer errado" }))).status).toBe(401);
+  });
+
   it("401 com sessão autenticada e sem o segredo", async () => {
     configured();
     const res = await GET(request({ cookie: "authjs.session-token=sessao_test" }));
