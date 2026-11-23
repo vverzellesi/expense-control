@@ -273,4 +273,45 @@ sequenceDiagram
     end
 ```
 
-Dez fluxos principais da aplicação. Transações com parcelas usam fan-out loop para criar N registros. Importação CSV faz detecção de banco, auto-categorização e linking com recorrentes. Investimentos usam transações atômicas (prisma.$transaction) para manter consistência entre cash-flow e portfolio. Os fluxos de espaços compartilhados (6-10) cobrem criação, convites, aceitação, alternância de contexto e verificação de permissões por role.
+## 11. Sincronização Pluggy (cron diário, webhook e script)
+
+```mermaid
+sequenceDiagram
+    participant V as Vercel Cron / Pluggy webhook / script
+    participant R as Rota ou script
+    participant S as src/lib/pluggy/sync.ts
+    participant P as API Pluggy
+    participant DB as Prisma/DB
+    participant T as Telegram do dono
+
+    alt cron
+        V->>R: GET /api/cron/pluggy-sync (Bearer CRON_SECRET)
+        R->>R: flag + segredo em tempo constante (503 / 401)
+    else webhook
+        V->>R: POST /webhooks/pluggy (X-Pluggy-Signature)
+        R->>R: limite de corpo, HMAC sobre t.corpo, janela 5 min, clientId e itemId
+        R-->>V: 200 imediato
+        R->>DB: último run < 10 min ou lease ocupado? então não dispara
+    end
+    R->>S: runPluggySync(apply | simulate)
+    S->>DB: links ativos do dono + Settings pluggy.excludePatterns
+    S->>DB: adquire lease, marca runs órfãos como interrupted, cria run running
+    S->>P: getItem (status, atualização, consentimento) + listAccounts
+    loop cada conta vinculada
+        S->>P: /v2/transactions (todas as páginas) e /bills no cartão
+        Note over S: falha em qualquer página invalida a conta
+    end
+    S->>S: mapeia, padrões do usuário, regras de lote com as contas juntas
+    loop cada conta válida
+        S->>DB: processPluggyRecords (decide e grava sob lock + lease)
+        S->>DB: reconcileUnseenLinks (provisórios sumidos, missing_upstream)
+        S->>S: resíduo por fatura e cobertura
+    end
+    S->>DB: fecha o run (ok / warning / error, contagens e checks) e libera o lease
+    opt warning, error ou novos em needs_review
+        S->>T: só contagens e tipos de alerta
+    end
+    S-->>R: relatório (a rota devolve só status e contagens)
+```
+
+Onze fluxos principais da aplicação. Transações com parcelas usam fan-out loop para criar N registros. Importação CSV faz detecção de banco, auto-categorização e linking com recorrentes. Investimentos usam transações atômicas (prisma.$transaction) para manter consistência entre cash-flow e portfolio. Os fluxos de espaços compartilhados (6-10) cobrem criação, convites, aceitação, alternância de contexto e verificação de permissões por role. A sincronização Pluggy (11) tem uma única função para as três entradas; em simulação não grava run, lease nem lançamento e não envia alerta.
