@@ -3,11 +3,13 @@
  * Banco: DATABASE_URL; produção só com --prod (e, com --apply, confirmação digitada).
  *
  * Uso (da raiz do repositório):
- *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply]
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply] [--no-ai]
  *
  * Roda mesmo com PLUGGY_SYNC_ENABLED desligado (é uma ação explícita). Grava em
  * personal/pluggy/sync-<data>.md um relatório legível por destino e motivo, com totais
  * por mês e a lista do que iria para revisão. No terminal saem só o caminho e contagens.
+ * Com --apply, ao fim chama a categorização por IA se ANTHROPIC_API_KEY estiver no
+ * ambiente ou no .env; --no-ai pula essa etapa (ex.: primeira gravação em produção).
  */
 import { formatCurrency } from "@/lib/utils";
 import { describeSyncError, runPluggySync, type SyncReport } from "@/lib/pluggy/sync";
@@ -28,6 +30,7 @@ import {
 } from "./cli";
 
 const REQUIRED_VARS = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_OWNER_USER_ID"] as const;
+const OPTIONAL_VARS = ["TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "AI_CATEGORIZER_MODEL", "AI_CATEGORIZER_MAX_CALLS_PER_RUN"] as const;
 const PROD_CONFIRMATION = "GRAVAR EM PRODUCAO";
 /** A primeira gravação pode ter centenas de registros: lease mais longo que o do cron. */
 const SCRIPT_LEASE_TTL_MS = 30 * 60 * 1000;
@@ -180,7 +183,7 @@ function buildSyncReport(report: SyncReport, label: string): string {
 
 async function main(): Promise<void> {
   const apply = hasFlag("apply");
-  loadEnvVars([...REQUIRED_VARS, "TELEGRAM_BOT_TOKEN"]);
+  loadEnvVars([...REQUIRED_VARS, ...OPTIONAL_VARS]);
   const missing = missingVars(REQUIRED_VARS);
   if (missing.length > 0) fail("Faltam variáveis no .env: " + missing.join(", ") + ". Nada foi consultado.");
   const owner = requireOwner();
@@ -196,7 +199,13 @@ async function main(): Promise<void> {
     }
     const report = await runPluggySync(
       { db: target.db, env: { ...process.env, PLUGGY_OWNER_USER_ID: owner } },
-      { mode: apply ? "apply" : "simulate", trigger: "manual", ignoreEnabledFlag: true, leaseTtlMs: SCRIPT_LEASE_TTL_MS }
+      {
+        mode: apply ? "apply" : "simulate",
+        trigger: "manual",
+        ignoreEnabledFlag: true,
+        leaseTtlMs: SCRIPT_LEASE_TTL_MS,
+        skipAi: hasFlag("no-ai"),
+      }
     );
     writePersonalReport(relativePath, buildSyncReport(report, target.label));
     const c = report.counts;
@@ -209,6 +218,13 @@ async function main(): Promise<void> {
         " | atualizados: " + c.destinations.updated + " | fora da janela: " + c.outsideWindow
     );
     console.log("Relatório: " + relativePath);
+    if (apply) {
+      const ai = report.checks.ai;
+      console.log(
+        "Categorização por IA: " +
+          (ai ? ai.state + " | categorizados: " + ai.counts.categorized + " | chamadas: " + ai.counts.calls : "não rodou (" + (report.checks.aiSkipped ?? "—") + ")")
+      );
+    }
   } finally {
     await target.db.$disconnect();
   }

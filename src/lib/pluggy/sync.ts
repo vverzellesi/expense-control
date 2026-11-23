@@ -95,6 +95,8 @@ export interface RunSyncOptions {
   importPending?: boolean;
   /** Validade do lease; scripts usam mais que o cron (primeira gravação longa). */
   leaseTtlMs?: number;
+  /** Não chamar a categorização por IA nesta execução. */
+  skipAi?: boolean;
 }
 
 type DestinationKey = RecordOutcome;
@@ -163,6 +165,13 @@ export interface SyncChecks {
   userPatterns: { configured: number; rejected: number; invalid: boolean };
   /** Categorização por IA depois da gravação (só contagens e estado). */
   ai: { state: CategorizeResult["state"]; counts: CategorizeCounts; error: string | null } | null;
+  /** Por que a IA não rodou nesta gravação (null quando rodou ou em simulação). */
+  aiSkipped: "flag" | "run_error" | "nothing_new" | null;
+  /**
+   * Nível já avisado de cada alerta persistente. Só realerta quando o total passa desse
+   * nível; se o envio falha, o nível não sobe e o próximo run tenta de novo.
+   */
+  alertBaseline: Record<string, number>;
 }
 
 export interface SyncDecision {
@@ -264,7 +273,15 @@ export function emptyCounts(): SyncCounts {
 }
 
 function emptyChecks(): SyncChecks {
-  return { alerts: {}, items: [], accounts: [], userPatterns: { configured: 0, rejected: 0, invalid: false }, ai: null };
+  return {
+    alerts: {},
+    items: [],
+    accounts: [],
+    userPatterns: { configured: 0, rejected: 0, invalid: false },
+    ai: null,
+    aiSkipped: null,
+    alertBaseline: {},
+  };
 }
 
 function addAlert(checks: SyncChecks, code: string, count = 1): void {
@@ -278,13 +295,29 @@ export function statusFromAlerts(alerts: Record<string, number>): SyncStatus {
   return codes.length > 0 ? "warning" : "ok";
 }
 
-/** Alertas a enviar: os persistentes só quando aumentaram em relação ao run anterior. */
-export function freshAlerts(current: Record<string, number>, previous: Record<string, number> | null): Record<string, number> {
+/** Alertas a enviar: os persistentes só quando passam do nível já avisado. */
+export function freshAlerts(current: Record<string, number>, baseline: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [code, count] of Object.entries(current)) {
     if (count <= 0) continue;
-    if (PERSISTENT_ALERTS.has(code) && previous && (previous[code] ?? 0) >= count) continue;
+    if (PERSISTENT_ALERTS.has(code) && (baseline[code] ?? 0) >= count) continue;
     out[code] = count;
+  }
+  return out;
+}
+
+/** Novo nível avisado: sobe para o total atual se o alerta saiu; senão acompanha só as quedas. */
+export function nextAlertBaseline(
+  current: Record<string, number>,
+  baseline: Record<string, number>,
+  sent: boolean
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const code of Array.from(PERSISTENT_ALERTS)) {
+    const now = current[code] ?? 0;
+    const before = baseline[code] ?? 0;
+    const level = sent ? now : Math.min(now, before);
+    if (level > 0) out[code] = level;
   }
   return out;
 }
@@ -515,20 +548,40 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
       if (leaseToken) await releasePluggyLease(db, ownerUserId, leaseToken).catch(() => undefined);
     }
 
-    // Categorização por IA: depois de fechar o run e liberar o lease; nunca muda o resultado.
-    await runCategorizer(deps, env, ownerUserId, report);
-
+    // Depois de fechar o run e liberar o lease: primeiro o alerta (não depende da IA),
+    // depois a categorização por IA. Nenhum dos dois muda o resultado do run.
     await sendAlertIfNeeded(deps, ownerUserId, report);
+    await runCategorizer(deps, env, options, ownerUserId, report);
+    if (report.runId) {
+      await db.pluggySyncRun
+        .update({ where: { id: report.runId }, data: { checks: toJson(report.checks) } })
+        .catch(() => undefined);
+    }
   }
   return report;
+}
+
+/** A IA só roda quando pode haver algo novo para categorizar, nunca depois de um run com erro. */
+function aiSkipReason(options: RunSyncOptions, report: SyncReport): SyncChecks["aiSkipped"] {
+  if (options.skipAi) return "flag";
+  if (report.status === "error") return "run_error";
+  const d = report.counts.destinations;
+  const somethingNew = d.created + d.adopted + d.updated + d.restored > 0;
+  // Cron e script rodam no máximo algumas vezes por dia; o webhook só quando entrou algo.
+  if (options.trigger === "webhook" && !somethingNew) return "nothing_new";
+  return null;
 }
 
 async function runCategorizer(
   deps: SyncDeps,
   env: Record<string, string | undefined>,
+  options: RunSyncOptions,
   ownerUserId: string,
   report: SyncReport
 ): Promise<void> {
+  const skip = aiSkipReason(options, report);
+  report.checks.aiSkipped = skip;
+  if (skip) return;
   const categorize = deps.categorize ?? categorizeUncategorized;
   try {
     const ai = await categorize(deps.db, { mode: "apply", ownerUserId, ...categorizerConfigFromEnv(env) });
@@ -536,10 +589,6 @@ async function runCategorizer(
   } catch (error) {
     report.checks.ai = { state: "erro", counts: emptyAiCounts(), error: describeSyncError(error) };
   }
-  if (!report.runId) return;
-  await deps.db.pluggySyncRun
-    .update({ where: { id: report.runId }, data: { checks: toJson(report.checks) } })
-    .catch(() => undefined);
 }
 
 function emptyAiCounts(): CategorizeCounts {
@@ -560,32 +609,33 @@ function emptyAiCounts(): CategorizeCounts {
 
 async function sendAlertIfNeeded(deps: SyncDeps, ownerUserId: string, report: SyncReport): Promise<void> {
   // Falha em qualquer passo do alerta não muda o resultado do run.
+  let baseline: Record<string, number> = {};
+  let sent = false;
   try {
-    let previous: Record<string, number> | null = null;
-    const hasPersistent = Object.keys(report.checks.alerts).some((code) => PERSISTENT_ALERTS.has(code));
-    if (hasPersistent) {
-      const last = await deps.db.pluggySyncRun.findFirst({
-        where: {
-          userId: ownerUserId,
-          status: { in: ["ok", "warning", "error"] },
-          ...(report.runId ? { NOT: { id: report.runId } } : {}),
-        },
-        orderBy: { startedAt: "desc" },
-        select: { checks: true },
-      });
-      const alerts = (last?.checks as { alerts?: Record<string, number> } | null)?.alerts;
-      previous = alerts && typeof alerts === "object" ? alerts : {};
-    }
-    const alerts = freshAlerts(report.checks.alerts, previous);
+    const last = await deps.db.pluggySyncRun.findFirst({
+      where: {
+        userId: ownerUserId,
+        status: { in: ["ok", "warning", "error"] },
+        ...(report.runId ? { NOT: { id: report.runId } } : {}),
+      },
+      orderBy: { startedAt: "desc" },
+      select: { checks: true },
+    });
+    const stored = (last?.checks as { alertBaseline?: unknown } | null)?.alertBaseline;
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) baseline = stored as Record<string, number>;
+    const alerts = freshAlerts(report.checks.alerts, baseline);
     const status = report.status === "skipped" ? "ok" : report.status;
     const needed = status === "error" || report.counts.newNeedsReview > 0 || Object.keys(alerts).length > 0;
-    if (!needed) return;
-    const summary: AlertSummary = { status, newNeedsReview: report.counts.newNeedsReview, alerts };
-    const send = deps.alert ?? ((client, owner, s) => sendSyncAlert(client, owner, s));
-    await send(deps.db, ownerUserId, summary);
+    if (needed) {
+      const summary: AlertSummary = { status, newNeedsReview: report.counts.newNeedsReview, alerts };
+      const send = deps.alert ?? ((client, owner, s) => sendSyncAlert(client, owner, s));
+      const result = (await send(deps.db, ownerUserId, summary)) as { sent?: boolean } | undefined;
+      sent = !(result && typeof result === "object" && result.sent === false);
+    }
   } catch {
-    // engolido de propósito
+    sent = false;
   }
+  report.checks.alertBaseline = nextAlertBaseline(report.checks.alerts, baseline, sent);
 }
 
 interface SyncContext {

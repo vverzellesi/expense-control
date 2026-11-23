@@ -547,21 +547,34 @@ describe("runPluggySync — registros já vinculados fora da janela", () => {
 });
 
 describe("runPluggySync — alertas persistentes", () => {
-  it("aviso que só se repete não reenvia o alerta; aumento reenvia", async () => {
+  it("aviso que só se repete não reenvia o alerta; aumento reenvia e sobe o nível avisado", async () => {
     storeMocks.reconcileUnseenLinks.mockResolvedValue({ ...noUnseen, missingUpstream: 2 });
     const same = fakeDb();
-    same.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { missing_upstream: 4 } } });
+    same.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alertBaseline: { missing_upstream: 4 } } });
     const alert = vi.fn().mockResolvedValue(undefined);
     const report = await run(same.db, { alert });
     expect(report.status).toBe("warning");
     expect(report.checks.alerts.missing_upstream).toBe(4);
     expect(alert).not.toHaveBeenCalled();
+    expect(report.checks.alertBaseline).toEqual({ missing_upstream: 4 });
 
     const grew = fakeDb();
-    grew.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { missing_upstream: 1 } } });
-    const alert2 = vi.fn().mockResolvedValue(undefined);
-    await run(grew.db, { alert: alert2 });
+    grew.db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alertBaseline: { missing_upstream: 1 } } });
+    const alert2 = vi.fn().mockResolvedValue({ sent: true });
+    const grown = await run(grew.db, { alert: alert2 });
     expect(alert2).toHaveBeenCalledWith(grew.db, OWNER, { status: "warning", newNeedsReview: 0, alerts: { missing_upstream: 4 } });
+    expect(grown.checks.alertBaseline).toEqual({ missing_upstream: 4 });
+  });
+
+  it("se o envio falha, o nível avisado não sobe e o próximo run tenta de novo", async () => {
+    storeMocks.reconcileUnseenLinks.mockResolvedValue({ ...noUnseen, missingUpstream: 2 });
+    const { db } = fakeDb();
+    db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alertBaseline: { missing_upstream: 1 } } });
+    const report = await run(db, { alert: vi.fn().mockResolvedValue({ sent: false, reason: "send_failed" }) });
+    expect(report.checks.alertBaseline).toEqual({ missing_upstream: 1 });
+    // O nível avisado vai para o run: é dele que o próximo run parte.
+    const lastChecks = db.pluggySyncRun.update.mock.calls.at(-1)![0].data.checks;
+    expect(lastChecks.alertBaseline).toEqual({ missing_upstream: 1 });
   });
 
   it("aviso não persistente (item parado) alerta todo dia", async () => {
@@ -623,6 +636,29 @@ describe("runPluggySync — categorização por IA", () => {
     expect(db.pluggySyncRun.update.mock.calls[0][0].data.status).toBe("ok");
     expect(report.checks.ai).toMatchObject({ state: "erro", error: "unexpected:Error" });
     expect(JSON.stringify(report.checks)).not.toContain("LOJA EXEMPLO");
+  });
+
+  it("não roda depois de um run com erro, nem com --no-ai, nem no webhook sem nada novo", async () => {
+    const failing = fakeDb();
+    const categorize = aiOff();
+    const client = fakeClient({ listAccounts: vi.fn().mockRejectedValue(new Error("rede")) });
+    const errored = await run(failing.db, { categorize, client: client as never });
+    expect(errored.status).toBe("error");
+    expect(errored.checks.aiSkipped).toBe("run_error");
+
+    const flagged = await runPluggySync(
+      { db: fakeDb().db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn(), categorize },
+      { mode: "apply", trigger: "manual", skipAi: true }
+    );
+    expect(flagged.checks.aiSkipped).toBe("flag");
+
+    storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => batchFor(input, () => "unchanged"));
+    const quiet = await runPluggySync(
+      { db: fakeDb().db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn(), categorize },
+      { mode: "apply", trigger: "webhook" }
+    );
+    expect(quiet.checks.aiSkipped).toBe("nothing_new");
+    expect(categorize).not.toHaveBeenCalled();
   });
 });
 

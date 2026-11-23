@@ -70,7 +70,14 @@ async function main(): Promise<void> {
     while (!token) {
       token = await acquirePluggyLease(target.db, owner, REVOKE_LEASE_TTL_MS);
       if (token) break;
-      if (Date.now() > deadline) abort("Uma sincronização segue em andamento após 11 minutos. O item NÃO foi apagado; rode de novo.");
+      if (Date.now() > deadline) {
+        const lease = await target.db.pluggySyncLease.findUnique({ where: { userId: owner }, select: { expiresAt: true } });
+        const minutes = lease ? Math.max(1, Math.ceil((lease.expiresAt.getTime() - Date.now()) / 60_000)) : null;
+        abort(
+          "Uma sincronização segue em andamento após 11 minutos. O item NÃO foi apagado; rode de novo" +
+            (minutes ? " em cerca de " + minutes + " min, quando o lease atual expira." : ".")
+        );
+      }
       await sleep(POLL_MS);
     }
     console.log("2/4 nenhuma sincronização em andamento.");

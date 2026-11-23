@@ -158,13 +158,34 @@ async function resolve(target: ScriptDatabase, owner: string, id: string, apply:
 
       if (action.kind === "restore") {
         if (!link.transactionId) abort("Este vínculo não tem lançamento para restaurar.");
-        const restored = await tx.transaction.updateMany({
+        const main = await tx.transaction.findFirst({
           where: { id: link.transactionId, userId: owner, spaceId: null, deletedAt: { not: null } },
-          data: { deletedAt: null },
+          select: { id: true, installmentId: true, deletedAt: true },
         });
-        if (restored.count !== 1) abort("O lançamento vinculado não está apagado (ou não é pessoal do dono).");
+        if (!main) abort("O lançamento vinculado não está apagado (ou não é pessoal do dono).");
+        await tx.transaction.update({ where: { id: main.id }, data: { deletedAt: null } });
+        // Projeções do mesmo grupo, sem vínculo, apagadas junto com ele.
+        let projections = 0;
+        if (main.installmentId) {
+          projections = (
+            await tx.transaction.updateMany({
+              where: {
+                installmentId: main.installmentId,
+                userId: owner,
+                spaceId: null,
+                deletedAt: main.deletedAt,
+                pluggyLinks: { none: {} },
+              },
+              data: { deletedAt: null },
+            })
+          ).count;
+        }
+        if (projections > 0) console.log("Projeções restauradas junto: " + projections);
         // adopted: a sincronização nunca apaga sozinha um lançamento adotado.
-        await tx.pluggyTransactionLink.update({ where: { id: link.id }, data: { disposition: "adopted", reasonCode: MANUAL_REASON } });
+        await tx.pluggyTransactionLink.update({
+          where: { id: link.id },
+          data: { disposition: "adopted", reasonCode: MANUAL_REASON, systemDeletedAt: null },
+        });
         return;
       }
 
