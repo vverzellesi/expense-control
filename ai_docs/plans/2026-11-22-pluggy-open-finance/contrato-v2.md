@@ -247,3 +247,11 @@ Parcelas de fatura parcelada e de parcelamento de compra não vêm pela Pluggy. 
 - **Nunca apagar `PluggyAccountLink`**, só desativar: apagar leva junto o histórico de vínculos.
 - **Importação manual** pula linhas de origin sincronizado a partir do corte (`skippedPluggyManaged`).
 
+
+## Emenda 4 — categorização por rotina do dono, sem chave de API (prevalece sobre as seções acima)
+
+- **Decisão do dono:** a categorização do que as regras não resolvem não usa chave de API de provedor de IA. Ela é feita por uma rotina do Claude Code na máquina do dono, com a assinatura dele. O app não chama nenhum provedor de IA para isso.
+- **Removido:** o cliente HTTP do provedor, as variáveis de ambiente da IA, o gancho no fim da sincronização (`checks.ai` e `checks.aiSkipped` deixam de existir) e as opções `--ai`/`--no-ai` de `scripts/pluggy/sync.ts`.
+- **Fluxo:** `scripts/pluggy/categorize.ts --export` (somente leitura) grava em `personal/` os pendentes, com chaves efêmeras, descrição minimizada e faixa de valor, e à parte um mapa privado chave → id. A rotina escreve um arquivo de decisões `{ exportacao, decisoes: [{ chave, categoria | null, confianca }] }`; `--apply-decisions <arquivo>` valida contra o mapa da última exportação (exportação diferente recusa o arquivo; chave desconhecida, categoria fora da lista ou formato inválido descarta o item), simula por padrão e grava com `--apply` só confiança alta. Instruções da rotina: `.claude/skills/mypocket-categorizar/SKILL.md`.
+- **Mantido:** seleção (cartão por padrão; conta corrente só com `--incluir-conta`), minimização da descrição, nunca selecionar `categorySource = manual`, escrita condicional (categoria e origem de categoria ainda nulas, `updatedAt` igual, vínculo ativo, categoria pessoal do dono) gravando `categorySource = "ai"`. Código em `src/lib/category-assist/`.
+- **Tentativas:** abstenções e confianças não altas ficam em `Settings` (`pluggy.categorizeAttempts`, id → dia) e não são reexportadas por 30 dias; entradas antigas são limpas a cada gravação. Sem migração.

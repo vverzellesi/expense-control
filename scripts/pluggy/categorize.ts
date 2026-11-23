@@ -1,124 +1,92 @@
 /**
- * Categorização por IA dos lançamentos de cartão da Pluggy que as regras não resolveram.
- * SIMULAÇÃO por padrão: não chama o provedor e não grava nada.
+ * Categorização assistida dos lançamentos da Pluggy que as regras não resolveram.
+ * Quem decide é a rotina do Claude Code do dono (skill .claude/skills/mypocket-categorizar),
+ * fora do app; este script só exporta os pendentes e aplica as decisões validadas.
  *
- * Uso (da raiz do repositório, com o .env local preenchido):
- *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts [--apply] [--prod]
+ * Uso (da raiz do repositório):
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts --export [--incluir-conta] [--limite 150] [--prod]
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts --apply-decisions <arquivo> [--apply] [--prod]
  *
- *   --apply  chama a Anthropic e grava categoryId + categorySource = "ai"
- *   --prod   usa DATABASE_URL_PROD em vez de DATABASE_URL
+ *   --export            somente leitura no banco; grava personal/pluggy/categorizar-pendentes.json (o que a rotina lê)
+ *                       e personal/pluggy/categorizar-mapa.json (mapa privado chave → id, que a rotina não precisa ler)
+ *   --incluir-conta     inclui a conta corrente além do cartão
+ *   --limite N          máximo de itens por exportação (padrão 150, mais recentes primeiro)
+ *   --apply-decisions   valida o arquivo de decisões contra o mapa da última exportação;
+ *                       SIMULAÇÃO por padrão, grava só com --apply (confiança "alta")
+ *   --prod              usa DATABASE_URL_PROD em vez de DATABASE_URL
  *
- * Lê do .env só DATABASE_URL, DATABASE_URL_PROD, PLUGGY_OWNER_USER_ID,
- * ANTHROPIC_API_KEY, AI_CATEGORIZER_MODEL e AI_CATEGORIZER_MAX_CALLS_PER_RUN,
- * sem imprimir nenhum valor. Na simulação, o que seria enviado ao provedor
- * (descrições reais) vai para personal/pluggy/categorize-<data>.json, caminho
- * que precisa estar ignorado pelo git. No terminal aparecem só contagens.
+ * Arquivos ficam em personal/ (conferido com git check-ignore). No terminal saem só contagens.
  */
-import { execFileSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, resolve } from "path";
-import { PrismaClient } from "@prisma/client";
-import { categorizeUncategorized, categorizerConfigFromEnv } from "@/lib/ai-categorizer";
+import { readFileSync } from "fs";
+import { applyDecisions, buildExport, DEFAULT_EXPORT_LIMIT, type PrivateMap } from "@/lib/category-assist";
+import { argValue, assertPersonalPath, fail, hasFlag, openDatabase, requireOwner, writePersonalReport } from "./cli";
 
-const ENV_VARS = [
-  "DATABASE_URL",
-  "DATABASE_URL_PROD",
-  "PLUGGY_OWNER_USER_ID",
-  "ANTHROPIC_API_KEY",
-  "AI_CATEGORIZER_MODEL",
-  "AI_CATEGORIZER_MAX_CALLS_PER_RUN",
-] as const;
+const PENDING_PATH = "personal/pluggy/categorizar-pendentes.json";
+const MAP_PATH = "personal/pluggy/categorizar-mapa.json";
 
-/** Carrega do .env apenas as variáveis acima, sem imprimir nada. */
-function loadEnv(): void {
-  const envPath = resolve(process.cwd(), ".env");
-  if (!existsSync(envPath)) return;
-  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const match = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
-    if (!match) continue;
-    const name = match[1];
-    if (!(ENV_VARS as readonly string[]).includes(name) || process.env[name]) continue;
-    let value = match[2].trim();
-    const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/.exec(value);
-    value = quoted ? quoted[2] : value.replace(/\s+#.*$/, "").trim();
-    if (value) process.env[name] = value;
-  }
-}
-
-function saoPauloStamp(date: Date): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
-  return get("year") + "-" + get("month") + "-" + get("day") + "-" + get("hour") + get("minute");
-}
-
-/** Aborta se o caminho não estiver ignorado pelo git. */
-function assertGitIgnored(relativePath: string): void {
+function readJson(path: string, label: string): unknown {
+  const absolute = assertPersonalPath(path);
   try {
-    execFileSync("git", ["check-ignore", "-q", relativePath], { stdio: "ignore" });
+    return JSON.parse(readFileSync(absolute, "utf8"));
   } catch {
-    console.error("Abortado: " + relativePath + " não está ignorado pelo git.");
-    process.exit(1);
+    fail("Não foi possível ler " + label + " (" + path + "). Nada foi feito.");
   }
+}
+
+function parseLimit(): number {
+  const raw = argValue("limite");
+  if (raw === undefined) {
+    if (hasFlag("limite")) fail("--limite precisa de um número.");
+    return DEFAULT_EXPORT_LIMIT;
+  }
+  if (!/^\d+$/.test(raw) || Number(raw) < 1) fail("--limite precisa ser um número inteiro positivo.");
+  return Number(raw);
 }
 
 async function main(): Promise<void> {
-  const apply = process.argv.includes("--apply");
-  const prod = process.argv.includes("--prod");
-  loadEnv();
+  const doExport = hasFlag("export");
+  const decisionsPath = argValue("apply-decisions");
+  if (hasFlag("apply-decisions") && !decisionsPath) fail("--apply-decisions precisa do caminho do arquivo de decisões.");
+  if (doExport === Boolean(decisionsPath)) fail("Use --export ou --apply-decisions <arquivo> (um dos dois).");
+  if (doExport && hasFlag("apply")) fail("--apply só vale com --apply-decisions.");
 
-  const urlVar = prod ? "DATABASE_URL_PROD" : "DATABASE_URL";
-  const datasourceUrl = process.env[urlVar]?.trim();
-  const ownerUserId = process.env.PLUGGY_OWNER_USER_ID?.trim();
-  const missing = [!datasourceUrl && urlVar, !ownerUserId && "PLUGGY_OWNER_USER_ID"].filter(Boolean);
-  if (missing.length > 0) {
-    console.error("Faltam variáveis no .env: " + missing.join(", ") + ". Nada foi feito.");
-    process.exit(1);
-  }
+  const owner = requireOwner();
+  // Confere os caminhos antes de abrir o banco.
+  assertPersonalPath(PENDING_PATH);
+  assertPersonalPath(MAP_PATH);
+  const limit = doExport ? parseLimit() : DEFAULT_EXPORT_LIMIT;
+  const decisions = decisionsPath ? readJson(decisionsPath, "o arquivo de decisões") : null;
+  const map = decisionsPath ? (readJson(MAP_PATH, "o mapa da última exportação") as PrivateMap) : null;
 
-  const relativePath = "personal/pluggy/categorize-" + saoPauloStamp(new Date()) + ".json";
-  if (!apply) assertGitIgnored(relativePath);
-
-  const config = categorizerConfigFromEnv();
-  const db = new PrismaClient({ datasourceUrl });
+  const target = await openDatabase();
   try {
-    const result = await categorizeUncategorized(db, {
-      ownerUserId: ownerUserId!,
-      mode: apply ? "apply" : "simulate",
-      ...config,
-    });
-
-    console.log(
-      "Banco: " + (prod ? "produção" : "local") + " | modo: " + (apply ? "gravação" : "simulação") +
-        " | estado: " + result.state + (result.error ? " (" + result.error + ")" : "") + " | modelo: " + result.model
-    );
-    console.log(
-      Object.entries(result.counts)
-        .map(([name, n]) => name + "=" + n)
-        .join(" ")
-    );
-
-    if (!apply) {
-      const absolutePath = resolve(process.cwd(), relativePath);
-      mkdirSync(dirname(absolutePath), { recursive: true });
-      const report = { generatedAt: new Date().toISOString(), counts: result.counts, batches: result.preview ?? [] };
-      writeFileSync(absolutePath, JSON.stringify(report, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
-      console.log("Relatório do que seria enviado (contém descrições reais): " + relativePath);
+    if (doExport) {
+      const includeBank = hasFlag("incluir-conta");
+      const { pending, map: privateMap, counts } = await buildExport(target.db, { ownerUserId: owner, includeBank, limit });
+      // Mapa antes dos pendentes: se a segunda escrita falhar, a aplicação recusa por exportação diferente.
+      writePersonalReport(MAP_PATH, JSON.stringify(privateMap, null, 2) + "\n");
+      writePersonalReport(PENDING_PATH, JSON.stringify(pending, null, 2) + "\n");
+      console.log("Banco: " + target.label + " | exportação (somente leitura) | " + (includeBank ? "cartão e conta corrente" : "só cartão"));
+      console.log(Object.entries(counts).map(([name, n]) => name + "=" + n).join(" "));
+      console.log("Pendentes para a rotina: " + PENDING_PATH);
+      return;
     }
-    if (result.state === "erro") process.exitCode = 1;
+
+    const apply = hasFlag("apply");
+    const result = await applyDecisions(target.db, { ownerUserId: owner, mode: apply ? "apply" : "simulate", map: map!, decisions });
+    const c = result.counts;
+    console.log("Banco: " + target.label + " | modo: " + (apply ? "gravação" : "simulação") + (result.error ? " | erro: " + result.error : ""));
+    console.log(
+      (apply ? "aplicadas=" : "aplicariam=") + c.aplicadas + " abstenções=" + c.abstencoes + " baixaConfiança=" + c.baixaConfianca +
+        " descartadas=" + c.descartadas + " conflitos=" + c.conflitos + " semDecisão=" + c.semDecisao
+    );
+    if (result.error) process.exitCode = 1;
   } finally {
-    await db.$disconnect();
+    await target.db.$disconnect();
   }
 }
 
 main().catch((error) => {
-  console.error("Categorização falhou: " + (error instanceof Error ? error.name : typeof error));
+  console.error("categorize.ts falhou: " + (error instanceof Error ? error.name : typeof error));
   process.exit(1);
 });

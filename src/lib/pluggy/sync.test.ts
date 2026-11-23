@@ -229,18 +229,9 @@ beforeEach(() => {
   storeMocks.reconcileUnseenLinks.mockResolvedValue(noUnseen);
 });
 
-const aiOff = () =>
-  vi.fn().mockResolvedValue({
-    state: "desligado",
-    mode: "apply",
-    model: "modelo_test",
-    counts: { selected: 0, unminimizable: 0, planned: 0, sent: 0, categorized: 0, abstained: 0, lowConfidence: 0, discarded: 0, conflicts: 0, notSent: 0, calls: 0 },
-    error: null,
-  });
-
 const run = (db: unknown, extra: Partial<Parameters<typeof runPluggySync>[0]> = {}, mode: "apply" | "simulate" = "apply") =>
   runPluggySync(
-    { db: db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn().mockResolvedValue(undefined), categorize: aiOff(), ...extra },
+    { db: db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn().mockResolvedValue(undefined), ...extra },
     { mode, trigger: "cron" }
   );
 
@@ -591,19 +582,15 @@ describe("runPluggySync — alertas persistentes", () => {
     expect(report.checks.alertBaseline).toEqual({ missing_upstream: 5 });
   });
 
-  it("o nível avisado é gravado antes da IA", async () => {
+  it("o nível avisado é gravado depois de fechar o run", async () => {
     const { db } = fakeDb();
     const order: string[] = [];
     db.pluggySyncRun.update.mockImplementation(async (args: { data: { status?: string } }) => {
       order.push(args.data.status ? "close_run" : "save_checks");
       return {};
     });
-    const categorize = vi.fn(async () => {
-      order.push("ai");
-      throw new Error("lenta");
-    });
-    await run(db, { categorize: categorize as never });
-    expect(order).toEqual(["close_run", "save_checks", "ai", "save_checks"]);
+    await run(db);
+    expect(order).toEqual(["close_run", "save_checks"]);
   });
 
   it("aviso não persistente (item parado) alerta todo dia", async () => {
@@ -616,78 +603,19 @@ describe("runPluggySync — alertas persistentes", () => {
   });
 });
 
-describe("runPluggySync — categorização por IA", () => {
-  it("simulação não chama a IA", async () => {
+describe("runPluggySync — sem categorização por IA", () => {
+  it("gravação não chama nenhum provedor externo além da Pluggy e os checks não têm campo de IA", async () => {
     const { db } = fakeDb();
-    const categorize = aiOff();
-    const report = await run(db, { categorize }, "simulate");
-    expect(categorize).not.toHaveBeenCalled();
-    expect(report.checks.ai).toBeNull();
-  });
-
-  it("gravação chama uma vez, depois de fechar o run e liberar o lease, e registra só contagens", async () => {
-    const { db } = fakeDb();
-    const order: string[] = [];
-    db.pluggySyncRun.update.mockImplementation(async (args: { data: { status?: string } }) => {
-      order.push(args.data.status ? "close_run" : "ai_checks");
-      return {};
-    });
-    leaseMocks.releasePluggyLease.mockImplementation(async () => {
-      order.push("release");
-      return true;
-    });
-    const categorize = vi.fn(async () => {
-      order.push("ai");
-      return {
-        state: "ok",
-        mode: "apply",
-        model: "modelo_test",
-        counts: { selected: 3, unminimizable: 0, planned: 3, sent: 3, categorized: 2, abstained: 1, lowConfidence: 0, discarded: 0, conflicts: 0, notSent: 0, calls: 1 },
-        error: null,
-      };
-    });
-    const report = await run(db, { categorize: categorize as never, env: { ...env, ANTHROPIC_API_KEY: "chave_test" } });
-
-    expect(categorize).toHaveBeenCalledTimes(1);
-    expect(categorize).toHaveBeenCalledWith(db, expect.objectContaining({ mode: "apply", ownerUserId: OWNER, apiKey: "chave_test" }));
-    expect(order).toEqual(["close_run", "release", "ai_checks", "ai", "ai_checks"]);
-    expect(report.checks.ai).toEqual({ state: "ok", counts: expect.objectContaining({ categorized: 2, calls: 1 }), error: null });
-    const persisted = JSON.stringify(db.pluggySyncRun.update.mock.calls.at(-1)![0].data.checks);
-    expect(persisted).toContain('"categorized":2');
-    expect(persisted).not.toContain("chave_test");
-  });
-
-  it("erro da IA não altera o status do run", async () => {
-    const { db } = fakeDb();
-    const categorize = vi.fn().mockRejectedValue(new Error("falhou com LOJA EXEMPLO"));
-    const report = await run(db, { categorize });
-    expect(report.status).toBe("ok");
-    expect(db.pluggySyncRun.update.mock.calls[0][0].data.status).toBe("ok");
-    expect(report.checks.ai).toMatchObject({ state: "erro", error: "unexpected:Error" });
-    expect(JSON.stringify(report.checks)).not.toContain("LOJA EXEMPLO");
-  });
-
-  it("não roda depois de um run com erro, nem com --no-ai, nem no webhook sem nada novo", async () => {
-    const failing = fakeDb();
-    const categorize = aiOff();
-    const client = fakeClient({ listAccounts: vi.fn().mockRejectedValue(new Error("rede")) });
-    const errored = await run(failing.db, { categorize, client: client as never });
-    expect(errored.status).toBe("error");
-    expect(errored.checks.aiSkipped).toBe("run_error");
-
-    const flagged = await runPluggySync(
-      { db: fakeDb().db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn(), categorize },
-      { mode: "apply", trigger: "manual", skipAi: true }
-    );
-    expect(flagged.checks.aiSkipped).toBe("flag");
-
-    storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => batchFor(input, () => "unchanged"));
-    const quiet = await runPluggySync(
-      { db: fakeDb().db as never, client: fakeClient() as never, env, now: () => NOW, alert: vi.fn(), categorize },
-      { mode: "apply", trigger: "webhook" }
-    );
-    expect(quiet.checks.aiSkipped).toBe("nothing_new");
-    expect(categorize).not.toHaveBeenCalled();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      const report = await run(db);
+      expect(report.status).toBe("ok");
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(report.checks).not.toHaveProperty("ai");
+      expect(report.checks).not.toHaveProperty("aiSkipped");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });
 

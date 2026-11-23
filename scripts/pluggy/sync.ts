@@ -3,14 +3,12 @@
  * Banco: DATABASE_URL; produção só com --prod (e, com --apply, confirmação digitada).
  *
  * Uso (da raiz do repositório):
- *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply] [--no-ai | --ai]
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply]
  *
  * Roda mesmo com PLUGGY_SYNC_ENABLED desligado (é uma ação explícita). Grava em
  * personal/pluggy/sync-<data>.md um relatório legível por destino e motivo, com totais
  * por mês e a lista do que iria para revisão. No terminal saem só o caminho e contagens.
- * Com --apply, ao fim chama a categorização por IA se ANTHROPIC_API_KEY estiver no
- * ambiente ou no .env; --no-ai pula essa etapa. Em produção (--prod) a IA fica desligada
- * a menos que se passe --ai (pela ordem de ativação, a IA é ligada por último).
+ * A categorização do que as regras não resolvem é feita à parte, por scripts/pluggy/categorize.ts.
  */
 import { formatCurrency } from "@/lib/utils";
 import { describeSyncError, runPluggySync, type SyncReport } from "@/lib/pluggy/sync";
@@ -31,7 +29,7 @@ import {
 } from "./cli";
 
 const REQUIRED_VARS = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_OWNER_USER_ID"] as const;
-const OPTIONAL_VARS = ["TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "AI_CATEGORIZER_MODEL", "AI_CATEGORIZER_MAX_CALLS_PER_RUN"] as const;
+const OPTIONAL_VARS = ["TELEGRAM_BOT_TOKEN"] as const;
 const PROD_CONFIRMATION = "GRAVAR EM PRODUCAO";
 /** A primeira gravação pode ter centenas de registros: lease mais longo que o do cron. */
 const SCRIPT_LEASE_TTL_MS = 30 * 60 * 1000;
@@ -97,13 +95,6 @@ function buildSyncReport(report: SyncReport, label: string): string {
   lines.push("- criados antes e agora excluídos pela fonte: " + c.reclassifiedExcluded);
   lines.push("- de fatura que a Pluggy não listou (unknown_bill): " + c.unknownBill);
   lines.push("- fora da janela e de fatura que a Pluggy não listou (histórico antigo): " + c.outsideWindowUnknownBill);
-  const ai = report.checks.ai;
-  if (ai) {
-    lines.push(
-      "- categorização por IA: " + ai.state + (ai.error ? " (" + ai.error + ")" : "") + " | elegíveis: " + ai.counts.selected +
-        " | categorizados: " + ai.counts.categorized + " | abstenções: " + ai.counts.abstained + " | chamadas: " + ai.counts.calls
-    );
-  }
   lines.push("- estornos lançados como receita: " + c.refundsAsIncome);
   lines.push("- provisórios que sumiram: " + c.provisionalVanished + " (lançamentos removidos: " + c.provisionalTransactionsDeleted + ")");
   lines.push("- já importados que sumiram da fonte: " + c.missingUpstream);
@@ -205,7 +196,6 @@ async function main(): Promise<void> {
         trigger: "manual",
         ignoreEnabledFlag: true,
         leaseTtlMs: SCRIPT_LEASE_TTL_MS,
-        skipAi: hasFlag("no-ai") || (target.prod && !hasFlag("ai")),
       }
     );
     writePersonalReport(relativePath, buildSyncReport(report, target.label));
@@ -219,13 +209,6 @@ async function main(): Promise<void> {
         " | atualizados: " + c.destinations.updated + " | fora da janela: " + c.outsideWindow
     );
     console.log("Relatório: " + relativePath);
-    if (apply) {
-      const ai = report.checks.ai;
-      console.log(
-        "Categorização por IA: " +
-          (ai ? ai.state + " | categorizados: " + ai.counts.categorized + " | chamadas: " + ai.counts.calls : "não rodou (" + (report.checks.aiSkipped ?? "—") + ")")
-      );
-    }
   } finally {
     await target.db.$disconnect();
   }
