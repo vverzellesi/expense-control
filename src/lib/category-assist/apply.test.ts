@@ -49,6 +49,30 @@ describe("applyDecisions", () => {
     expect(JSON.parse(attempts()!)).toEqual({ tx_test_2: "2026-04-01", tx_test_3: "2026-04-01" });
   });
 
+  it("só registra tentativa de lançamento que ainda é elegível", async () => {
+    const { db, attempts } = fakeDb({
+      txs: [{ id: "tx_test_3", description: "x", amount: -1, updatedAt: new Date("2026-03-12T12:00:00.000Z") }],
+    });
+    await applyDecisions(
+      db,
+      opts({
+        decisions: decisions([
+          { chave: "i2", categoria: null, confianca: "baixa" },
+          { chave: "i3", categoria: null, confianca: "baixa" },
+        ]),
+      })
+    );
+    expect(JSON.parse(attempts()!)).toEqual({ tx_test_3: "2026-04-01" });
+  });
+
+  it("mapa com valores inválidos é recusado", async () => {
+    const { db, updateMany } = fakeDb();
+    const bad = { ...map, categorias: { c1: 42 } } as unknown as PrivateMap;
+    const r = await applyDecisions(db, opts({ map: bad, decisions: decisions([{ chave: "i1", categoria: "c1", confianca: "alta" }]) }));
+    expect(r.error).toBe("mapa_invalido");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it("a escrita repete a seleção da exportação (com conta corrente quando exportada assim)", async () => {
     const { db, updateMany } = fakeDb();
     await applyDecisions(db, opts({ map: { ...map, incluirConta: true }, decisions: decisions([{ chave: "i1", categoria: "c1", confianca: "alta" }]) }));

@@ -23,6 +23,10 @@ describe("tentativas", () => {
     expect(merged).toEqual({ tx_test_2: "2026-03-20", tx_test_3: "2026-04-01" });
   });
 
+  it("reaplicar não renova a data de quem ainda está na janela", () => {
+    expect(mergeAttempts({ tx_test_1: "2026-03-20" }, ["tx_test_1"], NOW)).toEqual({ tx_test_1: "2026-03-20" });
+  });
+
   it("grava em Settings com a chave do dono", async () => {
     const { db, settingsUpsert, attempts } = fakeDb({ attempts: JSON.stringify({ tx_test_1: "2026-01-01" }) });
     await recordAttempts(db, OWNER, ["tx_test_2"], NOW);

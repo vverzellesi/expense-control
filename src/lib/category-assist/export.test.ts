@@ -60,7 +60,7 @@ describe("buildExport", () => {
       },
       categorias: { c1: "cat_test_food", c2: "cat_test_car", c3: "cat_test_health" },
     });
-    expect(counts).toEqual({ elegiveis: 3, tentadasRecentes: 0, naoMinimizaveis: 0, exportadas: 3, foraDoLimite: 0, categorias: 3 });
+    expect(counts).toEqual({ elegiveis: 3, tentadasRecentes: 0, naoMinimizaveis: 0, exportadas: 3, foraDoLimite: 0, semCategorias: 0, categorias: 3 });
   });
 
   it("com a conta corrente, transferência com nome de pessoa fica fora", async () => {
@@ -93,7 +93,7 @@ describe("buildExport", () => {
     const { db } = fakeDb({ categories: [] });
     const { pending, counts } = await buildExport(db, { ownerUserId: OWNER, now: NOW });
     expect(pending.itens).toEqual([]);
-    expect(counts).toMatchObject({ exportadas: 0, foraDoLimite: 3, categorias: 0 });
+    expect(counts).toMatchObject({ exportadas: 0, foraDoLimite: 0, semCategorias: 3, categorias: 0 });
   });
 
   it("cada exportação tem identificador próprio", async () => {

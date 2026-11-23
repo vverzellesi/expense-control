@@ -47,6 +47,8 @@ export interface ExportCounts {
   exportadas: number;
   /** Sobraram além do limite (vão na próxima exportação). */
   foraDoLimite: number;
+  /** Ficaram fora porque o dono não tem nenhuma categoria pessoal. */
+  semCategorias: number;
   categorias: number;
 }
 
@@ -116,6 +118,7 @@ export async function buildExport(
     naoMinimizaveis: 0,
     exportadas: 0,
     foraDoLimite: 0,
+    semCategorias: 0,
     categorias: categories.length,
   };
   const pending: PendingFile = { geradoEm, exportacao, categorias: [], itens: [] };
@@ -138,7 +141,11 @@ export async function buildExport(
       continue;
     }
     // Sem categoria para escolher, nada é exportado.
-    if (categories.length === 0 || pending.itens.length >= limit) {
+    if (categories.length === 0) {
+      counts.semCategorias++;
+      continue;
+    }
+    if (pending.itens.length >= limit) {
       counts.foraDoLimite++;
       continue;
     }

@@ -6,7 +6,7 @@
  * sequências de 6 ou mais dígitos, valores com centavos e dia/mês, normaliza
  * espaços e trunca. Descrição que não puder ser minimizada com segurança
  * (transferência ou carteira de pagamento entre pessoas, onde costuma vir nome
- * de pessoa) ou que fique com menos de 3 letras não vai para a IA.
+ * de pessoa) ou que fique com menos de 3 letras não é exportado.
  */
 
 export const MAX_DESCRIPTION_LENGTH = 80;
@@ -28,7 +28,7 @@ const DAY_MONTH_RE = /\d{1,2}\/\d{1,2}/g;
 /** Letras latinas, com acento (o tsconfig não permite a flag "u"). */
 const LETTER = "A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff";
 const LETTERS_RE = new RegExp("[" + LETTER + "]", "g");
-/** Referências de transferência costumam trazer o nome da contraparte: ficam fora da IA. */
+/** Referências de transferência costumam trazer o nome da contraparte: ficam fora da exportação. */
 const TRANSFER_RE = new RegExp(
   "(?:^|[^" + LETTER + "])(?:PIX|TED|DOC|TRANSF[" + LETTER + "]*)(?:[^" + LETTER + "]|$)",
   "i"
@@ -36,7 +36,7 @@ const TRANSFER_RE = new RegExp(
 /** Carteira usada sobretudo para pagar pessoas: o texto depois do prefixo costuma ser um nome. */
 const PERSON_WALLET_RE = /^\s*PIC\s*PAY/i;
 
-/** Descrição minimizada, ou null quando o item deve ficar fora da IA. */
+/** Descrição minimizada, ou null quando o item deve ficar fora da exportação. */
 export function minimizeDescription(raw: string): string | null {
   if (typeof raw !== "string") return null;
   if (TRANSFER_RE.test(raw)) return null;

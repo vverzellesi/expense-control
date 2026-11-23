@@ -46,7 +46,9 @@ function isValidMap(map: unknown): map is PrivateMap {
     typeof m.dono === "string" &&
     typeof m.incluirConta === "boolean" &&
     m.itens !== null && typeof m.itens === "object" &&
-    m.categorias !== null && typeof m.categorias === "object"
+    m.categorias !== null && typeof m.categorias === "object" &&
+    Object.values(m.categorias).every((id) => typeof id === "string") &&
+    Object.values(m.itens).every((i) => i !== null && typeof i === "object" && typeof i.id === "string" && typeof i.updatedAt === "string")
   );
 }
 
@@ -135,7 +137,11 @@ export async function applyDecisions(db: CategoryAssistDb, options: ApplyOptions
         return result("db_write_failed");
       }
     }
-    if (attempted.length > 0) await recordAttempts(db, ownerUserId, attempted, options.now ?? new Date());
+    if (attempted.length > 0) {
+      // Só o que ainda é elegível e do dono vira tentativa.
+      const still = await db.transaction.findMany({ where: { ...where, id: { in: attempted } }, select: { id: true } });
+      if (still.length > 0) await recordAttempts(db, ownerUserId, still.map((t) => t.id), options.now ?? new Date());
+    }
     return result();
   } catch {
     return result("unexpected_error");

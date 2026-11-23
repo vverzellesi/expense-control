@@ -19,6 +19,7 @@ O script só grava o que passa na validação, e a escrita é condicional: se o 
 4. Nunca abra `.env`, nunca imprima variáveis de ambiente, tokens ou URLs de banco, e não leia o arquivo de mapa (`personal/pluggy/categorizar-mapa.json`); ele é do script.
 5. Não crie regra de categorização, categoria ou qualquer outro registro. Sugestões de regra vão só no resumo final.
 6. Não copie descrições, valores ou categorias reais para arquivos fora de `personal/` (o repositório é público).
+7. Rode só os comandos desta skill. Se a rotina for agendada, configure as permissões dela para liberar apenas os dois comandos de `scripts/pluggy/categorize.ts`, a leitura de `categorizar-pendentes.json` e a escrita de `categorizar-decisoes.json`.
 
 ## Passo a passo
 

@@ -46,13 +46,13 @@ export function recentAttemptIds(attempts: Attempts, now: Date): Set<string> {
   return new Set(Object.keys(attempts).filter((id) => attempts[id] > cutoff));
 }
 
-/** Acrescenta as tentativas de hoje e remove as que saíram da janela. */
+/** Acrescenta as tentativas de hoje (sem renovar as que ainda estão na janela) e remove as que saíram dela. */
 export function mergeAttempts(attempts: Attempts, ids: Iterable<string>, now: Date): Attempts {
   const cutoff = cutoffDay(now);
   const out: Attempts = {};
   for (const [id, day] of Object.entries(attempts)) if (day > cutoff) out[id] = day;
   const today = dayOf(now);
-  for (const id of Array.from(ids)) out[id] = today;
+  for (const id of Array.from(ids)) if (!out[id]) out[id] = today;
   return out;
 }
 
