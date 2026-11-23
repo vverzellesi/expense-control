@@ -96,11 +96,10 @@ async function listEverything(target: ScriptDatabase, owner: string): Promise<vo
   });
   console.log("\nVínculos existentes (" + links.length + "):");
   for (const link of links) {
-    const cutoff = (link as { cutoffBillDueDate?: Date | null }).cutoffBillDueDate;
     console.log(
       "  - vínculo: " + link.id + "  conta: " + link.pluggyAccountId + "  " + link.accountType + " → " + link.origin.name +
         "  janela desde " + dayOf(link.syncFrom) +
-        (link.accountType === "CREDIT" ? "  corte por fatura: " + dayOf(cutoff) : "") +
+        (link.accountType === "CREDIT" ? "  corte por fatura: " + dayOf(link.cutoffBillDueDate) : "") +
         (link.enabled ? "" : "  (desativado)") +
         (link.replacesAccountLinkId ? "  substitui: " + link.replacesAccountLinkId : "")
     );

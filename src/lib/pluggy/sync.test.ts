@@ -144,6 +144,7 @@ function fakeDb(options: { links?: LinkFixture[]; patterns?: string | null; revi
     pluggySyncLease: { findUnique: vi.fn().mockResolvedValue(null) },
     pluggyTransactionLink: {
       findMany: vi.fn().mockResolvedValue((options.reviewIds ?? []).map((externalId) => ({ externalId }))),
+      count: vi.fn().mockResolvedValue(3),
     },
     telegramLink: { findUnique: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(txClient)),
@@ -156,8 +157,23 @@ function outcomeOf(record: PluggyStoreRecord): RecordOutcome {
   return record.preDisposition.disposition;
 }
 
-function batchFor(records: PluggyStoreRecord[], mode: "apply" | "simulate", outcome = outcomeOf): BatchResult {
-  const counts = { created: 0, adopted: 0, excluded: 0, pending: 0, needs_review: 0, before_cutoff: 0, unchanged: 0, updated: 0 };
+function batchFor(
+  input: Pick<ProcessPluggyRecordsInput, "records" | "mode" | "accountLinkId">,
+  outcome = outcomeOf,
+  records = input.records
+): BatchResult {
+  const { mode, accountLinkId } = input;
+  const counts: Record<RecordOutcome, number> = {
+    created: 0,
+    adopted: 0,
+    excluded: 0,
+    pending: 0,
+    needs_review: 0,
+    before_cutoff: 0,
+    unchanged: 0,
+    updated: 0,
+    restored: 0,
+  };
   const reasons: Record<string, number> = {};
   const results = records.map((r) => {
     const o = outcome(r);
@@ -176,12 +192,25 @@ function batchFor(records: PluggyStoreRecord[], mode: "apply" | "simulate", outc
       projectionAmountCorrected: false,
     };
   });
-  return { mode, results, counts, reasons, divergences: 0, superseded: 0, projectionsCreated: 0, groupsCreated: 0, projectionAmountCorrected: 0 };
+  return {
+    mode,
+    accountLinkId,
+    complete: true,
+    results: results.map((r) => ({ ...r, reclassifiedExcluded: false })),
+    counts,
+    reasons,
+    divergences: 0,
+    superseded: 0,
+    projectionsCreated: 0,
+    groupsCreated: 0,
+    projectionAmountCorrected: 0,
+    reclassifiedExcluded: 0,
+  };
 }
 
 const noUnseen = { missingUpstream: 0, missingByDisposition: {}, provisionalVanished: 0, provisionalTransactionsDeleted: 0, pendingVanished: 0 };
 
-function storeInput(accountLinkId: string): ProcessPluggyRecordsInput & { billDueDates?: Map<string, string> } {
+function storeInput(accountLinkId: string): ProcessPluggyRecordsInput {
   const call = storeMocks.processPluggyRecords.mock.calls.find((c) => c[1].accountLinkId === accountLinkId);
   return call![1];
 }
@@ -191,7 +220,7 @@ beforeEach(() => {
   leaseMocks.acquirePluggyLease.mockResolvedValue("lease_test_token");
   leaseMocks.renewPluggyLease.mockResolvedValue(true);
   leaseMocks.releasePluggyLease.mockResolvedValue(true);
-  storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => batchFor(input.records, input.mode));
+  storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => batchFor(input));
   storeMocks.reconcileUnseenLinks.mockResolvedValue(noUnseen);
 });
 
@@ -224,7 +253,8 @@ describe("runPluggySync — caminho feliz", () => {
 
     // Cartão: corte por fatura com o vencimento de cada fatura da mesma leitura.
     const card = storeInput("link_test_card");
-    expect(card.billDueDates).toEqual(new Map([["bill_test_1", "2026-10-10"], ["bill_test_2", "2026-11-10"]]));
+    expect(card.billDueDates).toEqual({ bill_test_1: "2026-10-10", bill_test_2: "2026-11-10" });
+    expect(bank.billDueDates).toBeUndefined();
     expect(card.records.find((r) => r.externalId === "tx_test_c3")?.sourceStatus).toBe("PENDING");
 
     expect(report.counts.read).toBe(7);
@@ -326,7 +356,7 @@ describe("runPluggySync — falhas de leitura", () => {
     const { db } = fakeDb();
     storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => {
       if (input.accountLinkId === "link_test_bank") throw new Error("boom");
-      return batchFor(input.records, input.mode);
+      return batchFor(input);
     });
     const report = await run(db);
     expect(report.checks.alerts).toEqual({ account_processing_failed: 1 });
@@ -336,7 +366,7 @@ describe("runPluggySync — falhas de leitura", () => {
   it("violação da invariante (registro sem destino) é erro", async () => {
     const { db } = fakeDb();
     storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) =>
-      batchFor(input.records.slice(1), input.mode)
+      batchFor(input, outcomeOf, input.records.slice(1))
     );
     const report = await run(db);
     expect(report.status).toBe("error");
@@ -426,7 +456,7 @@ describe("runPluggySync — conferências e alertas", () => {
   it("conta só os itens novos em revisão e alerta o dono; falha no alerta não muda o run", async () => {
     const { db } = fakeDb({ reviewIds: ["tx_test_b1"] });
     storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) =>
-      batchFor(input.records, input.mode, () => "needs_review")
+      batchFor(input, () => "needs_review")
     );
     const alert = vi.fn().mockRejectedValue(new Error("telegram fora"));
     const report = await run(db, { alert });
@@ -457,19 +487,21 @@ describe("runPluggySync — conferências e alertas", () => {
     expect(storeMocks.reconcileUnseenLinks.mock.calls[0][1]).toMatchObject({
       mode: "apply",
       readFrom: "2026-10-01",
-      seenExternalIds: ["tx_test_b1", "tx_test_b2", "tx_test_b3"],
+      processed: expect.objectContaining({ accountLinkId: "link_test_bank", complete: true }),
     });
   });
 
-  it("leitura vazia não remove nada: só conta e avisa", async () => {
+  it("leitura vazia não remove nada: só avisa quando a conta já tinha vínculos", async () => {
     const { db } = fakeDb({ links: [bankLink] });
     const client = fakeClient({ listTransactions: vi.fn().mockResolvedValue({ transactions: [], coverage: { total: 0, minDate: null, maxDate: null } }) });
-    storeMocks.reconcileUnseenLinks.mockResolvedValue({ ...noUnseen, provisionalVanished: 3 });
     const report = await run(db, { client: client as never });
-    expect(storeMocks.reconcileUnseenLinks).toHaveBeenCalledTimes(1);
-    expect(storeMocks.reconcileUnseenLinks.mock.calls[0][1].mode).toBe("simulate");
+    expect(storeMocks.reconcileUnseenLinks).not.toHaveBeenCalled();
     expect(report.checks.alerts).toEqual({ empty_read: 1 });
     expect(report.counts.provisionalVanished).toBe(0);
+
+    const fresh = fakeDb({ links: [bankLink] });
+    fresh.db.pluggyTransactionLink.count.mockResolvedValue(0);
+    expect((await run(fresh.db, { client: client as never })).status).toBe("ok");
   });
 
   it("histórico que começa depois do corte é coverage_truncated", async () => {

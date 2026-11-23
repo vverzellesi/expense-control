@@ -37,6 +37,7 @@ const DESTINATION_LABELS: Record<string, string> = {
   before_cutoff: "antes do corte",
   unchanged: "já processados, sem mudança",
   updated: "já processados, atualizados pela fonte",
+  restored: "provisórios que voltaram (lançamento restaurado)",
 };
 
 function money(cents: number): string {
@@ -85,6 +86,7 @@ function buildSyncReport(report: SyncReport, label: string): string {
   lines.push("- divergências (fonte mudou e o lançamento local foi editado): " + c.divergences);
   lines.push("- projeções de parcelas criadas: " + c.projectionsCreated + " | grupos criados: " + c.groupsCreated);
   lines.push("- valor de projeção corrigido pela fonte: " + c.projectionAmountCorrected);
+  lines.push("- criados antes e agora excluídos pela fonte: " + c.reclassifiedExcluded);
   lines.push("- estornos lançados como receita: " + c.refundsAsIncome);
   lines.push("- provisórios que sumiram: " + c.provisionalVanished + " (lançamentos removidos: " + c.provisionalTransactionsDeleted + ")");
   lines.push("- já importados que sumiram da fonte: " + c.missingUpstream);

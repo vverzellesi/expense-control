@@ -90,6 +90,7 @@ const DESTINATIONS: DestinationKey[] = [
   "before_cutoff",
   "unchanged",
   "updated",
+  "restored",
 ];
 
 export interface SyncCounts {
@@ -107,6 +108,8 @@ export interface SyncCounts {
   projectionsCreated: number;
   groupsCreated: number;
   projectionAmountCorrected: number;
+  /** Lançamentos criados antes que a fonte passou a excluir. */
+  reclassifiedExcluded: number;
   refundsAsIncome: number;
   provisionalVanished: number;
   provisionalTransactionsDeleted: number;
@@ -226,6 +229,7 @@ export function emptyCounts(): SyncCounts {
     projectionsCreated: 0,
     groupsCreated: 0,
     projectionAmountCorrected: 0,
+    reclassifiedExcluded: 0,
     refundsAsIncome: 0,
     provisionalVanished: 0,
     provisionalTransactionsDeleted: 0,
@@ -631,7 +635,9 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   });
   const previouslyInReview = new Set(before.map((row) => row.externalId));
 
-  const input: ProcessPluggyRecordsInput & { billDueDates?: Map<string, string> } = {
+  // Janela por data: na conta corrente é o corte; no cartão com corte por fatura é só um
+  // limite largo (link.ts usa 45 dias antes do vencimento de corte) e quem corta é a fatura.
+  const input: ProcessPluggyRecordsInput = {
     mode,
     ownerUserId,
     accountLinkId: link.id,
@@ -639,9 +645,9 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
     leaseToken: ctx.leaseToken ?? undefined,
     importPending: options.importPending ?? true,
     now: report.startedAt,
+    // Cartão: corte por fatura, com o vencimento de cada fatura da mesma leitura de /bills.
+    billDueDates: read.bills ? Object.fromEntries(billDueDates(read.bills)) : undefined,
   };
-  // Cartão: corte por fatura, com o vencimento de cada fatura da mesma leitura de /bills.
-  if (read.bills) input.billDueDates = billDueDates(read.bills);
   const batch: BatchResult = await processPluggyRecords(db, input);
 
   // Invariante: todo registro lido termina com um destino.
@@ -654,17 +660,22 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   const coverage = checkCoverage({ syncFromDay, minDate: read.coverage.minDate, total: read.coverage.total });
   if (coverage.status === "truncated") addAlert(checks, "coverage_truncated");
 
-  const seenExternalIds = read.transactions.map((tx) => tx.id);
   let unseen: UnseenLinksResult;
-  const unseenInput = { ownerUserId, accountLinkId: link.id, seenExternalIds, readFrom: coverage.coveredFrom, now: report.startedAt };
   if (coverage.status === "empty") {
-    // Leitura vazia não prova que algo sumiu: só conta, nada é removido.
-    unseen = await reconcileUnseenLinks(db, { ...unseenInput, mode: "simulate" });
-    const wouldChange = unseen.missingUpstream + unseen.provisionalVanished + unseen.pendingVanished;
-    if (wouldChange > 0) addAlert(checks, "empty_read");
+    // Leitura vazia não prova que algo sumiu: nada é removido; avisa se a conta já tinha vínculos.
+    const known = await db.pluggyTransactionLink.count({ where: { accountLinkId: link.id, disposition: { not: "superseded" } } });
+    if (known > 0) addAlert(checks, "empty_read");
     unseen = { missingUpstream: 0, missingByDisposition: {}, provisionalVanished: 0, provisionalTransactionsDeleted: 0, pendingVanished: 0 };
   } else {
-    unseen = await reconcileUnseenLinks(db, { ...unseenInput, mode, leaseToken: ctx.leaseToken ?? undefined });
+    unseen = await reconcileUnseenLinks(db, {
+      mode,
+      ownerUserId,
+      accountLinkId: link.id,
+      processed: batch,
+      readFrom: coverage.coveredFrom,
+      leaseToken: ctx.leaseToken ?? undefined,
+      now: report.startedAt,
+    });
   }
   addAlert(checks, "missing_upstream", unseen.missingUpstream);
 
@@ -708,6 +719,7 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   counts.projectionsCreated += batch.projectionsCreated;
   counts.groupsCreated += batch.groupsCreated;
   counts.projectionAmountCorrected += batch.projectionAmountCorrected;
+  counts.reclassifiedExcluded += batch.reclassifiedExcluded;
   counts.provisionalVanished += unseen.provisionalVanished;
   counts.provisionalTransactionsDeleted += unseen.provisionalTransactionsDeleted;
   counts.pendingVanished += unseen.pendingVanished;

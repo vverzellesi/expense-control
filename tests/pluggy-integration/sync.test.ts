@@ -27,7 +27,11 @@ let fx: Fixture;
 beforeEach(async () => {
   await resetDatabase(db);
   const owner = await createOwner(db, { syncFrom: "2026-10-01" });
-  const card = await db.pluggyAccountLink.findUniqueOrThrow({ where: { id: owner.accountLinkId } });
+  // Cartão com corte por fatura: a fatura que vence em 10/10 (e as anteriores) já foi importada.
+  const card = await db.pluggyAccountLink.update({
+    where: { id: owner.accountLinkId },
+    data: { cutoffBillDueDate: new Date("2026-10-10T12:00:00.000Z") },
+  });
   const bankOrigin = await db.origin.create({ data: { name: "Conta Teste", userId: owner.userId, type: "OTHER" } });
   const bank = await db.pluggyAccountLink.create({
     data: {
@@ -49,6 +53,8 @@ function tx(partial: Partial<PluggyTransaction> & Pick<PluggyTransaction, "id" |
 function cardTransactions(options: { withPending?: boolean } = {}): PluggyTransaction[] {
   const list = [
     tx({ id: "tx_test_c0", amount: 500, type: "DEBIT", date: "2026-09-05T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_1" } }),
+    // Dentro da janela por data, mas da fatura já importada: corte por fatura.
+    tx({ id: "tx_test_c6", amount: 70, type: "DEBIT", date: "2026-10-02T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_1" } }),
     tx({ id: "tx_test_c1", amount: 50, type: "DEBIT", date: "2026-10-20T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_2" } }),
     tx({
       id: "tx_test_c2",
@@ -130,12 +136,17 @@ describe("runPluggySync em Postgres real", () => {
 
     expect(first.checks.alerts).toEqual({});
     expect(first.status).toBe("ok");
-    // Lidos 9: 3 da conta corrente + 6 do cartão, 2 deles fora da janela.
-    expect(first.counts.read).toBe(9);
+    // Lidos 10: 3 da conta corrente + 7 do cartão, 2 deles fora da janela.
+    expect(first.counts.read).toBe(10);
     expect(first.counts.outsideWindow).toBe(2);
-    // b1, c1, c3 (provisório) e c5 (parcela 1/3) criados; b2 e c2 excluídos; c4 em revisão.
-    expect(first.counts.destinations).toMatchObject({ created: 4, excluded: 2, needs_review: 1 });
-    expect(first.counts.reasons).toMatchObject({ bill_payment_debit: 1, bill_payment_credit: 1, credit_unknown: 1 });
+    // b1, c1, c3 (provisório) e c5 (parcela 1/3) criados; b2 e c2 excluídos; c4 em revisão; c6 antes do corte.
+    expect(first.counts.destinations).toMatchObject({ created: 4, excluded: 2, needs_review: 1, before_cutoff: 1 });
+    expect(first.counts.reasons).toMatchObject({
+      bill_payment_debit: 1,
+      bill_payment_credit: 1,
+      credit_unknown: 1,
+      before_cutoff_bill: 1,
+    });
     expect(first.counts.newNeedsReview).toBe(1);
     expect(first.counts.projectionsCreated).toBe(2);
     expect(alert).toHaveBeenCalledTimes(1);
