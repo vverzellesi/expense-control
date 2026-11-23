@@ -114,10 +114,18 @@ flowchart TB
         M13["/api/installments GET DELETE"]
     end
 
+    subgraph PLUGGY["Pluggy Open Finance - fora da sessão"]
+        PG1["/api/cron/pluggy-sync GET (Bearer CRON_SECRET)"]
+        PG2["/webhooks/pluggy POST (X-Pluggy-Signature)"]
+    end
+
     MW{{"Middleware: NextAuth"}}
     MW -->|"bloqueia sem sessao"| PROTECTED
     MW -->|"permite"| PUBLIC
     MW -->|"permite"| AUTH_API
+    MW -->|"permite (caminho exato)"| PLUGGY
 ```
 
 Mapa completo de rotas: 5 páginas públicas, 15 protegidas, 5 endpoints de API públicos (auth) e 53 protegidos (incluindo 7 de espaços compartilhados). O middleware NextAuth intercepta todas as requisições e redireciona usuários não autenticados para /auth/login. Endpoints protegidos também validam sessão via getAuthenticatedUserId(). As APIs de espaços compartilhados gerenciam criação de espaços, alternância de contexto (active), permissões por role, membros, convites e migração de dados pessoais para o espaço.
+
+As duas rotas da Pluggy são liberadas no middleware por igualdade exata de caminho e se autenticam sozinhas: o cron exige `Authorization: Bearer CRON_SECRET` (mesmo com sessão) e o webhook confere a assinatura HMAC da Pluggy. Nenhuma das duas aceita parâmetro que escolha usuário; ambas ficam inertes sem `PLUGGY_SYNC_ENABLED=true`.

@@ -15,9 +15,20 @@ export const authConfig = {
       const isLandingPage = nextUrl.pathname === "/"
       const isTelegramWebhook = nextUrl.pathname === "/api/telegram/webhook"
       const isTelegramSetup = nextUrl.pathname === "/api/telegram/setup"
+      // Pluggy: autenticadas pela própria rota (CRON_SECRET / assinatura do webhook)
+      const isPluggyCron = nextUrl.pathname === "/api/cron/pluggy-sync"
+      const isPluggyWebhook = nextUrl.pathname === "/webhooks/pluggy"
 
-      // Allow landing page, auth pages, auth API routes, and Telegram endpoints without authentication
-      if (isLandingPage || isOnAuthPage || isApiAuthRoute || isTelegramWebhook || isTelegramSetup) {
+      // Allow landing page, auth pages, auth API routes, Telegram and Pluggy endpoints without authentication
+      if (
+        isLandingPage ||
+        isOnAuthPage ||
+        isApiAuthRoute ||
+        isTelegramWebhook ||
+        isTelegramSetup ||
+        isPluggyCron ||
+        isPluggyWebhook
+      ) {
         return true
       }
 
