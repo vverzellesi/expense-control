@@ -17,6 +17,8 @@ import type {
 export const MAX_USER_PATTERN_LENGTH = 200;
 /** Descrições são cortadas antes de testar padrões do usuário (limita custo de regex). */
 const MAX_MATCH_INPUT_LENGTH = 500;
+/** Regex testa só o começo da descrição: mesmo com um quantificador o custo fica pequeno. */
+const MAX_REGEX_INPUT_LENGTH = 200;
 
 // Indicadores de crédito de detectTransactionType (src/lib/statement-parser.ts), onde
 // estorno em fatura de cartão entra como INCOME, mais equivalentes em inglês.
@@ -97,14 +99,20 @@ function isRiskyRegex(body: string): boolean {
   if (/\\[1-9]|\\k</.test(body)) return true;
   let inClass = false;
   let quantifiers = 0;
+  // O que veio antes: "open" = "(" sem escape, "quant" = quantificador, "atom" = qualquer outro.
+  let previous: "open" | "quant" | "atom" = "atom";
   for (let i = 0; i < body.length; i++) {
     const char = body[i];
     if (char === "\\") {
       i++;
+      previous = "atom";
       continue;
     }
     if (inClass) {
-      if (char === "]") inClass = false;
+      if (char === "]") {
+        inClass = false;
+        previous = "atom";
+      }
       continue;
     }
     if (char === "[") {
@@ -112,13 +120,19 @@ function isRiskyRegex(body: string): boolean {
       continue;
     }
     if (char === ")" && /[*+?{]/.test(body[i + 1] ?? "")) return true;
-    const previous = body[i - 1] ?? "";
     let isQuantifier = false;
     if (char === "*" || char === "+") isQuantifier = true;
-    // "?" depois de "(" é sintaxe de grupo; depois de outro quantificador é modo preguiçoso.
-    else if (char === "?") isQuantifier = previous !== "(" && !/[*+?}]/.test(previous);
+    // "?" logo depois de "(" sem escape é sintaxe de grupo; depois de quantificador é modo preguiçoso.
+    else if (char === "?") isQuantifier = previous === "atom";
     else if (char === "{") isQuantifier = /^\{\d*,\d*\}/.test(body.slice(i));
-    if (isQuantifier && ++quantifiers > 1) return true;
+    if (isQuantifier) {
+      if (++quantifiers > 1) return true;
+      if (char === "{") i = body.indexOf("}", i);
+      previous = "quant";
+    } else {
+      // "?" que não é quantificador (sintaxe de grupo ou modo preguiçoso) mantém o estado anterior.
+      if (char !== "?") previous = char === "(" ? "open" : "atom";
+    }
   }
   return false;
 }
@@ -142,7 +156,7 @@ function compileOne(entry: unknown): CompiledExcludePattern | null {
     } catch {
       return null;
     }
-    return { accountType, action, test: (_normalized, raw) => regex.test(raw) };
+    return { accountType, action, test: (_normalized, raw) => regex.test(raw.slice(0, MAX_REGEX_INPUT_LENGTH)) };
   }
 
   const literal = normalizeForMatch(trimmed);
@@ -336,14 +350,18 @@ function assignPairs(pairs: CandidatePair[], entries: BatchEntry[]): CandidatePa
   return chosen;
 }
 
-/** Estorno elegível para anular uma tarifa: ESTORNO explícito (operationType ou descrição). */
+/**
+ * Estorno elegível para anular uma tarifa: operationType ESTORNO; na conta corrente,
+ * também a palavra ESTORNO na descrição; no cartão, a descrição só vale sem operationType.
+ * Cashback, devolução etc. não contam.
+ */
 function isFeeRefundEntry(entry: BatchEntry): boolean {
   const { mapped } = entry;
   if (mapped.direction !== "CREDIT") return false;
   const operationType = entry.operationType ? entry.operationType.trim().toUpperCase() : null;
   if (operationType === "ESTORNO") return true;
-  // Sem classificação do provedor, só a palavra ESTORNO conta (cashback, devolução etc. não).
-  return !operationType && /ESTORNO/i.test(mapped.description);
+  if (!/ESTORNO/i.test(mapped.description)) return false;
+  return mapped.accountType === "BANK" || !operationType;
 }
 
 /**

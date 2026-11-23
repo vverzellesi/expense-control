@@ -25,6 +25,8 @@ describe("compileExcludePatterns", () => {
       { pattern: "/A+B{3,}/", action: "exclude" },
       { pattern: "/[a-z ]{0,500}[a-z ]{0,500}Z/", action: "exclude" }, // quantificadores limitados em sequência
       { pattern: "/a?b?c/", action: "exclude" },
+      { pattern: "/\\(?\\(?\\(\\(Z/", action: "exclude" }, // "?" depois de caractere escapado conta
+      { pattern: "/\\*?a+/", action: "exclude" },
       { pattern: "x".repeat(201), action: "exclude" },
       { pattern: "   ", action: "exclude" },
       { pattern: "ok", accountType: "INVESTMENT", action: "exclude" },
@@ -33,7 +35,7 @@ describe("compileExcludePatterns", () => {
       "string solta",
     ]);
     expect(compiled.matchers.map((m) => m.action)).toEqual(["exclude", "transfer"]);
-    expect(compiled.rejected).toBe(16);
+    expect(compiled.rejected).toBe(18);
   });
 
   it("aceita um único quantificador, grupo não capturante e modo preguiçoso", () => {
@@ -305,6 +307,10 @@ describe("applyBatchRules - estorno integral de tarifa", () => {
       entry("card_test_1", { description: "AJUSTE EXEMPLO", amountCents: 2990, direction: "CREDIT", type: "INCOME", creditKind: "refund" }, { operationType: "ESTORNO" }),
     ];
     expect(reasons(applyBatchRules(withOperationType))).toEqual(["offsetting_refund", "offsetting_refund"]);
+    const bankOther = [fee("bank_test_1"), { ...feeRefund("bank_test_1"), operationType: "OUTROS" }];
+    expect(reasons(applyBatchRules(bankOther))).toEqual(["offsetting_refund", "offsetting_refund"]);
+    const cardOther = [fee("card_test_1"), { ...feeRefund("card_test_1"), operationType: "OUTROS" }];
+    expect(reasons(applyBatchRules(cardOther))).toEqual([null, null]);
   });
 });
 
