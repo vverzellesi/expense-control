@@ -107,6 +107,11 @@ export async function PUT(
       }
     }
 
+    // Edição manual da categoria (inclusive limpar) marca a origem como manual,
+    // para que nenhuma categorização automática a sobrescreva depois.
+    const newCategoryId = categoryId || null;
+    const categoryChanged = newCategoryId !== existingTransaction.categoryId;
+
     const transaction = await prisma.transaction.update({
       where: { id },
       data: {
@@ -115,7 +120,8 @@ export async function PUT(
         date: parseDateLocal(date),
         type,
         origin,
-        categoryId: categoryId || null,
+        categoryId: newCategoryId,
+        ...(categoryChanged && { categorySource: "manual" }),
         categoryTagId: validatedTagId !== undefined ? validatedTagId : undefined,
         isFixed: isFixed || false,
         tags: processedTags,
