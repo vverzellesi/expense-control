@@ -913,6 +913,24 @@ describe("simulação", () => {
 describe("custo de uma execução sem novidades", () => {
   it("usa um número pequeno e constante de consultas, qualquer que seja o tamanho da leitura", async () => {
     const counting = createCountingClient();
+    // Os eventos de log do Prisma chegam depois que a promessa resolve: o COMMIT da execução
+    // de preparo às vezes caía depois do reset e entrava na contagem (12 ou 13 ao acaso).
+    // Uma consulta-marcador, esperada até aparecer no log, delimita a janela medida.
+    const logged: string[] = [];
+    counting.client.$on("query", (e) => {
+      logged.push(e.query);
+    });
+    let marks = 0;
+    const barrier = async (): Promise<number> => {
+      const tag = "cost_barrier_" + ++marks;
+      await counting.client.$queryRawUnsafe("SELECT '" + tag + "'");
+      const deadline = Date.now() + 5_000;
+      while (!logged.some((q) => q.includes(tag))) {
+        if (Date.now() > deadline) throw new Error("marcador não apareceu no log");
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      return logged.findIndex((q) => q.includes(tag));
+    };
     try {
       const costFor = async (o: Owner, size: number) => {
         const records = Array.from({ length: size }, (_, i) =>
@@ -923,9 +941,9 @@ describe("custo de uma execução sem novidades", () => {
           processPluggyRecords(counting.client, { mode: "apply", ownerUserId: o.userId, accountLinkId: o.accountLinkId, records, leaseToken: token });
         expect((await run()).counts.created).toBe(size);
         const lastSeenBefore = await db.pluggyTransactionLink.findFirstOrThrow({ where: { accountLinkId: o.accountLinkId } });
-        counting.reset();
+        const start = await barrier();
         const again = await run();
-        const queries = counting.count();
+        const queries = (await barrier()) - start - 1;
         expect(again.counts.unchanged).toBe(size);
         const lastSeenAfter = await db.pluggyTransactionLink.findFirstOrThrow({ where: { id: lastSeenBefore.id } });
         expect(lastSeenAfter.lastSeenAt.getTime()).toBeGreaterThan(lastSeenBefore.lastSeenAt.getTime());
