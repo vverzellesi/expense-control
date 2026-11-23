@@ -8,6 +8,7 @@ import {
   businessDayKey,
   createDecisionView,
   createOverlay,
+  cutoffDecision,
   dayDiff,
   dayToStoredDate,
   decideRecord,
@@ -61,7 +62,10 @@ function tx(o: Partial<TxRow> & { id: string }): TxRow {
     description: "LOJA EXEMPLO",
     cents: -2500,
     amount: -25,
+    date: new Date("2026-03-10T12:00:00Z"),
     day: "2026-03-10",
+    categorySource: null,
+    deletedAt: null,
     origin: "Cartão Teste",
     isInstallment: false,
     currentInstallment: null,
@@ -95,6 +99,7 @@ function link(o: Partial<LinkRow> & { id: string; externalId: string }): LinkRow
     creditKind: null,
     installmentNumber: null,
     totalInstallments: null,
+    systemDeletedAt: null,
     ...o,
   };
 }
@@ -102,7 +107,9 @@ function link(o: Partial<LinkRow> & { id: string; externalId: string }): LinkRow
 const ctx: AccountContext = {
   ownerUserId: "user_test_1",
   accountLinkId: "acl_test_1",
+  accountType: "CREDIT",
   syncFromDay: "2026-01-01",
+  cutoffBillDueDay: null,
   originName: "Cartão Teste",
   lineageIds: ["acl_test_1"],
   originNames: ["Cartão Teste"],
@@ -115,7 +122,13 @@ function decide(record: PluggyStoreRecord, snapshot: Partial<BatchSnapshot> = {}
     view,
     ctx,
     record,
-    { seenExternalIds: new Set([record.externalId]), recreatedPairs: new Map(), importPending: true, ...facts },
+    {
+      seenExternalIds: new Set([record.externalId]),
+      recreatedPairs: new Map(),
+      importPending: true,
+      billDueDates: new Map(),
+      ...facts,
+    },
     []
   );
 }
@@ -228,6 +241,37 @@ describe("regras puras", () => {
 });
 
 describe("decisão em memória", () => {
+  it("corte por fatura no cartão; por data nos demais", () => {
+    const card = { accountType: "CREDIT", cutoffBillDueDay: "2026-03-10", syncFromDay: "2026-03-01" };
+    const bills = new Map([
+      ["bill_old", "2026-03-10"],
+      ["bill_new", "2026-04-10"],
+    ]);
+    const posted = "POSTED" as const;
+    expect(cutoffDecision({ billId: "bill_old", ledgerDate: "2026-03-20", sourceStatus: posted }, card, bills)?.disposition).toBe("before_cutoff");
+    expect(cutoffDecision({ billId: "bill_new", ledgerDate: "2026-01-01", sourceStatus: posted }, card, bills)).toBeNull();
+    expect(cutoffDecision({ billId: null, ledgerDate: "2025-01-01", sourceStatus: "PENDING" }, card, bills)).toBeNull();
+    expect(cutoffDecision({ billId: null, ledgerDate: "2025-01-01", sourceStatus: posted }, card, bills)).toEqual({ disposition: "needs_review", reasonCode: "missing_bill" });
+    expect(cutoffDecision({ billId: "bill_x", ledgerDate: "2026-03-20", sourceStatus: posted }, card, bills)).toEqual({ disposition: "needs_review", reasonCode: "unknown_bill" });
+    const bank = { accountType: "BANK", cutoffBillDueDay: null, syncFromDay: "2026-03-01" };
+    expect(cutoffDecision({ billId: null, ledgerDate: "2026-02-28", sourceStatus: posted }, bank, bills)?.reasonCode).toBe("before_sync_from");
+  });
+
+  it("reclassificação tardia: created intocado vira excluded com soft delete; editado só diverge", async () => {
+    const l = link({ id: "l1", externalId: "x1", transactionId: "t1" });
+    const excluded = rec({ externalId: "x1", preDisposition: { disposition: "excluded", reasonCode: "bill_payment_debit" } });
+    const plan = await decide(excluded, { links: [l], txs: [tx({ id: "t1", hasPluggyLink: true })] });
+    expect(plan).toMatchObject({ outcome: "excluded", reclassified: true, softDelete: { transactionId: "t1" } });
+    const manual = await decide(excluded, { links: [l], txs: [tx({ id: "t1", hasPluggyLink: true, categorySource: "manual" })] });
+    expect(manual).toMatchObject({ outcome: "unchanged", divergence: true, softDelete: null });
+  });
+
+  it("excluded que deixa de ser vira needs_review / exclusion_reverted sem criar", async () => {
+    const l = link({ id: "l1", externalId: "x1", disposition: "excluded", reasonCode: "bill_payment_debit" });
+    const plan = await decide(rec({ externalId: "x1" }), { links: [l] });
+    expect(plan).toMatchObject({ outcome: "needs_review", reasonCode: "exclusion_reverted", create: null });
+  });
+
   it("registro novo sem candidatas é criado no escopo pessoal", async () => {
     const plan = await decide(rec({ externalId: "n1" }));
     expect(plan).toMatchObject({ outcome: "created", create: { cents: -2500, day: "2026-03-10" } });

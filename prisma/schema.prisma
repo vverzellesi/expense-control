@@ -699,6 +699,8 @@ model PluggyAccountLink {
   lastSuccessfulSyncAt  DateTime?
   /// Conta anterior que esta substitui (reconexão do banco gera ids novos)
   replacesAccountLinkId String?            @unique
+  /// Cartão: vencimento da última fatura já importada por PDF (corte por fatura)
+  cutoffBillDueDate     DateTime?
   replaces              PluggyAccountLink? @relation("PluggyAccountLineage", fields: [replacesAccountLinkId], references: [id], onDelete: NoAction)
   replacedBy            PluggyAccountLink? @relation("PluggyAccountLineage")
   createdAt             DateTime           @default(now())
@@ -739,6 +741,8 @@ model PluggyTransactionLink {
   totalInstallments Int?
   firstSeenAt       DateTime          @default(now())
   lastSeenAt        DateTime
+  /// Carimbo do soft delete feito pelo sistema (provisório que sumiu, reclassificado); permite restaurar
+  systemDeletedAt   DateTime?
 
   @@unique([accountLinkId, externalId])
   @@index([accountLinkId, providerId])
