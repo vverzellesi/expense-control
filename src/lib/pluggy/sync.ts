@@ -306,17 +306,21 @@ export function freshAlerts(current: Record<string, number>, baseline: Record<st
   return out;
 }
 
-/** Novo nível avisado: sobe para o total atual se o alerta saiu; senão acompanha só as quedas. */
+/**
+ * Novo nível avisado: sobe para o total atual se o alerta saiu; senão acompanha só as quedas.
+ * Com conta que falhou (partial), os avisos dela não foram contados: o nível nunca desce.
+ */
 export function nextAlertBaseline(
   current: Record<string, number>,
   baseline: Record<string, number>,
-  sent: boolean
+  sent: boolean,
+  partial = false
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const code of Array.from(PERSISTENT_ALERTS)) {
     const now = current[code] ?? 0;
     const before = baseline[code] ?? 0;
-    const level = sent ? now : Math.min(now, before);
+    const level = partial ? (sent ? Math.max(now, before) : before) : sent ? now : Math.min(now, before);
     if (level > 0) out[code] = level;
   }
   return out;
@@ -551,12 +555,16 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
     // Depois de fechar o run e liberar o lease: primeiro o alerta (não depende da IA),
     // depois a categorização por IA. Nenhum dos dois muda o resultado do run.
     await sendAlertIfNeeded(deps, ownerUserId, report);
-    await runCategorizer(deps, env, options, ownerUserId, report);
-    if (report.runId) {
+    const saveChecks = async () => {
+      if (!report.runId) return;
       await db.pluggySyncRun
         .update({ where: { id: report.runId }, data: { checks: toJson(report.checks) } })
         .catch(() => undefined);
-    }
+    };
+    // O nível avisado vai para o banco antes da IA (que pode levar até o fim do maxDuration).
+    await saveChecks();
+    await runCategorizer(deps, env, options, ownerUserId, report);
+    if (report.checks.ai) await saveChecks();
   }
   return report;
 }
@@ -635,7 +643,7 @@ async function sendAlertIfNeeded(deps: SyncDeps, ownerUserId: string, report: Sy
   } catch {
     sent = false;
   }
-  report.checks.alertBaseline = nextAlertBaseline(report.checks.alerts, baseline, sent);
+  report.checks.alertBaseline = nextAlertBaseline(report.checks.alerts, baseline, sent, report.counts.accountsFailed > 0);
 }
 
 interface SyncContext {

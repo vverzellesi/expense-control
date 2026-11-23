@@ -577,6 +577,35 @@ describe("runPluggySync — alertas persistentes", () => {
     expect(lastChecks.alertBaseline).toEqual({ missing_upstream: 1 });
   });
 
+  it("com conta que falhou, o nível avisado não desce", async () => {
+    const { db } = fakeDb();
+    db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alertBaseline: { missing_upstream: 5 } } });
+    const client = fakeClient({
+      listTransactions: vi.fn(async (accountId: string) => {
+        if (accountId === "acc_test_card") throw new Error("rede");
+        return { transactions: bankTxs, coverage: coverageOf(bankTxs) };
+      }),
+    });
+    const report = await run(db, { client: client as never, alert: vi.fn().mockResolvedValue({ sent: true }) });
+    expect(report.status).toBe("error");
+    expect(report.checks.alertBaseline).toEqual({ missing_upstream: 5 });
+  });
+
+  it("o nível avisado é gravado antes da IA", async () => {
+    const { db } = fakeDb();
+    const order: string[] = [];
+    db.pluggySyncRun.update.mockImplementation(async (args: { data: { status?: string } }) => {
+      order.push(args.data.status ? "close_run" : "save_checks");
+      return {};
+    });
+    const categorize = vi.fn(async () => {
+      order.push("ai");
+      throw new Error("lenta");
+    });
+    await run(db, { categorize: categorize as never });
+    expect(order).toEqual(["close_run", "save_checks", "ai", "save_checks"]);
+  });
+
   it("aviso não persistente (item parado) alerta todo dia", async () => {
     const { db } = fakeDb();
     db.pluggySyncRun.findFirst.mockResolvedValue({ checks: { alerts: { item_stale: 1 } } });
@@ -621,9 +650,9 @@ describe("runPluggySync — categorização por IA", () => {
 
     expect(categorize).toHaveBeenCalledTimes(1);
     expect(categorize).toHaveBeenCalledWith(db, expect.objectContaining({ mode: "apply", ownerUserId: OWNER, apiKey: "chave_test" }));
-    expect(order).toEqual(["close_run", "release", "ai", "ai_checks"]);
+    expect(order).toEqual(["close_run", "release", "ai_checks", "ai", "ai_checks"]);
     expect(report.checks.ai).toEqual({ state: "ok", counts: expect.objectContaining({ categorized: 2, calls: 1 }), error: null });
-    const persisted = JSON.stringify(db.pluggySyncRun.update.mock.calls[1][0].data.checks);
+    const persisted = JSON.stringify(db.pluggySyncRun.update.mock.calls.at(-1)![0].data.checks);
     expect(persisted).toContain('"categorized":2');
     expect(persisted).not.toContain("chave_test");
   });

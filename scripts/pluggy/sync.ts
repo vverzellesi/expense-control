@@ -3,13 +3,14 @@
  * Banco: DATABASE_URL; produção só com --prod (e, com --apply, confirmação digitada).
  *
  * Uso (da raiz do repositório):
- *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply] [--no-ai]
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/sync.ts [--prod] [--apply] [--no-ai | --ai]
  *
  * Roda mesmo com PLUGGY_SYNC_ENABLED desligado (é uma ação explícita). Grava em
  * personal/pluggy/sync-<data>.md um relatório legível por destino e motivo, com totais
  * por mês e a lista do que iria para revisão. No terminal saem só o caminho e contagens.
  * Com --apply, ao fim chama a categorização por IA se ANTHROPIC_API_KEY estiver no
- * ambiente ou no .env; --no-ai pula essa etapa (ex.: primeira gravação em produção).
+ * ambiente ou no .env; --no-ai pula essa etapa. Em produção (--prod) a IA fica desligada
+ * a menos que se passe --ai (pela ordem de ativação, a IA é ligada por último).
  */
 import { formatCurrency } from "@/lib/utils";
 import { describeSyncError, runPluggySync, type SyncReport } from "@/lib/pluggy/sync";
@@ -204,7 +205,7 @@ async function main(): Promise<void> {
         trigger: "manual",
         ignoreEnabledFlag: true,
         leaseTtlMs: SCRIPT_LEASE_TTL_MS,
-        skipAi: hasFlag("no-ai"),
+        skipAi: hasFlag("no-ai") || (target.prod && !hasFlag("ai")),
       }
     );
     writePersonalReport(relativePath, buildSyncReport(report, target.label));
