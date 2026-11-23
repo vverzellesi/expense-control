@@ -1721,10 +1721,14 @@ async function applyPlanToOverlay(
     if (row) overlay.txs.set(row.id, { ...row, deleted: true, deletedAt: now });
     if (d.installmentId && d.installmentNumber !== null) {
       const members = await view.groupMembers(d.installmentId);
-      const othersLinked = members.some((m) => m.id !== d.transactionId && m.hasPluggyLink);
+      // Mesmo critério da execução: outro membro com vínculo que não esteja superseded.
+      const others = members.filter((m) => m.id !== d.transactionId);
+      const links = await view.linksOfTransactions(others.map((m) => m.id));
+      const othersLinked = links.some((l) => l.disposition !== "superseded");
       if (!othersLinked) {
-        for (const m of members) {
-          if (!m.hasPluggyLink && !m.deleted && (m.currentInstallment ?? 0) > d.installmentNumber) {
+        for (const m of others) {
+          const linked = links.some((l) => l.transactionId === m.id);
+          if (!linked && !m.deleted && (m.currentInstallment ?? 0) > d.installmentNumber) {
             overlay.txs.set(m.id, { ...m, deleted: true, deletedAt: now });
           }
         }
