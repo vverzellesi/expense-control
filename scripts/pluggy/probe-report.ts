@@ -90,11 +90,10 @@ function accountType(account: PluggyAccount): "BANK" | "CREDIT" | null {
   return account.type === "BANK" || account.type === "CREDIT" ? account.type : null;
 }
 
-/** Valor do registro na moeda da conta, em reais (positivo). */
-function amountInAccount(tx: PluggyTransaction, account: PluggyAccount): number {
-  const sameCurrency = tx.currencyCode.toUpperCase() === account.currencyCode.toUpperCase();
-  const value = !sameCurrency && typeof tx.amountInAccountCurrency === "number" ? tx.amountInAccountCurrency : tx.amount;
-  return Math.abs(value);
+/** Valor do registro na moeda da conta (positivo), ou null se a fonte não informar. */
+function amountInAccount(tx: PluggyTransaction, account: PluggyAccount): number | null {
+  if (tx.currencyCode.toUpperCase() === account.currencyCode.toUpperCase()) return Math.abs(tx.amount);
+  return typeof tx.amountInAccountCurrency === "number" ? Math.abs(tx.amountInAccountCurrency) : null;
 }
 
 /** Mapeia todas as contas e aplica as regras de lote do item inteiro. */
@@ -274,6 +273,8 @@ interface BillCheck {
   debits: number;
   credits: number;
   residual: number | null;
+  /** Registros da fatura sem valor na moeda da conta, deixados fora da soma. */
+  skipped: number;
 }
 
 /**
@@ -282,21 +283,22 @@ interface BillCheck {
  */
 export function billChecks(data: ProbeAccountData): BillCheck[] {
   const bills = [...(data.bills ?? [])].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const sums = new Map<string, { debits: number; credits: number }>();
+  const sums = new Map<string, { debits: number; credits: number; skipped: number }>();
   for (const tx of data.transactions ?? []) {
     const billId = tx.creditCardMetadata?.billId;
     if (!billId) continue;
-    const sum = sums.get(billId) ?? { debits: 0, credits: 0 };
+    const sum = sums.get(billId) ?? { debits: 0, credits: 0, skipped: 0 };
     const value = amountInAccount(tx, data.account);
-    if (tx.type === "DEBIT") sum.debits += value;
+    if (value === null) sum.skipped++;
+    else if (tx.type === "DEBIT") sum.debits += value;
     else sum.credits += value;
     sums.set(billId, sum);
   }
   return bills.map((bill, index) => {
-    const sum = sums.get(bill.id) ?? { debits: 0, credits: 0 };
+    const sum = sums.get(bill.id) ?? { debits: 0, credits: 0, skipped: 0 };
     const previous = index > 0 ? bills[index - 1].totalAmount : null;
     const residual = previous === null ? null : bill.totalAmount - previous - sum.debits + sum.credits;
-    return { dueDate: bill.dueDate, total: bill.totalAmount, debits: sum.debits, credits: sum.credits, residual };
+    return { dueDate: bill.dueDate, total: bill.totalAmount, debits: sum.debits, credits: sum.credits, residual, skipped: sum.skipped };
   });
 }
 
@@ -327,6 +329,7 @@ function billSection(data: ProbeAccountData, detailed: boolean): string[] {
   lines.push("", "Conferência: total(n) = total(n−1) + débitos(n) − créditos(n) + resíduo(n), tolerância R$ 0,05.");
   lines.push(...counterTable("Sinal do resíduo", signs));
   lines.push("- primeira fatura sem anterior para comparar: 1");
+  lines.push("- registros sem valor na moeda da conta, fora da conferência: " + checks.reduce((total, check) => total + check.skipped, 0));
   if (detailed) {
     lines.push("", "| Vencimento | Total | Débitos | Créditos | Resíduo |", "|---|---|---|---|---|");
     for (const check of checks) {

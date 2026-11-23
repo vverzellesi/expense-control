@@ -23,6 +23,8 @@ describe("compileExcludePatterns", () => {
       { pattern: "/(a)\\1/", action: "exclude" }, // referência para trás
       { pattern: "/.*.*Z/", action: "exclude" }, // dois quantificadores ilimitados
       { pattern: "/A+B{3,}/", action: "exclude" },
+      { pattern: "/[a-z ]{0,500}[a-z ]{0,500}Z/", action: "exclude" }, // quantificadores limitados em sequência
+      { pattern: "/a?b?c/", action: "exclude" },
       { pattern: "x".repeat(201), action: "exclude" },
       { pattern: "   ", action: "exclude" },
       { pattern: "ok", accountType: "INVESTMENT", action: "exclude" },
@@ -31,7 +33,17 @@ describe("compileExcludePatterns", () => {
       "string solta",
     ]);
     expect(compiled.matchers.map((m) => m.action)).toEqual(["exclude", "transfer"]);
-    expect(compiled.rejected).toBe(14);
+    expect(compiled.rejected).toBe(16);
+  });
+
+  it("aceita um único quantificador, grupo não capturante e modo preguiçoso", () => {
+    const compiled = compileExcludePatterns([
+      { pattern: "/(?:LOJA) TESTE+/", action: "exclude" },
+      { pattern: "/LOJA.+?TESTE/", action: "exclude" },
+      { pattern: "/^[0-9]{4} LOJA/", action: "exclude" },
+    ]);
+    expect(compiled.rejected).toBe(0);
+    expect(matchUserPattern("LOJA X TESTE", "BANK", compiled)).toBe("exclude");
   });
 
   it("entrada que não é lista vira lista vazia", () => {
@@ -137,6 +149,18 @@ describe("classifyPluggyTransaction", () => {
         reasonCode: "carryover",
       });
     }
+  });
+
+  it("operationType PAGAMENTO_FATURA vence o texto de rotativo; conta corrente não tem rotativo", () => {
+    for (const description of ["PAGAMENTO MINIMO", "PARCELAMENTO DE FATURA"]) {
+      expect(card(description, "PAGAMENTO_FATURA").preDisposition).toEqual({
+        disposition: "excluded",
+        reasonCode: "bill_payment_credit",
+      });
+    }
+    expect(
+      classifyPluggyTransaction({ accountType: "BANK", direction: "DEBIT", description: "PAGAMENTO MINIMO FATURA" }, none).preDisposition
+    ).toBeNull();
   });
 
   it("padrão do usuário: exclude exclui, transfer vira TRANSFER sem destino prévio", () => {
@@ -257,6 +281,31 @@ describe("applyBatchRules - estorno integral de tarifa", () => {
     ];
     expect(reasons(applyBatchRules(list))).toEqual([null, "offsetting_refund", "offsetting_refund"]);
   });
+
+  it("estorno fica com a tarifa mais próxima, mesmo que outra tarifa venha antes", () => {
+    const list = [
+      fee("bank_test_1", { sourceDate: "2026-01-05" }),
+      fee("bank_test_1", { sourceDate: "2026-02-05" }),
+      feeRefund("bank_test_1", { sourceDate: "2026-02-06" }),
+    ];
+    const result = applyBatchRules(list);
+    expect(reasons(result)).toEqual([null, "offsetting_refund", "offsetting_refund"]);
+    expect(result[1].preDisposition).not.toBe(result[2].preDisposition);
+  });
+
+  it("só estorno explícito anula tarifa (cashback e devolução não)", () => {
+    const list = [
+      fee("card_test_1"),
+      feeRefund("card_test_1", { description: "CASHBACK EXEMPLO" }),
+      feeRefund("card_test_1", { description: "ESTORNO TARIFA EXEMPLO" }, ),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual(["offsetting_refund", null, "offsetting_refund"]);
+    const withOperationType = [
+      fee("card_test_1"),
+      entry("card_test_1", { description: "AJUSTE EXEMPLO", amountCents: 2990, direction: "CREDIT", type: "INCOME", creditKind: "refund" }, { operationType: "ESTORNO" }),
+    ];
+    expect(reasons(applyBatchRules(withOperationType))).toEqual(["offsetting_refund", "offsetting_refund"]);
+  });
 });
 
 describe("applyBatchRules - débito do pagamento de fatura", () => {
@@ -275,6 +324,19 @@ describe("applyBatchRules - débito do pagamento de fatura", () => {
       bankDebit({ sourceDate: "2026-03-10", amountCents: 150001 }),
     ];
     expect(reasons(applyBatchRules(list))).toEqual(["bill_payment_credit", null, null, null]);
+  });
+
+  it("item ausente não pareia", () => {
+    const list = [billCredit({ sourceDate: "2026-03-10" }), bankDebit({ sourceDate: "2026-03-10" }, { itemId: "" })];
+    expect(reasons(applyBatchRules(list))).toEqual(["bill_payment_credit", null]);
+  });
+
+  it("crédito de pagamento pendente (importPending desligado) ainda exclui o débito da conta", () => {
+    const list = [
+      billCredit({ sourceStatus: "PENDING", preDisposition: { disposition: "pending", reasonCode: "pending" } }),
+      bankDebit(),
+    ];
+    expect(reasons(applyBatchRules(list))).toEqual(["pending", "bill_payment_debit"]);
   });
 
   it("um para um com valores repetidos: dois créditos e três débitos excluem só dois", () => {
