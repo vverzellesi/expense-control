@@ -16,6 +16,7 @@ CREATE TABLE "PluggyAccountLink" (
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "lastSuccessfulSyncAt" TIMESTAMP(3),
     "replacesAccountLinkId" TEXT,
+    "cutoffBillDueDate" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -45,6 +46,7 @@ CREATE TABLE "PluggyTransactionLink" (
     "totalInstallments" INTEGER,
     "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "lastSeenAt" TIMESTAMP(3) NOT NULL,
+    "systemDeletedAt" TIMESTAMP(3),
 
     CONSTRAINT "PluggyTransactionLink_pkey" PRIMARY KEY ("id")
 );

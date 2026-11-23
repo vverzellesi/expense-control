@@ -42,15 +42,23 @@ async function linkOf(externalId: string, accountLinkId = owner.accountLinkId) {
   return db.pluggyTransactionLink.findUnique({ where: { accountLinkId_externalId: { accountLinkId, externalId } } });
 }
 
-async function reconcile(seen: string[], o: Owner = owner, accountLinkId = o.accountLinkId) {
+type Processed = Awaited<ReturnType<typeof applyBatch>>;
+
+async function reconcile(processed: Processed, o: Owner = owner) {
   return reconcileUnseenLinks(db, {
     mode: "apply",
     ownerUserId: o.userId,
-    accountLinkId,
-    seenExternalIds: seen,
+    accountLinkId: processed.accountLinkId,
+    processed,
     readFrom: "2026-01-01",
     leaseToken: await testLease(db, o.userId),
   });
+}
+
+/** Leitura completa com só estes registros, seguida do reconcile. */
+async function readAndReconcile(records: Parameters<typeof applyBatch>[2], o: Owner = owner) {
+  const processed = await applyBatch(db, o, records);
+  return { processed, reconciled: await reconcile(processed, o) };
 }
 
 const pendingPre = { disposition: "pending" as const, reasonCode: "pending" };
@@ -93,7 +101,7 @@ describe("criação e idempotência", () => {
     expect(r2.counts).toMatchObject({ adopted: 4, created: 0 });
     expect(r2.results.every((x) => x.reasonCode === "recreated_match")).toBe(true);
     expect(new Set(r2.results.map((x) => x.transactionId))).toEqual(oldTx);
-    expect(await reconcile(ids)).toMatchObject({ missingUpstream: 0, provisionalVanished: 0 });
+    expect(await reconcile(r2)).toMatchObject({ missingUpstream: 0, provisionalVanished: 0 });
     expect(await activeTxs()).toHaveLength(4);
   });
 });
@@ -164,32 +172,217 @@ describe("pendentes do cartão e atualização a partir da fonte", () => {
       rec({ externalId: "lost", description: "OUTRA LOJA" }),
     ]);
     expect(await db.transaction.count({ where: { deletedAt: null } })).toBe(6);
+    const simulated = await simulateBatch(db, owner, [rec({ externalId: "keep" })]);
     const sim = await reconcileUnseenLinks(db, {
       mode: "simulate",
       ownerUserId: owner.userId,
       accountLinkId: owner.accountLinkId,
-      seenExternalIds: ["keep"],
+      processed: simulated,
       readFrom: "2026-01-01",
     });
-    expect(sim).toMatchObject({ missingUpstream: 1, provisionalVanished: 2 });
+    expect(sim).toMatchObject({ missingUpstream: 1, provisionalVanished: 2, provisionalTransactionsDeleted: 4 });
     expect(await db.transaction.count({ where: { deletedAt: null } })).toBe(6);
 
-    const r = await reconcile(["keep"]);
-    expect(r).toMatchObject({ missingUpstream: 1, missingByDisposition: { created: 1 }, provisionalVanished: 2 });
-    expect(r.provisionalTransactionsDeleted).toBe(4);
+    const { reconciled: r } = await readAndReconcile([rec({ externalId: "keep" })]);
+    expect(r).toEqual(sim);
     expect(await linkOf("gone_p")).toMatchObject({ disposition: "superseded", reasonCode: "provisional_vanished" });
     expect((await activeTxs()).map((t) => t.description).sort()).toEqual(["LOJA EXEMPLO", "OUTRA LOJA"]);
   });
 
   it("destino pending (opção desligada) que some vira needs_review / pending_vanished", async () => {
     await applyBatch(db, owner, [rec({ externalId: "keep" }), pending({ externalId: "gone" })], { importPending: false });
-    const r = await reconcile(["keep"]);
+    const r = await reconcile(await applyBatch(db, owner, [rec({ externalId: "keep" })], { importPending: false }));
     expect(r.pendingVanished).toBe(1);
     expect(await linkOf("gone")).toMatchObject({ disposition: "needs_review", reasonCode: "pending_vanished" });
   });
 });
 
+describe("provisório que some e volta (P1 da revisão)", () => {
+  const pv = (o: Partial<Parameters<typeof rec>[0]> = {}) =>
+    rec({ externalId: "pv", sourceStatus: "PENDING", preDisposition: pendingPre, ...o });
+
+  it("volta com o mesmo id: a transação apagada pelo sistema é restaurada", async () => {
+    const r1 = await applyBatch(db, owner, [rec({ externalId: "keep" }), pv()]);
+    const id = byExternalId(r1.results).pv.transactionId as string;
+    await readAndReconcile([rec({ externalId: "keep" })]);
+    expect((await db.transaction.findUniqueOrThrow({ where: { id } })).deletedAt).not.toBeNull();
+
+    const back = await applyBatch(db, owner, [rec({ externalId: "keep" }), pv({ sourceStatus: "POSTED" })]);
+    expect(byExternalId(back.results).pv).toMatchObject({ outcome: "restored", transactionId: id });
+    expect((await db.transaction.findUniqueOrThrow({ where: { id } })).deletedAt).toBeNull();
+    expect(await linkOf("pv")).toMatchObject({ disposition: "created", systemDeletedAt: null });
+    expect(await activeTxs()).toHaveLength(2);
+  });
+
+  it("volta com id novo e a mesma chave: cria de novo (não religa na transação apagada)", async () => {
+    await applyBatch(db, owner, [rec({ externalId: "keep" }), pv()]);
+    await readAndReconcile([rec({ externalId: "keep" })]);
+    const back = await applyBatch(db, owner, [rec({ externalId: "keep" }), pv({ externalId: "pv_new" })]);
+    expect(byExternalId(back.results).pv_new.outcome).toBe("created");
+    expect(await activeTxs()).toHaveLength(2);
+  });
+
+  it("apagada pelo usuário depois não é restaurada", async () => {
+    const r1 = await applyBatch(db, owner, [rec({ externalId: "keep" }), pv()]);
+    const id = byExternalId(r1.results).pv.transactionId as string;
+    await readAndReconcile([rec({ externalId: "keep" })]);
+    await db.transaction.update({ where: { id }, data: { deletedAt: new Date(Date.now() + 1000) } });
+    const back = await applyBatch(db, owner, [rec({ externalId: "keep" }), pv()]);
+    expect(byExternalId(back.results).pv.outcome).toBe("restored");
+    expect((await db.transaction.findUniqueOrThrow({ where: { id } })).deletedAt).not.toBeNull();
+  });
+
+  it("reconcile exige o resultado completo do lote da mesma conta", async () => {
+    const r = await applyBatch(db, owner, [rec({ externalId: "keep" })]);
+    await expect(
+      reconcileUnseenLinks(db, {
+        mode: "apply",
+        ownerUserId: owner.userId,
+        accountLinkId: owner.accountLinkId,
+        processed: { ...r, complete: false },
+        readFrom: "2026-01-01",
+        leaseToken: await testLease(db, owner.userId),
+      })
+    ).rejects.toMatchObject({ code: "reconcile_requires_processed_batch" });
+  });
+
+  it("vínculo cuja transação foi apagada de vez não deixa um id novo recriar o lançamento", async () => {
+    const r1 = await applyBatch(db, owner, [rec({ externalId: "h1" })]);
+    await db.transaction.delete({ where: { id: r1.results[0].transactionId as string } });
+    const r2 = await applyBatch(db, owner, [rec({ externalId: "h2" })]);
+    expect(r2.results[0]).toMatchObject({ outcome: "needs_review", reasonCode: "linked_transaction_deleted" });
+    expect(await db.transaction.count()).toBe(0);
+  });
+});
+
+describe("reclassificação tardia pelas regras de lote", () => {
+  const debit = (o: Partial<Parameters<typeof rec>[0]> = {}) =>
+    rec({ externalId: "pay_debit", accountType: "BANK", description: "PAGAMENTO EXEMPLO", amountCents: 50000, ...o });
+  const excludedLater = { preDisposition: { disposition: "excluded" as const, reasonCode: "bill_payment_debit" } };
+
+  it("created intocado que passa a excluded sofre soft delete e muda o vínculo", async () => {
+    const r1 = await applyBatch(db, owner, [debit()]);
+    const id = r1.results[0].transactionId as string;
+    const r2 = await applyBatch(db, owner, [debit(excludedLater)]);
+    expect(r2.results[0]).toMatchObject({ outcome: "excluded", reasonCode: "bill_payment_debit", reclassifiedExcluded: true });
+    expect(r2.reclassifiedExcluded).toBe(1);
+    expect((await db.transaction.findUniqueOrThrow({ where: { id } })).deletedAt).not.toBeNull();
+    expect(await linkOf("pay_debit")).toMatchObject({ disposition: "excluded", reasonCode: "bill_payment_debit", transactionId: id });
+    const r3 = await applyBatch(db, owner, [debit(excludedLater)]);
+    expect(r3.results[0].outcome).toBe("excluded");
+    expect(r3.reclassifiedExcluded).toBe(0);
+  });
+
+  it("editada (valor) ou com categoria manual: só divergence, nada muda", async () => {
+    const r1 = await applyBatch(db, owner, [debit(), debit({ externalId: "fee", description: "TARIFA EXEMPLO", amountCents: 1990 })]);
+    const res = byExternalId(r1.results);
+    await db.transaction.update({ where: { id: res.pay_debit.transactionId as string }, data: { amount: -499 } });
+    const cat = await db.category.create({ data: { name: "Tarifas", color: "#999", userId: owner.userId } });
+    await db.transaction.update({ where: { id: res.fee.transactionId as string }, data: { categoryId: cat.id, categorySource: "manual" } });
+    const r2 = await applyBatch(db, owner, [
+      debit(excludedLater),
+      debit({ externalId: "fee", description: "TARIFA EXEMPLO", amountCents: 1990, preDisposition: { disposition: "excluded", reasonCode: "offsetting_refund" } }),
+    ]);
+    expect(r2.results.every((x) => x.outcome === "unchanged" && x.divergence)).toBe(true);
+    expect(await activeTxs()).toHaveLength(2);
+    expect((await linkOf("fee"))?.disposition).toBe("created");
+  });
+
+  it("excluded que deixa de ser vira needs_review / exclusion_reverted, sem criar nada", async () => {
+    await applyBatch(db, owner, [debit(excludedLater)]);
+    expect(await db.transaction.count()).toBe(0);
+    const r2 = await applyBatch(db, owner, [debit()]);
+    expect(r2.results[0]).toMatchObject({ outcome: "needs_review", reasonCode: "exclusion_reverted" });
+    const r3 = await applyBatch(db, owner, [debit()]);
+    expect(r3.results[0]).toMatchObject({ outcome: "needs_review", reasonCode: "exclusion_reverted" });
+    expect(await db.transaction.count()).toBe(0);
+    const r4 = await applyBatch(db, owner, [debit(excludedLater)]);
+    expect(r4.results[0].outcome).toBe("excluded");
+  });
+});
+
+describe("corte do cartão por fatura", () => {
+  const bills = { bill_old: "2026-03-10", bill_new: "2026-04-10" };
+  beforeEach(async () => {
+    await db.pluggyAccountLink.update({
+      where: { id: owner.accountLinkId },
+      data: { cutoffBillDueDate: new Date("2026-03-10T03:00:00.000Z"), syncFrom: new Date("2026-03-01T03:00:00.000Z") },
+    });
+  });
+
+  it("fatura até o corte → before_cutoff; ciclo aberto ou fatura posterior seguem; fatura desconhecida → revisão", async () => {
+    const r = await applyBatch(
+      db,
+      owner,
+      [
+        rec({ externalId: "b_old", billId: "bill_old", sourceDate: "2026-03-05", description: "NA FATURA ANTIGA" }),
+        rec({ externalId: "b_new", billId: "bill_new", sourceDate: "2026-02-27", description: "DATA ANTIGA FATURA NOVA" }),
+        rec({ externalId: "b_open", billId: null, sourceDate: "2026-02-20", sourceStatus: "PENDING", description: "CICLO ABERTO" }),
+        rec({ externalId: "b_unknown", billId: "bill_x", description: "FATURA DESCONHECIDA" }),
+      ],
+      { billDueDates: bills }
+    );
+    const res = byExternalId(r.results);
+    expect(res.b_old).toMatchObject({ outcome: "before_cutoff", reasonCode: "before_cutoff_bill" });
+    expect(res.b_new.outcome).toBe("created");
+    expect(res.b_open.outcome).toBe("created");
+    expect(res.b_unknown).toMatchObject({ outcome: "needs_review", reasonCode: "unknown_bill" });
+    expect((await activeTxs()).map((t) => t.description).sort()).toEqual(["CICLO ABERTO", "DATA ANTIGA FATURA NOVA"]);
+  });
+
+  it("registro posterior ao corte ainda adota a projeção legada do PDF", async () => {
+    const { txs } = await createLegacyInstallments(db, owner, {
+      description: "LOJA PARCELADA",
+      amount: 60,
+      total: 4,
+      startDay: "2026-01-15",
+      items: [{ number: 3, day: "2026-03-15" }],
+    });
+    const r = await applyBatch(
+      db,
+      owner,
+      [rec({ externalId: "inst3", billId: "bill_new", description: "LOJA PARCELADA", amountCents: 6000, installmentNumber: 3, totalInstallments: 4, sourceDate: "2026-03-20", ledgerDate: "2026-03-15", purchaseDate: "2026-01-15" })],
+      { billDueDates: bills }
+    );
+    expect(r.results[0]).toMatchObject({ outcome: "adopted", reasonCode: "installment_projection", transactionId: txs[0].id });
+  });
+
+  it("conta sem corte por fatura continua com syncFrom por data", async () => {
+    await db.pluggyAccountLink.update({ where: { id: owner.accountLinkId }, data: { cutoffBillDueDate: null } });
+    const r = await applyBatch(db, owner, [rec({ externalId: "d1", billId: "bill_new", sourceDate: "2026-02-27" })], { billDueDates: bills });
+    expect(r.results[0]).toMatchObject({ outcome: "before_cutoff", reasonCode: "before_sync_from" });
+  });
+});
+
 describe("parcelas", () => {
+  it("duas compras parceladas idênticas viram dois grupos", async () => {
+    const base = { description: "LOJA EXEMPLO", amountCents: 3000, installmentNumber: 1, totalInstallments: 3, purchaseDate: "2026-03-10" };
+    const r = await applyBatch(db, owner, [rec({ ...base, externalId: "i_a" }), rec({ ...base, externalId: "i_b" })]);
+    expect(r.counts.created).toBe(2);
+    expect(await db.installment.count()).toBe(2);
+    expect(await activeTxs()).toHaveLength(6);
+  });
+
+  it("projeção adotada com data deslocada passa à data da fonte e aceita atualização depois", async () => {
+    const { txs } = await createLegacyInstallments(db, owner, {
+      description: "LOJA EXEMPLO",
+      amount: 50,
+      total: 5,
+      startDay: "2026-01-15",
+      items: [{ number: 2, day: "2026-02-15" }],
+    });
+    const base = { description: "LOJA EXEMPLO", installmentNumber: 2, totalInstallments: 5, sourceDate: "2026-02-20", ledgerDate: "2026-02-17", purchaseDate: "2026-01-17" };
+    await applyBatch(db, owner, [rec({ ...base, externalId: "s2", amountCents: 5000 })]);
+    expect((await db.transaction.findUniqueOrThrow({ where: { id: txs[0].id } })).date.toISOString().slice(0, 10)).toBe("2026-02-17");
+    const r = await applyBatch(db, owner, [rec({ ...base, externalId: "s2", amountCents: 5010 })]);
+    expect(r.results[0]).toMatchObject({ outcome: "updated", divergence: false });
+  });
+
+  it("moeda que não é BRL vai para revisão mesmo sem destino prévio", async () => {
+    const r = await applyBatch(db, owner, [rec({ externalId: "fx", currencyCode: "USD" })]);
+    expect(r.results[0]).toMatchObject({ outcome: "needs_review", reasonCode: "foreign_currency" });
+  });
+
   it("parcela 2/10 adota a projeção existente e corrige o valor para o da fonte", async () => {
     const { txs } = await createLegacyInstallments(db, owner, {
       description: "LOJA EXEMPLO",
@@ -478,7 +671,7 @@ describe("recriados e linhagem", () => {
     await applyBatch(db, other, [rec({ externalId: "a1" }), rec({ externalId: "a2" })]);
     const r3 = await applyBatch(db, other, [rec({ externalId: "a3" })]);
     expect(r3.results[0]).toMatchObject({ outcome: "adopted", reasonCode: "recreated_match" });
-    expect(await reconcile(["a3"], other)).toMatchObject({ missingUpstream: 1 });
+    expect(await reconcile(r3, other)).toMatchObject({ missingUpstream: 1 });
     expect(await activeTxs(other)).toHaveLength(2);
   });
 
@@ -691,4 +884,5 @@ describe("custo de uma execução sem novidades", () => {
     }
   });
 });
+
 

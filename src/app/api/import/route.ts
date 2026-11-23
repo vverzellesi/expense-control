@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
     }
     const { origin } = parsed.data;
 
-    // categoryId só vale se a categoria for do usuário ou do espaço ativo
-    // (mesmo critério da listagem de categorias); o resto é descartado.
+    // categoryId só vale se a categoria for pessoal do usuário ou do espaço ativo
+    // (a tela de importação lista as categorias do contexto ativo); o resto é descartado.
     const requestedCategoryIds = Array.from(
       new Set(parsed.data.transactions.map((t) => t.categoryId).filter((id): id is string => !!id))
     );
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
             await prisma.category.findMany({
               where: {
                 id: { in: requestedCategoryIds },
-                OR: [ctx.ownerFilter, { userId: ctx.userId }],
+                OR: [{ userId: ctx.userId, spaceId: null }, ...(ctx.spaceId ? [{ spaceId: ctx.spaceId }] : [])],
               },
               select: { id: true },
             })

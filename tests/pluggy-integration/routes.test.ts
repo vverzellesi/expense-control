@@ -112,6 +112,18 @@ describe("/api/import", () => {
     expect((await db.transaction.findFirstOrThrow()).categoryId).toBe(spaceCat.id);
   });
 
+  it("descarta categoria do usuário que pertence a outro espaço (não ativo)", async () => {
+    const space = await db.space.create({ data: { name: "Outro Espaço", createdBy: owner.userId } });
+    const otherSpaceCat = await db.category.create({ data: { name: "De Outro Espaço", color: "#444", userId: owner.userId, spaceId: space.id } });
+    const res = await importPOST(
+      jsonRequest("/api/import", "POST", {
+        transactions: [{ description: "COMPRA", amount: 5, date: "2026-02-10", categoryId: otherSpaceCat.id }],
+      })
+    );
+    expect(res.status).toBe(201);
+    expect((await db.transaction.findFirstOrThrow()).categoryId).toBeNull();
+  });
+
   it("rejeita corpo inválido", async () => {
     const res = await importPOST(jsonRequest("/api/import", "POST", { transactions: [{ description: "X", amount: "dez" }] }));
     expect(res.status).toBe(400);

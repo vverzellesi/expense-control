@@ -277,6 +277,7 @@ erDiagram
         boolean enabled
         datetime lastSuccessfulSyncAt
         string replacesAccountLinkId FK "reconexão, UK"
+        datetime cutoffBillDueDate "cartão: corte por fatura"
     }
 
     PluggyTransactionLink {
@@ -296,6 +297,7 @@ erDiagram
         int installmentNumber
         int totalInstallments
         datetime lastSeenAt
+        datetime systemDeletedAt "soft delete feito pelo sistema"
     }
 
     PluggySyncRun {

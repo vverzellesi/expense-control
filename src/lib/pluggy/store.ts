@@ -7,6 +7,7 @@ import {
   type PluggyDbClient,
   type PluggyTxClient,
 } from "./lease";
+import type { MappedPluggyTransaction } from "./types";
 
 /**
  * Persistência e decisão da integração Pluggy.
@@ -24,32 +25,8 @@ import {
 // Tipos de entrada
 // ---------------------------------------------------------------------------
 
-/**
- * Registro mapeado (fronteira mapeamento → persistência). Mesmo formato de
- * MappedPluggyTransaction do contrato; declarado aqui por tipagem estrutural.
- */
-export interface PluggyStoreRecord {
-  externalId: string;
-  providerId: string | null;
-  accountType: "BANK" | "CREDIT";
-  sourceStatus: "PENDING" | "POSTED";
-  sourceDate: string; // YYYY-MM-DD (America/Sao_Paulo)
-  purchaseDate: string | null; // YYYY-MM-DD
-  ledgerDate: string; // vai para Transaction.date
-  description: string;
-  amountCents: number; // inteiro positivo
-  currencyCode: string;
-  direction: "DEBIT" | "CREDIT";
-  type: "EXPENSE" | "INCOME" | "TRANSFER";
-  creditKind: "refund" | "bill_payment" | "other" | "unknown" | null;
-  billId: string | null;
-  installmentNumber: number | null;
-  totalInstallments: number | null;
-  preDisposition: null | {
-    disposition: "excluded" | "needs_review" | "pending";
-    reasonCode: string;
-  };
-}
+/** Registro mapeado (fronteira mapeamento → persistência), definido em ./types. */
+export type PluggyStoreRecord = MappedPluggyTransaction;
 
 export type LinkDisposition =
   | "created"
@@ -62,9 +39,10 @@ export type LinkDisposition =
 
 /**
  * Destino do registro nesta execução. "unchanged" = já contabilizado antes;
- * "updated" = já contabilizado e a transação local foi atualizada a partir da fonte.
+ * "updated" = já contabilizado e a transação local foi atualizada a partir da fonte;
+ * "restored" = provisório que tinha sumido voltou e o lançamento foi restaurado.
  */
-export type RecordOutcome = Exclude<LinkDisposition, "superseded"> | "unchanged" | "updated";
+export type RecordOutcome = Exclude<LinkDisposition, "superseded"> | "unchanged" | "updated" | "restored";
 
 export class PluggyStoreError extends Error {
   // A mensagem é só o código: nunca ids, descrições ou valores.
@@ -218,15 +196,20 @@ export interface LinkRow {
   creditKind: string | null;
   installmentNumber: number | null;
   totalInstallments: number | null;
+  /** Carimbo do soft delete feito pelo sistema na transação vinculada. */
+  systemDeletedAt: Date | null;
 }
 
 export interface TxRow {
   id: string;
   description: string;
   cents: number; // com sinal
-  /** Valor bruto gravado (para a atualização condicional). */
+  /** Valor e data brutos gravados (para a atualização condicional). */
   amount: number;
+  date: Date;
   day: string;
+  categorySource: string | null;
+  deletedAt: Date | null;
   origin: string;
   isInstallment: boolean;
   currentInstallment: number | null;
@@ -329,6 +312,7 @@ const TX_SELECT = {
   totalInstallments: true,
   installmentId: true,
   deletedAt: true,
+  categorySource: true,
   recurringExpenseId: true,
   createdAt: true,
   installment: { select: { startDate: true, userId: true, spaceId: true } },
@@ -344,7 +328,10 @@ function toTxRow(t: TxSelected, ownerUserId: string): TxRow {
     description: t.description,
     cents: amountToCents(t.amount),
     amount: t.amount,
+    date: t.date,
     day: businessDayKey(t.date),
+    categorySource: t.categorySource,
+    deletedAt: t.deletedAt,
     origin: t.origin,
     isInstallment: t.isInstallment,
     currentInstallment: t.currentInstallment,
@@ -382,6 +369,7 @@ function toLinkRow(l: LinkRecordDb): LinkRow {
     creditKind: l.creditKind,
     installmentNumber: l.installmentNumber,
     totalInstallments: l.totalInstallments,
+    systemDeletedAt: l.systemDeletedAt,
   };
 }
 
@@ -627,7 +615,10 @@ export function createDecisionView(source: DecisionSource, overlay: SimulationOv
 export interface AccountContext {
   ownerUserId: string;
   accountLinkId: string;
+  accountType: string;
   syncFromDay: string;
+  /** Cartão: vencimento da última fatura importada por PDF (corte por fatura), ou null. */
+  cutoffBillDueDay: string | null;
   originName: string;
   /** Conta atual primeiro, depois as que ela substitui. */
   lineageIds: string[];
@@ -647,7 +638,14 @@ export async function loadAccountContext(
   accountLinkId: string
 ): Promise<AccountContext> {
   if (!ownerUserId) throw new PluggyStoreError("owner_not_configured");
-  const chain: Array<{ id: string; syncFrom: Date; enabled: boolean; originName: string }> = [];
+  const chain: Array<{
+    id: string;
+    syncFrom: Date;
+    enabled: boolean;
+    originName: string;
+    accountType: string;
+    cutoffBillDueDate: Date | null;
+  }> = [];
   const visited = new Set<string>();
   let nextId: string | null = accountLinkId;
   while (nextId) {
@@ -660,7 +658,14 @@ export async function loadAccountContext(
     if (link.origin.userId !== ownerUserId || link.origin.spaceId !== null) {
       throw new PluggyStoreError("origin_not_personal");
     }
-    chain.push({ id: link.id, syncFrom: link.syncFrom, enabled: link.enabled, originName: link.origin.name });
+    chain.push({
+      id: link.id,
+      syncFrom: link.syncFrom,
+      enabled: link.enabled,
+      originName: link.origin.name,
+      accountType: link.accountType,
+      cutoffBillDueDate: link.cutoffBillDueDate,
+    });
     nextId = link.replacesAccountLinkId;
   }
   const current = chain[0];
@@ -668,7 +673,9 @@ export async function loadAccountContext(
   return {
     ownerUserId,
     accountLinkId: current.id,
+    accountType: current.accountType,
     syncFromDay: businessDayKey(current.syncFrom),
+    cutoffBillDueDay: current.cutoffBillDueDate ? businessDayKey(current.cutoffBillDueDate) : null,
     originName: current.originName,
     lineageIds: chain.map((c) => c.id),
     originNames: Array.from(new Set(chain.map((c) => c.originName))),
@@ -722,6 +729,8 @@ export function matchPersonalRecurring(
 // ---------------------------------------------------------------------------
 
 export const NEW_TRANSACTION = "__new_transaction__";
+/** Prefixo, no pareamento, de um vínculo cuja transação foi apagada de vez. */
+export const TOMBSTONE_PREFIX = "tomb:";
 export const INSTALLMENT_DATE_TOLERANCE_DAYS = 3;
 
 export interface TransactionPlan {
@@ -757,6 +766,12 @@ export interface DecisionPlan {
   updateTransaction: TransactionUpdate | null;
   /** A adoção corrigiu o valor de uma projeção para o valor da fonte. */
   projectionAmountCorrected: boolean;
+  /** Reclassificação tardia: soft delete (pelo sistema) da transação intocada. */
+  softDelete: null | { transactionId: string; expectAmount: number; expectDate: Date };
+  /** Provisório que voltou: desfaz o soft delete feito pelo sistema (mesmo carimbo). */
+  restore: null | { transactionId: string; systemDeletedAt: Date; installmentId: string | null };
+  /** Registro antes "created" que a fonte passou a excluir (reclassified_excluded). */
+  reclassified: boolean;
   /** Vínculo a gravar (novo, ou reaproveitado quando reuseLinkId). */
   link: null | { reuseLinkId: string | null; transactionId: string | null };
   supersedeLinkIds: string[];
@@ -768,6 +783,7 @@ export interface TransactionUpdate {
   cents: number;
   day: string;
   expectAmount: number;
+  expectDate: Date;
   expectDay: string;
 }
 
@@ -778,6 +794,28 @@ export interface BatchFacts {
   recreatedPairs: Map<string, string>;
   /** Pendentes do cartão entram como lançamento provisório (padrão ligado). */
   importPending: boolean;
+  /** Cartão: billId → vencimento da fatura (YYYY-MM-DD), para o corte por fatura. */
+  billDueDates: Map<string, string>;
+}
+
+/**
+ * Corte (passo 4). Cartão com cutoffBillDueDate: vale a fatura — billId com
+ * vencimento até o corte → before_cutoff; sem billId (ciclo aberto) ou fatura
+ * posterior → segue, qualquer que seja a data; billId fora do mapa →
+ * needs_review / unknown_bill. Sem corte por fatura: ledgerDate antes de syncFrom.
+ */
+export function cutoffDecision(
+  record: Pick<PluggyStoreRecord, "billId" | "ledgerDate">,
+  ctx: Pick<AccountContext, "accountType" | "cutoffBillDueDay" | "syncFromDay">,
+  billDueDates: Map<string, string>
+): null | { disposition: "before_cutoff" | "needs_review"; reasonCode: string } {
+  if (ctx.accountType === "CREDIT" && ctx.cutoffBillDueDay) {
+    if (!record.billId) return null;
+    const due = billDueDates.get(record.billId);
+    if (!due) return { disposition: "needs_review", reasonCode: "unknown_bill" };
+    return due <= ctx.cutoffBillDueDay ? { disposition: "before_cutoff", reasonCode: "before_cutoff_bill" } : null;
+  }
+  return record.ledgerDate < ctx.syncFromDay ? { disposition: "before_cutoff", reasonCode: "before_sync_from" } : null;
 }
 
 /** Chave de religação por campos: dia do lançamento + centavos + direção + descrição normalizada + N/T. */
@@ -806,7 +844,7 @@ export function linkRecreationKey(l: LinkRow): string {
 }
 
 function linkOnly(
-  outcome: Exclude<RecordOutcome, "unchanged" | "updated">,
+  outcome: Exclude<RecordOutcome, "unchanged" | "updated" | "restored">,
   reasonCode: string | null,
   reuseLinkId: string | null,
   supersedeLinkIds: string[],
@@ -822,6 +860,9 @@ function linkOnly(
     refreshSnapshot: false,
     updateTransaction: null,
     projectionAmountCorrected: false,
+    softDelete: null,
+    restore: null,
+    reclassified: false,
     link: { reuseLinkId, transactionId },
     supersedeLinkIds,
     create: null,
@@ -919,9 +960,16 @@ async function findPurchaseGroup(
   const groupIds = Array.from(
     new Set(txs.filter((x) => x.installmentId && x.groupStartDay !== null).map((x) => x.installmentId as string))
   );
-  if (groupIds.length === 0) return { kind: "none" };
-  if (groupIds.length > 1) return { kind: "ambiguous" };
-  return { kind: "one", groupId: groupIds[0], members: await view.groupMembers(groupIds[0]) };
+  // Só serve um grupo da mesma compra que ainda não tenha a parcela N; com
+  // todos já tendo N, é outra compra idêntica e ganha grupo próprio.
+  const open: Array<{ groupId: string; members: TxRow[] }> = [];
+  for (const groupId of groupIds) {
+    const members = await view.groupMembers(groupId);
+    if (!members.some((m) => m.currentInstallment === record.installmentNumber)) open.push({ groupId, members });
+  }
+  if (open.length === 0) return { kind: "none" };
+  if (open.length > 1) return { kind: "ambiguous" };
+  return { kind: "one", groupId: open[0].groupId, members: open[0].members };
 }
 
 async function evaluateFromStep3(
@@ -940,15 +988,25 @@ async function evaluateFromStep3(
   if (pre) {
     return linkOnly(pre.disposition, pre.reasonCode, reuseLinkId, supersedeIds());
   }
-  // 4. corte
-  if (record.ledgerDate < ctx.syncFromDay) {
-    return linkOnly("before_cutoff", "before_sync_from", reuseLinkId, supersedeIds());
+  // Defesa em profundidade: só entra no razão valor em BRL.
+  if (record.currencyCode !== "BRL") {
+    return linkOnly("needs_review", "foreign_currency", reuseLinkId, supersedeIds());
+  }
+  // 4. corte (por fatura no cartão com cutoffBillDueDate; por data nos demais)
+  const cut = cutoffDecision(record, ctx, facts.billDueDates);
+  if (cut) {
+    return linkOnly(cut.disposition, cut.reasonCode, reuseLinkId, supersedeIds());
   }
 
   const cents = signedCents(record);
 
   // 5. registro recriado: par calculado no início do lote, reconferido aqui
   const pairedTxId = facts.recreatedPairs.get(record.externalId);
+  if (pairedTxId?.startsWith(TOMBSTONE_PREFIX)) {
+    // O lançamento local de um registro igual foi apagado de vez: não recriar sozinho.
+    const tombLinkId = pairedTxId.slice(TOMBSTONE_PREFIX.length);
+    return linkOnly("needs_review", "linked_transaction_deleted", reuseLinkId, [...supersedeIds(), tombLinkId]);
+  }
   if (pairedTxId) {
     const aliases = await view.linksOfTransactions([pairedTxId]);
     const present = aliases.some(
@@ -977,9 +1035,17 @@ async function evaluateFromStep3(
     if (r6.kind === "adopt") {
       const plan = linkOnly("adopted", "installment_projection", reuseLinkId, supersedeIds(), r6.transactionId);
       const chosen = candidates.find((c) => c.id === r6.transactionId) as TxRow;
-      if (chosen.cents !== cents) {
-        plan.updateTransaction = { id: chosen.id, cents, day: chosen.day, expectAmount: chosen.amount, expectDay: chosen.day };
-        plan.projectionAmountCorrected = true;
+      // A projeção adotada passa a ter o valor e a data da fonte.
+      if (chosen.cents !== cents || chosen.day !== record.ledgerDate) {
+        plan.updateTransaction = {
+          id: chosen.id,
+          cents,
+          day: record.ledgerDate,
+          expectAmount: chosen.amount,
+          expectDate: chosen.date,
+          expectDay: chosen.day,
+        };
+        plan.projectionAmountCorrected = chosen.cents !== cents;
       }
       return plan;
     }
@@ -1020,13 +1086,11 @@ async function evaluateFromStep3(
     let groupStartDay: string | null = null;
     if (group.kind === "one") {
       const existingNumbers = new Set(group.members.map((m) => m.currentInstallment));
-      if (existingNumbers.has(n)) {
-        return linkOnly("needs_review", "installment_number_exists", reuseLinkId, supersedeIds());
-      }
       reuseGroupId = group.groupId;
       groupStartDay = group.members.find((m) => m.groupStartDay)?.groupStartDay ?? null;
       for (let k = n + 1; k <= t; k++) if (!existingNumbers.has(k)) projectionNumbers.push(k);
     } else if (n < t) {
+      // Sem grupo da mesma compra ainda sem a parcela N: compra nova (inclusive idêntica a outra).
       newGroupStartDay = record.purchaseDate ?? record.ledgerDate;
       groupStartDay = newGroupStartDay;
       for (let k = n + 1; k <= t; k++) projectionNumbers.push(k);
@@ -1054,6 +1118,9 @@ async function evaluateFromStep3(
     refreshSnapshot: false,
     updateTransaction: null,
     projectionAmountCorrected: false,
+    softDelete: null,
+    restore: null,
+    reclassified: false,
     link: { reuseLinkId, transactionId: NEW_TRANSACTION },
     supersedeLinkIds: supersedeIds(),
     create: {
@@ -1086,7 +1153,105 @@ export function effectivePreDisposition(
   return pre;
 }
 
-const REEVALUATED_DISPOSITIONS = new Set<LinkDisposition>(["pending", "needs_review", "excluded", "before_cutoff"]);
+const REEVALUATED_DISPOSITIONS = new Set<LinkDisposition>(["pending", "needs_review", "before_cutoff"]);
+
+function touchPlan(existing: LinkRow): DecisionPlan {
+  return {
+    outcome: "unchanged",
+    disposition: existing.disposition,
+    reasonCode: existing.reasonCode,
+    divergence: false,
+    touchLinkId: existing.id,
+    touchTransactionId: existing.transactionId,
+    refreshSnapshot: false,
+    updateTransaction: null,
+    projectionAmountCorrected: false,
+    softDelete: null,
+    restore: null,
+    reclassified: false,
+    link: null,
+    supersedeLinkIds: [],
+    create: null,
+  };
+}
+
+/**
+ * Transições de um registro já conhecido que não são "mesmo destino de antes":
+ * - excluído que deixa de ser → needs_review / exclusion_reverted (nunca cria sozinho);
+ * - created que a fonte passa a excluir (reclassificação tardia das regras de
+ *   lote) → soft delete pelo sistema se a transação está intocada (valor e data
+ *   iguais aos últimos vistos e categoria não manual); editada → divergence;
+ * - provisório que tinha sumido e voltou → reativa o vínculo e desfaz o soft
+ *   delete só se o carimbo ainda for o do sistema.
+ */
+async function decideKnownTransitions(
+  view: DecisionView,
+  record: PluggyStoreRecord,
+  facts: BatchFacts,
+  existing: LinkRow
+): Promise<DecisionPlan | null> {
+  const pre = effectivePreDisposition(record, facts.importPending);
+  const excludedNow = pre?.disposition === "excluded" ? pre : null;
+
+  if (existing.disposition === "excluded") {
+    if (excludedNow) {
+      return linkOnly("excluded", excludedNow.reasonCode, existing.id, [], existing.transactionId);
+    }
+    return linkOnly("needs_review", "exclusion_reverted", existing.id, [], existing.transactionId);
+  }
+  if (existing.disposition === "needs_review" && existing.reasonCode === "exclusion_reverted") {
+    return excludedNow
+      ? linkOnly("excluded", excludedNow.reasonCode, existing.id, [], existing.transactionId)
+      : linkOnly("needs_review", "exclusion_reverted", existing.id, [], existing.transactionId);
+  }
+
+  if (existing.disposition === "created" && existing.transactionId && excludedNow) {
+    const [tx] = await view.ownerTransactionsById([existing.transactionId]);
+    const plan = linkOnly("excluded", excludedNow.reasonCode, existing.id, [], existing.transactionId);
+    plan.reclassified = true;
+    if (!tx || tx.deleted) return plan;
+    const previousCents = signedCents({
+      type: record.type,
+      direction: existing.direction as PluggyStoreRecord["direction"],
+      amountCents: existing.sourceAmountCents,
+    });
+    if (tx.cents === previousCents && tx.day === existing.ledgerDate && tx.categorySource !== "manual") {
+      plan.softDelete = { transactionId: tx.id, expectAmount: tx.amount, expectDate: tx.date };
+      return plan;
+    }
+    return { ...touchPlan(existing), divergence: true };
+  }
+
+  if (
+    existing.disposition === "superseded" &&
+    existing.transactionId &&
+    (existing.reasonCode === "provisional_vanished" || existing.reasonCode === "provisional_vanished_adopted")
+  ) {
+    const [tx] = await view.ownerTransactionsById([existing.transactionId]);
+    const plan = linkOnly(
+      existing.reasonCode === "provisional_vanished" ? "created" : "adopted",
+      "provisional_returned",
+      existing.id,
+      [],
+      existing.transactionId
+    );
+    plan.outcome = "restored";
+    const systemDeleted =
+      !!tx && !!existing.systemDeletedAt && !!tx.deletedAt && tx.deletedAt.getTime() === existing.systemDeletedAt.getTime();
+    if (tx && systemDeleted) {
+      plan.restore = {
+        transactionId: tx.id,
+        systemDeletedAt: existing.systemDeletedAt as Date,
+        installmentId: tx.installmentId,
+      };
+    }
+    const su = await sourceUpdate(view, existing, record, systemDeleted);
+    plan.updateTransaction = su.update;
+    plan.divergence = su.divergence;
+    return plan;
+  }
+  return null;
+}
 
 /**
  * Atualização a partir da fonte: se a transação local ainda tem exatamente o
@@ -1096,7 +1261,8 @@ const REEVALUATED_DISPOSITIONS = new Set<LinkDisposition>(["pending", "needs_rev
 async function sourceUpdate(
   view: DecisionView,
   previous: LinkRow,
-  record: PluggyStoreRecord
+  record: PluggyStoreRecord,
+  assumeRestored = false
 ): Promise<{ update: TransactionUpdate | null; divergence: boolean; refresh: boolean }> {
   const changed =
     previous.sourceAmountCents !== record.amountCents ||
@@ -1104,7 +1270,7 @@ async function sourceUpdate(
     previous.sourceDate !== record.sourceDate;
   if (!changed || !previous.transactionId) return { update: null, divergence: false, refresh: false };
   const [tx] = await view.ownerTransactionsById([previous.transactionId]);
-  if (!tx || tx.deleted) return { update: null, divergence: false, refresh: false };
+  if (!tx || (tx.deleted && !assumeRestored)) return { update: null, divergence: false, refresh: false };
   const previousCents = signedCents({
     type: record.type,
     direction: previous.direction as PluggyStoreRecord["direction"],
@@ -1116,7 +1282,7 @@ async function sourceUpdate(
   const cents = signedCents(record);
   const update =
     cents !== tx.cents || record.ledgerDate !== tx.day
-      ? { id: tx.id, cents, day: record.ledgerDate, expectAmount: tx.amount, expectDay: tx.day }
+      ? { id: tx.id, cents, day: record.ledgerDate, expectAmount: tx.amount, expectDate: tx.date, expectDay: tx.day }
       : null;
   return { update, divergence: false, refresh: true };
 }
@@ -1135,6 +1301,8 @@ export async function decideRecord(
   // 1. identidade canônica pelo externalId
   const existing = await view.linkByExternalId(ctx.accountLinkId, record.externalId);
   if (existing) {
+    const special = await decideKnownTransitions(view, record, facts, existing);
+    if (special) return special;
     if (existing.transactionId === null && REEVALUATED_DISPOSITIONS.has(existing.disposition)) {
       // Sem lançamento local: segue pelos passos 3 a 8 com os dados atuais.
       return evaluateFromStep3(view, ctx, record, facts, rules, existing.id, []);
@@ -1143,20 +1311,7 @@ export async function decideRecord(
       existing.disposition === "superseded"
         ? { update: null, divergence: false, refresh: false }
         : await sourceUpdate(view, existing, record);
-    return {
-      outcome: su.update ? "updated" : "unchanged",
-      disposition: existing.disposition,
-      reasonCode: existing.reasonCode,
-      divergence: su.divergence,
-      touchLinkId: existing.id,
-      touchTransactionId: existing.transactionId,
-      refreshSnapshot: su.refresh,
-      updateTransaction: su.update,
-      projectionAmountCorrected: false,
-      link: null,
-      supersedeLinkIds: [],
-      create: null,
-    };
+    return { ...touchPlan(existing), outcome: su.update ? "updated" : "unchanged", divergence: su.divergence, refreshSnapshot: su.refresh, updateTransaction: su.update };
   }
 
   // 2. identidade canônica pelo providerId (não nulo) na linhagem da conta
@@ -1249,6 +1404,7 @@ function linkRowFromRecord(
     creditKind: record.creditKind,
     installmentNumber: record.installmentNumber,
     totalInstallments: record.totalInstallments,
+    systemDeletedAt: null,
   };
 }
 
@@ -1280,7 +1436,7 @@ interface AppliedEffect {
 /** Atualização condicional: só grava se a transação ainda tiver o valor lido sob o lock. */
 async function applyTransactionUpdate(tx: PluggyTxClient, u: TransactionUpdate): Promise<void> {
   const res = await tx.transaction.updateMany({
-    where: { id: u.id, amount: u.expectAmount, deletedAt: null },
+    where: { id: u.id, amount: u.expectAmount, date: u.expectDate, deletedAt: null },
     data: { amount: u.cents / 100, ...(u.day !== u.expectDay ? { date: dayToStoredDate(u.day) } : {}) },
   });
   if (res.count !== 1) throw new PluggyStoreError("concurrent_edit");
@@ -1315,7 +1471,31 @@ async function executePlan(
       data: { disposition: "superseded" },
     });
   }
+  if (plan.restore) {
+    const r = plan.restore;
+    const restored = await tx.transaction.updateMany({
+      where: { id: r.transactionId, userId: ctx.ownerUserId, spaceId: null, deletedAt: r.systemDeletedAt },
+      data: { deletedAt: null },
+    });
+    if (restored.count !== 1) throw new PluggyStoreError("concurrent_edit");
+    if (r.installmentId) {
+      await tx.transaction.updateMany({
+        where: { installmentId: r.installmentId, userId: ctx.ownerUserId, spaceId: null, deletedAt: r.systemDeletedAt, pluggyLinks: { none: {} } },
+        data: { deletedAt: null },
+      });
+    }
+  }
   if (plan.updateTransaction) await applyTransactionUpdate(tx, plan.updateTransaction);
+  let systemDeletedAt: Date | null | undefined = plan.restore ? null : undefined;
+  if (plan.softDelete) {
+    const d = plan.softDelete;
+    const res = await tx.transaction.updateMany({
+      where: { id: d.transactionId, amount: d.expectAmount, date: d.expectDate, deletedAt: null, OR: [{ categorySource: null }, { categorySource: { not: "manual" } }] },
+      data: { deletedAt: now },
+    });
+    if (res.count !== 1) throw new PluggyStoreError("concurrent_edit");
+    systemDeletedAt = now;
+  }
 
   let transactionId = plan.link.transactionId;
   let projectionsCreated = 0;
@@ -1400,6 +1580,7 @@ async function executePlan(
     disposition: plan.disposition,
     reasonCode: plan.reasonCode,
     lastSeenAt: now,
+    ...(systemDeletedAt !== undefined ? { systemDeletedAt } : {}),
   };
   if (plan.link.reuseLinkId) {
     await tx.pluggyTransactionLink.update({ where: { id: plan.link.reuseLinkId }, data });
@@ -1414,7 +1595,9 @@ async function executePlan(
 
 async function applyUpdateToOverlay(view: DecisionView, overlay: SimulationOverlay, u: TransactionUpdate) {
   const [row] = await view.ownerTransactionsById([u.id]);
-  if (row) overlay.txs.set(u.id, { ...row, cents: u.cents, amount: u.cents / 100, day: u.day });
+  if (row) {
+    overlay.txs.set(u.id, { ...row, cents: u.cents, amount: u.cents / 100, day: u.day, date: dayToStoredDate(u.day) });
+  }
 }
 
 async function applyPlanToOverlay(
@@ -1463,7 +1646,23 @@ async function applyPlanToOverlay(
       }
     }
   }
+  if (plan.restore) {
+    const r = plan.restore;
+    const affected = [
+      ...(await view.ownerTransactionsById([r.transactionId])),
+      ...(r.installmentId ? (await view.groupMembers(r.installmentId)).filter((m) => !m.hasPluggyLink) : []),
+    ];
+    for (const row of affected) {
+      if (row.deletedAt && row.deletedAt.getTime() === r.systemDeletedAt.getTime()) {
+        overlay.txs.set(row.id, { ...row, deleted: false, deletedAt: null });
+      }
+    }
+  }
   if (plan.updateTransaction) await applyUpdateToOverlay(view, overlay, plan.updateTransaction);
+  if (plan.softDelete) {
+    const [row] = await view.ownerTransactionsById([plan.softDelete.transactionId]);
+    if (row) overlay.txs.set(row.id, { ...row, deleted: true, deletedAt: now });
+  }
 
   let transactionId = plan.link.transactionId;
   let projectionsCreated = 0;
@@ -1480,6 +1679,8 @@ async function applyPlanToOverlay(
       cents: c.cents,
       amount: c.cents / 100,
       origin: ctx.originName,
+      categorySource: c.categoryId ? "rule" : null,
+      deletedAt: null,
       deleted: false,
       groupStartDay: c.installment?.groupStartDay ?? null,
       recurringExpenseId: null as string | null,
@@ -1491,6 +1692,7 @@ async function applyPlanToOverlay(
       id: transactionId,
       description: c.description,
       day: c.day,
+      date: dayToStoredDate(c.day),
       isInstallment: c.installment !== null,
       currentInstallment: c.installment?.n ?? null,
       totalInstallments: c.installment?.t ?? null,
@@ -1513,6 +1715,7 @@ async function applyPlanToOverlay(
           id,
           description: p.description,
           day: p.day,
+          date: dayToStoredDate(p.day),
           isInstallment: true,
           currentInstallment: p.number,
           totalInstallments: c.installment!.t,
@@ -1526,10 +1729,10 @@ async function applyPlanToOverlay(
   }
 
   const linkId = plan.link.reuseLinkId ?? nextId("sim_link_");
-  overlay.links.set(
-    linkId,
-    linkRowFromRecord(linkId, ctx.accountLinkId, record, plan.disposition, plan.reasonCode, transactionId)
-  );
+  overlay.links.set(linkId, {
+    ...linkRowFromRecord(linkId, ctx.accountLinkId, record, plan.disposition, plan.reasonCode, transactionId),
+    systemDeletedAt: plan.softDelete ? now : null,
+  });
   return { transactionId, projectionsCreated, groupCreated };
 }
 
@@ -1548,10 +1751,16 @@ export interface RecordResult {
   projectionsCreated: number;
   groupCreated: boolean;
   projectionAmountCorrected: boolean;
+  /** Era "created" e a fonte passou a excluir (reclassified_excluded). */
+  reclassifiedExcluded: boolean;
 }
 
 export interface BatchResult {
   mode: "apply" | "simulate";
+  /** Conta processada; o reconcile só aceita o resultado da mesma conta. */
+  accountLinkId: string;
+  /** Lote processado até o fim (exigido pelo reconcile). */
+  complete: boolean;
   results: RecordResult[];
   counts: Record<RecordOutcome, number>;
   reasons: Record<string, number>;
@@ -1560,6 +1769,7 @@ export interface BatchResult {
   projectionsCreated: number;
   groupsCreated: number;
   projectionAmountCorrected: number;
+  reclassifiedExcluded: number;
 }
 
 export interface ProcessPluggyRecordsInput {
@@ -1572,6 +1782,8 @@ export interface ProcessPluggyRecordsInput {
   leaseToken?: string;
   /** Pendentes entram como lançamento provisório (padrão: true). */
   importPending?: boolean;
+  /** Cartão: billId → vencimento da fatura (YYYY-MM-DD), para o corte por fatura. */
+  billDueDates?: Record<string, string>;
   now?: Date;
   /** Ponto de observação para testes (falha forçada, pausa durante a escrita). */
   onWrite?: PluggyWriteHook;
@@ -1624,7 +1836,8 @@ export function buildBatchFacts(
   snapshot: BatchSnapshot,
   ctx: AccountContext,
   records: PluggyStoreRecord[],
-  importPending: boolean
+  importPending: boolean,
+  billDueDates: Map<string, string> = new Map()
 ): BatchFacts {
   const seenExternalIds = new Set(records.map((r) => r.externalId));
   const withLink = new Set(
@@ -1636,13 +1849,21 @@ export function buildBatchFacts(
       !withLink.has(r.externalId) &&
       !(r.providerId && takenProviders.has(r.providerId)) &&
       effectivePreDisposition(r, importPending) === null &&
-      r.ledgerDate >= ctx.syncFromDay
+      r.currencyCode === "BRL" &&
+      cutoffDecision(r, ctx, billDueDates) === null
   );
   let recreatedPairs = new Map<string, string>();
   if (newRecords.length > 0) {
     const byTx = new Map<string, LinkRow[]>();
+    const tombstones: Array<{ transactionId: string; key: string; createdAt: Date }> = [];
     for (const l of snapshot.links) {
-      if (!l.transactionId) continue;
+      if (!l.transactionId) {
+        // Vínculo cujo lançamento foi apagado de vez: lápide pareável pela chave gravada.
+        if ((l.disposition === "created" || l.disposition === "adopted") && !seenExternalIds.has(l.externalId)) {
+          tombstones.push({ transactionId: TOMBSTONE_PREFIX + l.id, key: linkRecreationKey(l), createdAt: new Date(8.64e15) });
+        }
+        continue;
+      }
       const list = byTx.get(l.transactionId) ?? [];
       list.push(l);
       byTx.set(l.transactionId, list);
@@ -1653,12 +1874,14 @@ export function buildBatchFacts(
       const tx = owned.get(txId);
       if (!tx) return;
       if (ls.some((l) => l.accountLinkId === ctx.accountLinkId && seenExternalIds.has(l.externalId))) return;
-      const canonical = ls.find((l) => l.disposition !== "superseded") ?? ls[0];
+      // Só transações ainda contabilizadas (vínculo ativo created/adopted) e não apagadas pelo sistema.
+      const canonical = ls.find((l) => l.disposition === "created" || l.disposition === "adopted");
+      if (!canonical || ls.some((l) => l.systemDeletedAt !== null)) return;
       absent.push({ transactionId: txId, key: linkRecreationKey(canonical), createdAt: tx.createdAt });
     });
-    recreatedPairs = pairRecreated(newRecords, absent);
+    recreatedPairs = pairRecreated(newRecords, [...absent, ...tombstones]);
   }
-  return { seenExternalIds, recreatedPairs, importPending };
+  return { seenExternalIds, recreatedPairs, importPending, billDueDates };
 }
 
 function emptyCounts(): Record<RecordOutcome, number> {
@@ -1671,6 +1894,7 @@ function emptyCounts(): Record<RecordOutcome, number> {
     needs_review: 0,
     before_cutoff: 0,
     unchanged: 0,
+    restored: 0,
   };
 }
 
@@ -1680,7 +1904,16 @@ function emptyCounts(): Record<RecordOutcome, number> {
  */
 export function isNoopPlan(plan: DecisionPlan, existing: LinkRow | null, record: PluggyStoreRecord): boolean {
   if (!existing || !linkSnapshotEquals(existing, record)) return false;
-  if (plan.updateTransaction || plan.refreshSnapshot || plan.create || plan.supersedeLinkIds.length > 0) return false;
+  if (
+    plan.updateTransaction ||
+    plan.refreshSnapshot ||
+    plan.create ||
+    plan.softDelete ||
+    plan.restore ||
+    plan.supersedeLinkIds.length > 0
+  ) {
+    return false;
+  }
   if (plan.touchLinkId) return plan.touchLinkId === existing.id;
   return (
     plan.link !== null &&
@@ -1761,16 +1994,23 @@ export async function processPluggyRecords(
   const records = sortRecordsForProcessing(input.records);
   const now = input.now ?? new Date();
   const importPending = input.importPending ?? true;
+  const billDueDates = new Map<string, string>();
+  for (const [billId, due] of Object.entries(input.billDueDates ?? {})) {
+    parseDay(due);
+    billDueDates.set(billId, due);
+  }
 
   const ctx0 = await loadAccountContext(db, ownerUserId, accountLinkId);
   const rules = await loadPersonalRules(db, ownerUserId);
   const snapshot = await loadBatchSnapshot(db, ctx0);
-  const facts = buildBatchFacts(snapshot, ctx0, records, importPending);
+  const facts = buildBatchFacts(snapshot, ctx0, records, importPending, billDueDates);
   const overlay = createOverlay();
   const memory = snapshotSource(snapshot);
 
   const result: BatchResult = {
     mode,
+    accountLinkId: ctx0.accountLinkId,
+    complete: false,
     results: [],
     counts: emptyCounts(),
     reasons: {},
@@ -1779,6 +2019,7 @@ export async function processPluggyRecords(
     projectionsCreated: 0,
     groupsCreated: 0,
     projectionAmountCorrected: 0,
+    reclassifiedExcluded: 0,
   };
   const noopLinkIds: string[] = [];
 
@@ -1793,9 +2034,11 @@ export async function processPluggyRecords(
       projectionsCreated: effect.projectionsCreated,
       groupCreated: effect.groupCreated,
       projectionAmountCorrected: plan.projectionAmountCorrected,
+      reclassifiedExcluded: plan.reclassified,
     });
     result.counts[plan.outcome]++;
-    if (plan.reasonCode && plan.outcome !== "unchanged" && plan.outcome !== "updated") {
+    if (plan.reclassified) result.reclassifiedExcluded++;
+    if (plan.reasonCode && plan.outcome !== "unchanged" && plan.outcome !== "updated" && plan.outcome !== "restored") {
       result.reasons[plan.reasonCode] = (result.reasons[plan.reasonCode] ?? 0) + 1;
     }
     if (plan.divergence) result.divergences++;
@@ -1829,7 +2072,11 @@ export async function processPluggyRecords(
         await lockUserForPluggy(tx, ownerUserId);
         await assertPluggyLeaseHeld(tx, ownerUserId, input.leaseToken as string);
         const ctx = await loadAccountContext(tx, ownerUserId, accountLinkId);
-        const fresh = createDecisionView(dbSource(tx, ownerUserId), createOverlay());
+        // Leitura fresca sob o lock; recorrentes vêm do retrato + efeitos desta execução.
+        const fresh = createDecisionView(
+          { ...dbSource(tx, ownerUserId), recurrings: async () => snapshot.recurrings },
+          { ...createOverlay(), recurringMonths: overlay.recurringMonths }
+        );
         const p = await decideRecord(fresh, ctx, record, facts, rules);
         const e = await executePlan(tx, ctx, record, p, now, input.onWrite);
         await syncOverlayFromDb(tx, overlay, ctx, record, p, e);
@@ -1857,6 +2104,7 @@ export async function processPluggyRecords(
       { maxWait: 15_000, timeout: input.transactionTimeoutMs ?? 30_000 }
     );
   }
+  result.complete = true;
   return result;
 }
 
@@ -1868,23 +2116,32 @@ export interface UnseenLinksResult {
   /** Vínculos POSTED não vistos e não religados (nada é apagado). */
   missingUpstream: number;
   missingByDisposition: Record<string, number>;
-  /** Provisórios (PENDING) que sumiram → superseded / provisional_vanished. */
+  /** Provisórios (PENDING) contabilizados que sumiram → superseded / provisional_vanished*. */
   provisionalVanished: number;
-  /** Transações locais apagadas (soft delete) por causa desses provisórios. */
+  /** Transações locais apagadas (soft delete pelo sistema) por causa desses provisórios, projeções incluídas. */
   provisionalTransactionsDeleted: number;
   /** Destino "pending" (importPending desligado) que sumiu → needs_review / pending_vanished. */
   pendingVanished: number;
 }
 
+interface ProvisionalVanish {
+  link: LinkRow;
+  /** Transações a apagar: a do provisório (se ele a criou) e as projeções só dele. */
+  deleteIds: string[];
+}
+
 /**
- * Depois de processar uma leitura completa (Emenda 2, regra 4): presença é por
+ * Depois de processar a leitura completa (Emenda 2, regra 4). Exige o
+ * BatchResult completo da mesma conta e do mesmo modo, para que nada seja
+ * apagado antes de os registros recriados serem religados. Presença é por
  * transação canônica (basta um dos ids históricos ter sido visto).
- * - vínculo provisório (sourceStatus PENDING) que sumiu: soft delete da
- *   transação que ele criou (e das projeções sem vínculo do grupo que só ele
- *   gerou), vínculo vira superseded / provisional_vanished;
+ * - provisório (sourceStatus PENDING) que sumiu: o vínculo vira superseded /
+ *   provisional_vanished; se ele criou a transação, ela e as projeções sem
+ *   vínculo do grupo que só ele gerou sofrem soft delete com o carimbo
+ *   systemDeletedAt (se o registro voltar, a exclusão é desfeita);
  * - destino "pending" que sumiu: needs_review / pending_vanished;
  * - POSTED que sumiu (a partir de readFrom): só conta em missing_upstream.
- * Em "simulate" só conta.
+ * Em "simulate" só conta, com os mesmos critérios.
  */
 export async function reconcileUnseenLinks(
   db: PluggyDbClient,
@@ -1892,7 +2149,7 @@ export async function reconcileUnseenLinks(
     mode: "apply" | "simulate";
     ownerUserId: string;
     accountLinkId: string;
-    seenExternalIds: Iterable<string>;
+    processed: BatchResult;
     readFrom: string;
     leaseToken?: string;
     now?: Date;
@@ -1900,7 +2157,11 @@ export async function reconcileUnseenLinks(
 ): Promise<UnseenLinksResult> {
   parseDay(input.readFrom);
   if (input.mode === "apply" && !input.leaseToken) throw new PluggyStoreError("lease_token_required");
-  const seen = new Set(input.seenExternalIds);
+  const p = input.processed;
+  if (!p.complete || p.accountLinkId !== input.accountLinkId || p.mode !== input.mode) {
+    throw new PluggyStoreError("reconcile_requires_processed_batch");
+  }
+  const seen = new Set(p.results.map((r) => r.externalId));
   const now = input.now ?? new Date();
 
   const compute = async (client: ReadClient) => {
@@ -1917,24 +2178,67 @@ export async function reconcileUnseenLinks(
       (l) => !seen.has(l.externalId) && !(l.transactionId && presentTx.has(l.transactionId))
     );
     const pendingDisposition = unseen.filter((l) => l.disposition === "pending" && l.transactionId === null);
-    const provisional = unseen.filter((l) => l.disposition !== "pending" && l.sourceStatus === "PENDING");
+    const provisionalLinks = unseen.filter(
+      (l) =>
+        l.sourceStatus === "PENDING" &&
+        l.transactionId !== null &&
+        (l.disposition === "created" || l.disposition === "adopted")
+    );
     const missing = unseen.filter(
       (l) => l.disposition !== "pending" && l.sourceStatus !== "PENDING" && l.sourceDate >= input.readFrom
     );
+    const provisional: ProvisionalVanish[] = [];
+    for (const l of provisionalLinks) {
+      const deleteIds: string[] = [];
+      // Só apaga o que o próprio provisório criou; lançamento adotado era do usuário.
+      if (l.disposition === "created") {
+        const local = await client.transaction.findFirst({
+          where: { id: l.transactionId as string, userId: ctx.ownerUserId, spaceId: null },
+          select: { id: true, installmentId: true, deletedAt: true },
+        });
+        if (local && local.deletedAt === null) deleteIds.push(local.id);
+        if (local && local.installmentId && l.installmentNumber !== null) {
+          const othersLinked = await client.transaction.count({
+            where: {
+              installmentId: local.installmentId,
+              id: { not: local.id },
+              pluggyLinks: { some: { disposition: { not: "superseded" } } },
+            },
+          });
+          if (othersLinked === 0) {
+            const projections = await client.transaction.findMany({
+              where: {
+                installmentId: local.installmentId,
+                userId: ctx.ownerUserId,
+                spaceId: null,
+                currentInstallment: { gt: l.installmentNumber },
+                deletedAt: null,
+                pluggyLinks: { none: {} },
+              },
+              select: { id: true },
+            });
+            deleteIds.push(...projections.map((x) => x.id));
+          }
+        }
+      }
+      provisional.push({ link: l, deleteIds });
+    }
     const missingByDisposition: Record<string, number> = {};
     for (const l of missing) missingByDisposition[l.disposition] = (missingByDisposition[l.disposition] ?? 0) + 1;
-    return { ctx, pendingDisposition, provisional, missing, missingByDisposition };
+    return { pendingDisposition, provisional, missing, missingByDisposition };
   };
+
+  const summarize = (r: Awaited<ReturnType<typeof compute>>, pendingVanished: number): UnseenLinksResult => ({
+    missingUpstream: r.missing.length,
+    missingByDisposition: r.missingByDisposition,
+    provisionalVanished: r.provisional.length,
+    provisionalTransactionsDeleted: r.provisional.reduce((n, v) => n + v.deleteIds.length, 0),
+    pendingVanished,
+  });
 
   if (input.mode === "simulate") {
     const r = await compute(db);
-    return {
-      missingUpstream: r.missing.length,
-      missingByDisposition: r.missingByDisposition,
-      provisionalVanished: r.provisional.length,
-      provisionalTransactionsDeleted: r.provisional.filter((l) => l.disposition === "created" && l.transactionId).length,
-      pendingVanished: r.pendingDisposition.length,
-    };
+    return summarize(r, r.pendingDisposition.length);
   }
   return db.$transaction(async (tx) => {
     await lockUserForPluggy(tx, input.ownerUserId);
@@ -1949,54 +2253,24 @@ export async function reconcileUnseenLinks(
         })
       ).count;
     }
-    let provisionalTransactionsDeleted = 0;
-    for (const l of r.provisional) {
-      await tx.pluggyTransactionLink.update({
-        where: { id: l.id },
-        data: { disposition: "superseded", reasonCode: "provisional_vanished" },
-      });
-      // Só apaga o que o próprio provisório criou; lançamento adotado era do usuário.
-      if (l.disposition !== "created" || !l.transactionId) continue;
-      const local = await tx.transaction.findFirst({
-        where: { id: l.transactionId, userId: r.ctx.ownerUserId, spaceId: null },
-        select: { id: true, installmentId: true, deletedAt: true },
-      });
-      if (!local) continue;
-      if (local.deletedAt === null) {
-        await tx.transaction.update({ where: { id: local.id }, data: { deletedAt: now } });
-        provisionalTransactionsDeleted++;
-      }
-      if (local.installmentId && l.installmentNumber !== null) {
-        const othersLinked = await tx.transaction.count({
-          where: {
-            installmentId: local.installmentId,
-            id: { not: local.id },
-            pluggyLinks: { some: { disposition: { not: "superseded" } } },
-          },
+    for (const v of r.provisional) {
+      const deleted = v.deleteIds.length > 0;
+      if (deleted) {
+        await tx.transaction.updateMany({
+          where: { id: { in: v.deleteIds }, deletedAt: null },
+          data: { deletedAt: now },
         });
-        if (othersLinked === 0) {
-          const res = await tx.transaction.updateMany({
-            where: {
-              installmentId: local.installmentId,
-              userId: r.ctx.ownerUserId,
-              spaceId: null,
-              currentInstallment: { gt: l.installmentNumber },
-              deletedAt: null,
-              pluggyLinks: { none: {} },
-            },
-            data: { deletedAt: now },
-          });
-          provisionalTransactionsDeleted += res.count;
-        }
       }
+      await tx.pluggyTransactionLink.update({
+        where: { id: v.link.id },
+        data: {
+          disposition: "superseded",
+          reasonCode: v.link.disposition === "created" ? "provisional_vanished" : "provisional_vanished_adopted",
+          systemDeletedAt: deleted && v.deleteIds[0] === v.link.transactionId ? now : null,
+        },
+      });
     }
-    return {
-      missingUpstream: r.missing.length,
-      missingByDisposition: r.missingByDisposition,
-      provisionalVanished: r.provisional.length,
-      provisionalTransactionsDeleted,
-      pendingVanished,
-    };
+    return summarize(r, pendingVanished);
   });
 }
 

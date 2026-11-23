@@ -45,6 +45,22 @@ jobs:
       - name: Create schema (db push)
         run: npx prisma db push --skip-generate
 
+      # Migrações novas do PR, aplicadas sobre um banco criado a partir do schema
+      # da base, precisam chegar exatamente ao schema do PR.
+      - name: Validate new migrations against the base schema
+        env:
+          MIGCHECK_URL: postgresql://postgres@localhost:5432/migcheck
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          git show "origin/$GITHUB_BASE_REF:prisma/schema.prisma" > /tmp/base.prisma
+          psql postgresql://postgres@localhost:5432/postgres -c "CREATE DATABASE migcheck"
+          DATABASE_URL="$MIGCHECK_URL" npx prisma db push --schema /tmp/base.prisma --skip-generate
+          for f in $(git diff --name-only --diff-filter=A "origin/$GITHUB_BASE_REF" HEAD -- 'prisma/migrations/*/migration.sql' | sort); do
+            echo "applying $f"
+            psql -v ON_ERROR_STOP=1 "$MIGCHECK_URL" -f "$f"
+          done
+          npx prisma migrate diff --from-url "$MIGCHECK_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
       - name: Run Pluggy integration tests
         run: npm run test:pluggy-integration
 
