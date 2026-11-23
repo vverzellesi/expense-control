@@ -49,6 +49,14 @@ erDiagram
 
     InvestmentTransaction ||--o| Transaction : "linked to"
 
+    User ||--o{ PluggyAccountLink : owns
+    User ||--o{ PluggySyncRun : runs
+    User ||--o| PluggySyncLease : holds
+    Origin ||--o{ PluggyAccountLink : "synced by"
+    PluggyAccountLink ||--o| PluggyAccountLink : replaces
+    PluggyAccountLink ||--o{ PluggyTransactionLink : records
+    Transaction ||--o{ PluggyTransactionLink : "linked from"
+
     User {
         string id PK
         string name
@@ -75,6 +83,7 @@ erDiagram
         datetime deletedAt "soft delete"
         string userId FK
         string spaceId FK "opcional"
+        string categorySource "rule | ai | manual; null = legado"
     }
 
     Category {
@@ -256,6 +265,54 @@ erDiagram
         datetime expiresAt
         datetime createdAt
     }
+
+    PluggyAccountLink {
+        string id PK
+        string userId FK
+        string itemId
+        string pluggyAccountId UK
+        string accountType "BANK | CREDIT"
+        string originId FK "Origin pessoal"
+        datetime syncFrom "corte"
+        boolean enabled
+        datetime lastSuccessfulSyncAt
+        string replacesAccountLinkId FK "reconexão, UK"
+    }
+
+    PluggyTransactionLink {
+        string id PK
+        string accountLinkId FK
+        string externalId "UK com accountLinkId"
+        string providerId
+        string transactionId FK "opcional"
+        string disposition "created | adopted | excluded | pending | needs_review | before_cutoff | superseded"
+        string reasonCode
+        string sourceStatus "PENDING | POSTED"
+        datetime sourceDate
+        datetime ledgerDate
+        datetime purchaseDate
+        int sourceAmountCents
+        string direction "DEBIT | CREDIT"
+        int installmentNumber
+        int totalInstallments
+        datetime lastSeenAt
+    }
+
+    PluggySyncRun {
+        string id PK
+        string userId FK
+        string trigger "cron | manual"
+        string status "running | ok | warning | error | interrupted"
+        json counts
+        json checks
+        string error "sanitizado"
+    }
+
+    PluggySyncLease {
+        string userId PK
+        string ownerToken
+        datetime expiresAt
+    }
 ```
 
-Diagrama ER completo das 23 entidades Prisma. User é o hub central com relacionamentos 1:N para quase todas as entidades de domínio. Transaction é a entidade mais conectada, podendo pertencer a Category, Installment e RecurringExpense. O domínio de investimentos tem sua própria hierarquia (InvestmentCategory > Investment > InvestmentTransaction) com link para Transaction via linkedTransactionId. O domínio de espaços compartilhados introduz Space, SpaceMember e SpaceInvite. Space tem relacionamentos 1:N com a maioria das entidades de domínio (Transaction, Category, Origin, Budget, etc.) via spaceId opcional, permitindo que recursos existam tanto no contexto pessoal (spaceId null) quanto em um espaço compartilhado.
+Diagrama ER completo das 27 entidades Prisma. User é o hub central com relacionamentos 1:N para quase todas as entidades de domínio. Transaction é a entidade mais conectada, podendo pertencer a Category, Installment e RecurringExpense. O domínio de investimentos tem sua própria hierarquia (InvestmentCategory > Investment > InvestmentTransaction) com link para Transaction via linkedTransactionId. O domínio de espaços compartilhados introduz Space, SpaceMember e SpaceInvite. Space tem relacionamentos 1:N com a maioria das entidades de domínio (Transaction, Category, Origin, Budget, etc.) via spaceId opcional, permitindo que recursos existam tanto no contexto pessoal (spaceId null) quanto em um espaço compartilhado. A integração Open Finance (Pluggy) acrescenta PluggyAccountLink (conta da Pluggy ligada a um Origin pessoal do dono, com linhagem de reconexão), PluggyTransactionLink (destino de cada registro lido; vários ids históricos podem apontar para a mesma Transaction, e o vínculo sobrevive ao soft delete), PluggySyncRun (auditoria das execuções) e PluggySyncLease (exclusão mútua por usuário).
