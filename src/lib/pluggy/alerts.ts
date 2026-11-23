@@ -38,6 +38,7 @@ export const ALERT_LABELS: Record<string, string> = {
   empty_read: "leitura vazia com lançamentos já vinculados (nada foi removido)",
   missing_upstream: "lançamentos já importados que sumiram da fonte",
   bill_residue_negative: "fatura com resíduo negativo",
+  unknown_bill: "lançamentos de fatura que a Pluggy não listou",
   user_patterns_invalid: "padrões de exclusão inválidos (ignorados)",
   user_patterns_rejected: "padrões de exclusão recusados",
   invariant_violation: "contagem de destinos não fecha",

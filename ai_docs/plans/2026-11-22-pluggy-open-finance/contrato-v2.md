@@ -237,3 +237,13 @@ Medido em 22/11/2026 numa conexão real via MeuPluggy (uma conta corrente e um c
 ### Limite conhecido
 Parcelas de fatura parcelada e de parcelamento de compra não vêm pela Pluggy. Continuam dependendo do registro manual de pagamento parcial/parcelado de fatura que o app já tem.
 
+
+## Emenda 3 — regras acrescentadas durante a implementação da persistência (PR #115)
+
+- **Corte do cartão por fatura.** `PluggyAccountLink.cutoffBillDueDate`: registro com `billId` de fatura que vence até o corte → `before_cutoff`; registro sem `billId` em `PENDING` ou de fatura posterior segue normalmente, qualquer que seja a data; `billId` fora do mapa de faturas → `needs_review / unknown_bill`; `POSTED` sem fatura → `needs_review / missing_bill`. Conta corrente continua com corte por data (`syncFrom`).
+- **Reclassificação tardia.** Vínculo `created` cujo registro volta com destino prévio `excluded` (par de pagamento de fatura ou de estorno de tarifa que só fechou depois): se a transação está intocada, soft delete e vínculo `excluded`, contado em `reclassified_excluded`; se foi editada ou tem categoria manual, só `divergence`. `excluded` que deixa de ser → `needs_review / exclusion_reverted`.
+- **Provisório que some e volta.** O soft delete feito pelo sistema é carimbado no vínculo (`systemDeletedAt`); se o registro reaparece e o carimbo ainda é o do sistema, a transação é restaurada.
+- **Custo.** Decisão em memória, escrita só do que mudou, `lastSeenAt` em lote: uma execução sem novidades faz um número constante de consultas.
+- **Nunca apagar `PluggyAccountLink`**, só desativar: apagar leva junto o histórico de vínculos.
+- **Importação manual** pula linhas de origin sincronizado a partir do corte (`skippedPluggyManaged`).
+

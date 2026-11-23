@@ -10,10 +10,13 @@
  *   ... link.ts --account <id da conta> --origin <id do origin> --sync-from AAAA-MM-DD [--apply]
  *       Conta corrente: corte por data (nada com data anterior é criado).
  *
- *   ... link.ts --account <id da conta> --origin <id do origin> --cutoff-bill-due AAAA-MM-DD [--apply]
+ *   ... link.ts --account <id da conta> --origin <id do origin> --cutoff-bill-due AAAA-MM-DD
+ *               [--cutoff-bill-closing AAAA-MM-DD] [--apply]
  *       Cartão: corte por fatura. Informe o vencimento da ÚLTIMA fatura já importada
- *       (por PDF/CSV); ela e as anteriores ficam fora. A janela de leitura começa
- *       45 dias antes desse vencimento (ajustável com --sync-from).
+ *       (por PDF/CSV); ela e as anteriores ficam fora. O syncFrom do cartão vira o dia
+ *       seguinte ao fechamento dessa fatura (a importação manual passa a pular o origin a
+ *       partir dele). Fechamento: --cutoff-bill-closing; senão o "dia fechamento" do origin;
+ *       senão a data do último lançamento da fatura de corte.
  *
  *   Reconexão (o banco gerou contas novas): acrescente --replaces <id do vínculo antigo>.
  *   O vínculo antigo é desativado e o novo herda a linhagem.
@@ -45,8 +48,6 @@ import {
 } from "./cli";
 
 const PLUGGY_VARS = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_ITEM_ID"] as const;
-/** Cartão: a janela de leitura começa este tanto antes do vencimento de corte. */
-const CARD_WINDOW_DAYS_BEFORE_CUTOFF = 45;
 
 function pluggyClient(): { client: PluggyClient; itemId: string } {
   loadEnvVars(PLUGGY_VARS);
@@ -55,10 +56,24 @@ function pluggyClient(): { client: PluggyClient; itemId: string } {
   return { client: createPluggyClientFromEnv(), itemId: process.env.PLUGGY_ITEM_ID!.trim() };
 }
 
-function minusDays(day: string, days: number): string {
+function plusDays(day: string, days: number): string {
   const [y, m, d] = day.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d) - days * 86_400_000);
+  const date = new Date(Date.UTC(y, m - 1, d) + days * 86_400_000);
   return date.toISOString().slice(0, 10);
+}
+
+/** Último dia de fechamento (dia do mês do origin) antes do vencimento. */
+function closingFromCycleDay(dueDay: string, cycleDay: number): string {
+  const [y, m] = dueDay.split("-").map(Number);
+  for (let back = 0; back < 3; back++) {
+    const monthIndex = y * 12 + (m - 1) - back;
+    const year = Math.floor(monthIndex / 12);
+    const month = (monthIndex % 12) + 1;
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const day = [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(Math.min(cycleDay, last)).padStart(2, "0")].join("-");
+    if (day < dueDay) return day;
+  }
+  return fail("Dia de fechamento do origin inválido.");
 }
 
 function dayOf(value: Date | null | undefined): string {
@@ -73,11 +88,19 @@ async function listEverything(target: ScriptDatabase, owner: string): Promise<vo
     console.log("  - " + account.type + (account.subtype ? "/" + account.subtype : "") + " " + account.currencyCode + "  conta: " + account.id);
     if (account.type === "CREDIT") {
       const bills = await client.listBills(account.id);
-      const dues = bills
-        .map((bill) => toBusinessDate(bill.dueDate))
-        .filter((day): day is string => day !== null)
-        .sort();
-      console.log("      vencimentos das faturas: " + (dues.length > 0 ? dues.join(", ") : "nenhum"));
+      const { transactions } = await client.listTransactions(account.id);
+      const lastByBill = new Map<string, string>();
+      for (const tx of transactions) {
+        const billId = tx.creditCardMetadata?.billId;
+        const day = toBusinessDate(tx.date);
+        if (billId && day && (!lastByBill.has(billId) || day > lastByBill.get(billId)!)) lastByBill.set(billId, day);
+      }
+      const lines = bills
+        .map((bill) => ({ due: toBusinessDate(bill.dueDate), last: lastByBill.get(bill.id) ?? null }))
+        .filter((bill): bill is { due: string; last: string | null } => bill.due !== null)
+        .sort((a, b) => (a.due < b.due ? -1 : 1));
+      console.log("      faturas (vencimento / último lançamento):");
+      for (const bill of lines) console.log("        " + bill.due + " / " + (bill.last ?? "—"));
     }
   }
 
@@ -98,7 +121,7 @@ async function listEverything(target: ScriptDatabase, owner: string): Promise<vo
   for (const link of links) {
     console.log(
       "  - vínculo: " + link.id + "  conta: " + link.pluggyAccountId + "  " + link.accountType + " → " + link.origin.name +
-        "  janela desde " + dayOf(link.syncFrom) +
+        "  syncFrom " + dayOf(link.syncFrom) +
         (link.accountType === "CREDIT" ? "  corte por fatura: " + dayOf(link.cutoffBillDueDate) : "") +
         (link.enabled ? "" : "  (desativado)") +
         (link.replacesAccountLinkId ? "  substitui: " + link.replacesAccountLinkId : "")
@@ -120,25 +143,50 @@ async function upsertLink(target: ScriptDatabase, owner: string, apply: boolean)
   if (account.type !== "BANK" && account.type !== "CREDIT") fail("Tipo de conta não suportado: " + account.type);
   const accountType = account.type as "BANK" | "CREDIT";
 
+  const origin = await target.db.origin.findFirst({ where: { id: originId, userId: owner, spaceId: null } });
+  if (!origin) fail("Origin não encontrado entre os origins pessoais do dono.");
+
   let syncFromDay: string;
   let cutoffDay: string | null = null;
+  let closingNote = "";
   if (accountType === "BANK") {
-    if (cutoffArg) fail("Conta corrente usa corte por data: informe --sync-from, não --cutoff-bill-due.");
+    if (cutoffArg || argValue("cutoff-bill-closing")) fail("Conta corrente usa corte por data: informe só --sync-from.");
     if (!syncFromArg) fail("Conta corrente: informe --sync-from AAAA-MM-DD.");
     syncFromDay = syncFromArg;
   } else {
+    if (syncFromArg) fail("Cartão: o syncFrom sai do fechamento da fatura de corte; não use --sync-from.");
     if (!cutoffArg) fail("Cartão usa corte por fatura: informe --cutoff-bill-due com o vencimento da última fatura já importada.");
-    const dues = new Set(
-      (await client.listBills(account.id)).map((bill) => toBusinessDate(bill.dueDate)).filter((day) => day !== null)
-    );
-    if (!dues.has(cutoffArg)) fail("Nenhuma fatura do cartão vence em " + cutoffArg + " (rode sem argumentos para ver os vencimentos).");
+    const cutBill = (await client.listBills(account.id)).find((bill) => toBusinessDate(bill.dueDate) === cutoffArg);
+    if (!cutBill) fail("Nenhuma fatura do cartão vence em " + cutoffArg + " (rode sem argumentos para ver os vencimentos).");
+    const { transactions } = await client.listTransactions(account.id);
+    const latestInBill =
+      transactions
+        .filter((tx) => tx.creditCardMetadata?.billId === cutBill.id)
+        .map((tx) => toBusinessDate(tx.date))
+        .filter((day): day is string => day !== null)
+        .sort()
+        .pop() ?? null;
+    const closingArg = parseDayArg(argValue("cutoff-bill-closing"), "cutoff-bill-closing");
+    let closing: string | null;
+    if (closingArg) {
+      closing = closingArg;
+      closingNote = "informado";
+    } else if (origin.billingCycleDay) {
+      closing = closingFromCycleDay(cutoffArg, origin.billingCycleDay);
+      closingNote = "pelo dia de fechamento do origin";
+    } else {
+      closing = latestInBill;
+      closingNote = "estimado pelo último lançamento da fatura";
+    }
+    if (!closing) fail("Não deu para estimar o fechamento da fatura de corte: informe --cutoff-bill-closing AAAA-MM-DD.");
+    if (closing >= cutoffArg) fail("O fechamento precisa ser antes do vencimento da fatura de corte.");
+    if (latestInBill && latestInBill > closing) {
+      fail("A fatura de corte tem lançamento depois do fechamento " + closing + ". Confira --cutoff-bill-closing ou o dia de fechamento do origin.");
+    }
     cutoffDay = cutoffArg;
-    syncFromDay = syncFromArg ?? minusDays(cutoffArg, CARD_WINDOW_DAYS_BEFORE_CUTOFF);
-    if (syncFromDay > cutoffDay) fail("--sync-from não pode ser depois do vencimento de corte.");
+    closingNote = "fechamento " + closing + " (" + closingNote + ")";
+    syncFromDay = plusDays(closing, 1);
   }
-
-  const origin = await target.db.origin.findFirst({ where: { id: originId, userId: owner, spaceId: null } });
-  if (!origin) fail("Origin não encontrado entre os origins pessoais do dono.");
 
   const existing = await target.db.pluggyAccountLink.findUnique({ where: { pluggyAccountId: account.id } });
   if (existing && existing.userId !== owner) fail("Esta conta já está vinculada a outro usuário. Nada foi feito.");
@@ -160,7 +208,7 @@ async function upsertLink(target: ScriptDatabase, owner: string, apply: boolean)
   const recorded = existing ? await target.db.pluggyTransactionLink.count({ where: { accountLinkId: existing.id } }) : 0;
   console.log("Banco: " + target.label);
   console.log((existing ? "Atualizar" : "Criar") + " vínculo " + accountType + " → " + origin.name);
-  console.log("  janela desde: " + syncFromDay + (cutoffDay ? " | corte por fatura: vencimento " + cutoffDay : ""));
+  console.log("  syncFrom: " + syncFromDay + (cutoffDay ? " | corte por fatura: vencimento " + cutoffDay + ", " + closingNote : ""));
   if (replaced) console.log("  substitui o vínculo " + replaced.id + " (que será desativado)");
   if (recorded > 0) console.log("  atenção: este vínculo já tem " + recorded + " registros processados; o corte novo vale só para decisões futuras.");
   if (!apply) {

@@ -56,6 +56,8 @@ function cardTransactions(options: { withPending?: boolean } = {}): PluggyTransa
     // Dentro da janela por data, mas da fatura já importada: corte por fatura.
     tx({ id: "tx_test_c6", amount: 70, type: "DEBIT", date: "2026-10-02T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_1" } }),
     tx({ id: "tx_test_c1", amount: 50, type: "DEBIT", date: "2026-10-20T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_2" } }),
+    // Antes de syncFrom, mas de fatura posterior ao corte (compra do fechamento): entra.
+    tx({ id: "tx_test_c7", amount: 20, type: "DEBIT", date: "2026-09-30T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_2" } }),
     tx({
       id: "tx_test_c2",
       amount: -500,
@@ -90,7 +92,7 @@ const bankTransactions = (): PluggyTransaction[] => [
 
 const bills: PluggyBill[] = [
   { id: "bill_test_1", dueDate: "2026-10-10", totalAmount: 500, totalAmountCurrencyCode: "BRL" },
-  { id: "bill_test_2", dueDate: "2026-11-10", totalAmount: 50, totalAmountCurrencyCode: "BRL" },
+  { id: "bill_test_2", dueDate: "2026-11-10", totalAmount: 70, totalAmountCurrencyCode: "BRL" },
 ] as PluggyBill[];
 
 function fakeClient(cardList: () => PluggyTransaction[] = () => cardTransactions()) {
@@ -136,11 +138,12 @@ describe("runPluggySync em Postgres real", () => {
 
     expect(first.checks.alerts).toEqual({});
     expect(first.status).toBe("ok");
-    // Lidos 10: 3 da conta corrente + 7 do cartão, 2 deles fora da janela.
-    expect(first.counts.read).toBe(10);
+    // Lidos 11: 3 da conta corrente + 8 do cartão, 2 deles fora da janela.
+    expect(first.counts.read).toBe(11);
     expect(first.counts.outsideWindow).toBe(2);
-    // b1, c1, c3 (provisório) e c5 (parcela 1/3) criados; b2 e c2 excluídos; c4 em revisão; c6 antes do corte.
-    expect(first.counts.destinations).toMatchObject({ created: 4, excluded: 2, needs_review: 1, before_cutoff: 1 });
+    // b1, c1, c7, c3 (provisório) e c5 (parcela 1/3) criados; b2 e c2 excluídos; c4 em revisão; c6 antes do corte.
+    expect(first.counts.destinations).toMatchObject({ created: 5, excluded: 2, needs_review: 1, before_cutoff: 1 });
+    expect(first.counts.unknownBill).toBe(0);
     expect(first.counts.reasons).toMatchObject({
       bill_payment_debit: 1,
       bill_payment_credit: 1,
@@ -158,7 +161,7 @@ describe("runPluggySync em Postgres real", () => {
     const links = await db.pluggyAccountLink.findMany({ where: { userId: fx.owner.userId } });
     expect(links.every((l) => l.lastSuccessfulSyncAt !== null)).toBe(true);
     const transactionsAfterFirst = await db.transaction.count({ where: { deletedAt: null } });
-    expect(transactionsAfterFirst).toBe(6); // 4 criadas + 2 projeções
+    expect(transactionsAfterFirst).toBe(7); // 5 criadas + 2 projeções
 
     const rerunAlert = vi.fn().mockResolvedValue(undefined);
     const second = await runPluggySync(deps(fakeClient(), rerunAlert), { mode: "apply", trigger: "cron" });
@@ -177,7 +180,7 @@ describe("runPluggySync em Postgres real", () => {
     expect(report.counts.missingUpstream).toBe(0);
     const vanished = await db.pluggyTransactionLink.findFirstOrThrow({ where: { externalId: "tx_test_c3" } });
     expect(vanished).toMatchObject({ disposition: "superseded", reasonCode: "provisional_vanished" });
-    expect(await db.transaction.count({ where: { deletedAt: null } })).toBe(5);
+    expect(await db.transaction.count({ where: { deletedAt: null } })).toBe(6);
   });
 
   it("run órfão em running é marcado interrupted pela execução seguinte", async () => {

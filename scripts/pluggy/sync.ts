@@ -87,6 +87,7 @@ function buildSyncReport(report: SyncReport, label: string): string {
   lines.push("- projeções de parcelas criadas: " + c.projectionsCreated + " | grupos criados: " + c.groupsCreated);
   lines.push("- valor de projeção corrigido pela fonte: " + c.projectionAmountCorrected);
   lines.push("- criados antes e agora excluídos pela fonte: " + c.reclassifiedExcluded);
+  lines.push("- de fatura que a Pluggy não listou (unknown_bill): " + c.unknownBill);
   lines.push("- estornos lançados como receita: " + c.refundsAsIncome);
   lines.push("- provisórios que sumiram: " + c.provisionalVanished + " (lançamentos removidos: " + c.provisionalTransactionsDeleted + ")");
   lines.push("- já importados que sumiram da fonte: " + c.missingUpstream);

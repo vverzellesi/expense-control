@@ -110,6 +110,8 @@ export interface SyncCounts {
   projectionAmountCorrected: number;
   /** Lançamentos criados antes que a fonte passou a excluir. */
   reclassifiedExcluded: number;
+  /** Registros com billId fora do mapa de faturas lido (needs_review / unknown_bill). */
+  unknownBill: number;
   refundsAsIncome: number;
   provisionalVanished: number;
   provisionalTransactionsDeleted: number;
@@ -230,6 +232,7 @@ export function emptyCounts(): SyncCounts {
     groupsCreated: 0,
     projectionAmountCorrected: 0,
     reclassifiedExcluded: 0,
+    unknownBill: 0,
     refundsAsIncome: 0,
     provisionalVanished: 0,
     provisionalTransactionsDeleted: 0,
@@ -300,6 +303,34 @@ export async function loadUserPatterns(
   return { compiled: compileExcludePatterns(parsed), invalid: false };
 }
 
+/**
+ * O registro entra na leitura desta execução? Limite superior: o dia do início.
+ * Conta corrente (e cartão sem corte por fatura): a partir de syncFrom. Cartão com corte
+ * por fatura: quem corta é a fatura (Emenda 3), então o registro de fatura posterior ao
+ * corte e o do ciclo aberto entram qualquer que seja a data (a compra do dia do fechamento
+ * que cai na fatura seguinte tem data anterior a syncFrom). Antes de syncFrom, o que é de
+ * fatura já importada ou desconhecida fica de fora, para não encher a revisão com histórico.
+ */
+export function isInReadWindow(
+  record: Pick<MappedPluggyTransaction, "sourceDate" | "sourceStatus" | "billId">,
+  window: {
+    accountType: string;
+    syncFromDay: string;
+    upperDay: string;
+    cutoffBillDueDay: string | null;
+    billDueDates: Map<string, string> | null;
+  }
+): boolean {
+  if (record.sourceDate > window.upperDay) return false;
+  if (record.sourceDate >= window.syncFromDay) return true;
+  if (window.accountType !== "CREDIT" || !window.cutoffBillDueDay) return false;
+  if (record.billId) {
+    const due = window.billDueDates?.get(record.billId);
+    return due !== undefined && due > window.cutoffBillDueDay;
+  }
+  return record.sourceStatus === "PENDING";
+}
+
 // ---------------------------------------------------------------------------
 // Sincronização
 // ---------------------------------------------------------------------------
@@ -310,6 +341,7 @@ interface LinkRow {
   pluggyAccountId: string;
   accountType: string;
   syncFrom: Date;
+  cutoffBillDueDate: Date | null;
   originName: string;
 }
 
@@ -375,6 +407,7 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
     pluggyAccountId: link.pluggyAccountId,
     accountType: link.accountType,
     syncFrom: link.syncFrom,
+    cutoffBillDueDate: link.cutoffBillDueDate,
     originName: link.origin.name,
   }));
   if (links.length === 0) return skipped(mode, trigger, "no_links", startedAt);
@@ -625,8 +658,15 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   const checks = report.checks;
   const mode = options.mode;
   const syncFromDay = businessDayKey(link.syncFrom);
-
-  const window = read.mapped.filter((record) => record.sourceDate >= syncFromDay && record.sourceDate <= upperDay);
+  const dueDates = read.bills ? billDueDates(read.bills) : null;
+  const windowSpec = {
+    accountType: link.accountType,
+    syncFromDay,
+    upperDay,
+    cutoffBillDueDay: link.cutoffBillDueDate ? businessDayKey(link.cutoffBillDueDate) : null,
+    billDueDates: dueDates,
+  };
+  const window = read.mapped.filter((record) => isInReadWindow(record, windowSpec));
   const outsideWindow = read.mapped.length - window.length;
 
   const before = await db.pluggyTransactionLink.findMany({
@@ -645,8 +685,8 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
     leaseToken: ctx.leaseToken ?? undefined,
     importPending: options.importPending ?? true,
     now: report.startedAt,
-    // Cartão: corte por fatura, com o vencimento de cada fatura da mesma leitura de /bills.
-    billDueDates: read.bills ? Object.fromEntries(billDueDates(read.bills)) : undefined,
+    // Cartão: corte por fatura, com o vencimento de TODAS as faturas da mesma leitura de /bills.
+    billDueDates: dueDates ? Object.fromEntries(dueDates) : undefined,
   };
   const batch: BatchResult = await processPluggyRecords(db, input);
 
@@ -720,6 +760,10 @@ async function processAccount(ctx: SyncContext, read: AccountRead, upperDay: str
   counts.groupsCreated += batch.groupsCreated;
   counts.projectionAmountCorrected += batch.projectionAmountCorrected;
   counts.reclassifiedExcluded += batch.reclassifiedExcluded;
+  // Total no run; alerta só para os novos (os já em revisão são reavaliados a cada execução).
+  const unknownBill = batch.results.filter((r) => r.outcome === "needs_review" && r.reasonCode === "unknown_bill");
+  counts.unknownBill += unknownBill.length;
+  addAlert(checks, "unknown_bill", unknownBill.filter((r) => !previouslyInReview.has(r.externalId)).length);
   counts.provisionalVanished += unseen.provisionalVanished;
   counts.provisionalTransactionsDeleted += unseen.provisionalTransactionsDeleted;
   counts.pendingVanished += unseen.pendingVanished;

@@ -15,7 +15,7 @@ const storeMocks = vi.hoisted(() => ({ processPluggyRecords: vi.fn(), reconcileU
 vi.mock("./lease", async (importOriginal) => ({ ...(await importOriginal<typeof import("./lease")>()), ...leaseMocks }));
 vi.mock("./store", async (importOriginal) => ({ ...(await importOriginal<typeof import("./store")>()), ...storeMocks }));
 
-import { describeSyncError, evaluateItemHealth, runPluggySync, triggerSyncFromWebhook } from "./sync";
+import { describeSyncError, evaluateItemHealth, isInReadWindow, runPluggySync, triggerSyncFromWebhook } from "./sync";
 import { PluggyLeaseLostError } from "./lease";
 import { PluggyApiError } from "./client";
 
@@ -40,6 +40,7 @@ interface LinkFixture {
   pluggyAccountId: string;
   accountType: "BANK" | "CREDIT";
   syncFrom: Date;
+  cutoffBillDueDate: Date | null;
   enabled: boolean;
   origin: { name: string };
 }
@@ -51,6 +52,7 @@ const bankLink: LinkFixture = {
   pluggyAccountId: "acc_test_bank",
   accountType: "BANK",
   syncFrom: new Date("2026-10-01T12:00:00.000Z"),
+  cutoffBillDueDate: null,
   enabled: true,
   origin: { name: "Conta Teste" },
 };
@@ -509,6 +511,64 @@ describe("runPluggySync — conferências e alertas", () => {
     const report = await run(db);
     expect(report.checks.alerts).toEqual({ coverage_truncated: 1 });
     expect(storeMocks.reconcileUnseenLinks.mock.calls[0][1].readFrom).toBe("2026-09-01");
+  });
+});
+
+describe("isInReadWindow", () => {
+  const dues = new Map([["bill_test_1", "2026-10-10"], ["bill_test_2", "2026-11-10"]]);
+  const bank = { accountType: "BANK", syncFromDay: "2026-10-04", upperDay: "2026-11-22", cutoffBillDueDay: null, billDueDates: null };
+  const card = { ...bank, accountType: "CREDIT", cutoffBillDueDay: "2026-10-10", billDueDates: dues };
+  const r = (sourceDate: string, billId: string | null = null, sourceStatus: "PENDING" | "POSTED" = "POSTED") => ({ sourceDate, billId, sourceStatus });
+
+  it("conta corrente: de syncFrom até o dia do início", () => {
+    expect(isInReadWindow(r("2026-10-04"), bank)).toBe(true);
+    expect(isInReadWindow(r("2026-10-03"), bank)).toBe(false);
+    expect(isInReadWindow(r("2026-11-23"), bank)).toBe(false);
+  });
+
+  it("cartão com corte por fatura: compra do dia do fechamento que caiu na fatura seguinte entra", () => {
+    expect(isInReadWindow(r("2026-10-03", "bill_test_2"), card)).toBe(true);
+    expect(isInReadWindow(r("2026-09-20", null, "PENDING"), card)).toBe(true);
+  });
+
+  it("cartão: antes de syncFrom, fatura já importada, desconhecida ou lançado sem fatura fica de fora", () => {
+    expect(isInReadWindow(r("2026-10-03", "bill_test_1"), card)).toBe(false);
+    expect(isInReadWindow(r("2026-10-03", "bill_test_x"), card)).toBe(false);
+    expect(isInReadWindow(r("2026-10-03"), card)).toBe(false);
+    expect(isInReadWindow(r("2026-11-23", "bill_test_2"), card)).toBe(false);
+  });
+});
+
+describe("runPluggySync — corte do cartão por fatura", () => {
+  it("passa TODAS as faturas, inclui a compra anterior a syncFrom de fatura posterior e conta unknown_bill", async () => {
+    const { db } = fakeDb({ links: [bankLink, { ...cardLink, cutoffBillDueDate: new Date("2026-10-10T12:00:00.000Z") }], reviewIds: ["tx_test_c1"] });
+    const extra = [
+      tx({ id: "tx_test_c7", amount: 20, type: "DEBIT", date: "2026-09-30T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_2" } }),
+      tx({ id: "tx_test_c8", amount: 15, type: "DEBIT", date: "2026-11-02T00:00:00.000Z", creditCardMetadata: { billId: "bill_test_9" } }),
+    ];
+    const client = fakeClient({
+      listTransactions: vi.fn(async (accountId: string) => {
+        const list = accountId === "acc_test_bank" ? bankTxs : [...cardTxs, ...extra];
+        return { transactions: list, coverage: coverageOf(list) };
+      }),
+    });
+    // No store real, c1 e c8 caem em needs_review / unknown_bill.
+    const unknown = new Set(["tx_test_c1", "tx_test_c8"]);
+    storeMocks.processPluggyRecords.mockImplementation(async (_db, input: ProcessPluggyRecordsInput) => {
+      const batch = batchFor(input, (record) => (unknown.has(record.externalId) ? "needs_review" : outcomeOf(record)));
+      batch.results = batch.results.map((x) => (unknown.has(x.externalId) ? { ...x, reasonCode: "unknown_bill" } : x));
+      return batch;
+    });
+
+    const report = await run(db, { client: client as never });
+    const card = storeInput("link_test_card");
+    expect(card.billDueDates).toEqual({ bill_test_1: "2026-10-10", bill_test_2: "2026-11-10" });
+    expect(card.records.map((x) => x.externalId)).toContain("tx_test_c7");
+    expect(card.records.map((x) => x.externalId)).not.toContain("tx_test_c0");
+    // c8 (novo) e c1 (já estava em revisão): os dois contam no run, só o novo alerta.
+    expect(report.counts.unknownBill).toBe(2);
+    expect(report.checks.alerts.unknown_bill).toBe(1);
+    expect(report.status).toBe("warning");
   });
 });
 
