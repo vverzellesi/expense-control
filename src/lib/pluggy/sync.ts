@@ -1,5 +1,4 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { categorizeUncategorized, categorizerConfigFromEnv, type CategorizeCounts, type CategorizeResult } from "@/lib/ai-categorizer";
 import { sendSyncAlert, type AlertSummary } from "./alerts";
 import { createPluggyClientFromEnv, PluggyApiError, type PluggyClient } from "./client";
 import { toBusinessDate } from "./dates";
@@ -82,8 +81,6 @@ export interface SyncDeps {
   env?: Record<string, string | undefined>;
   now?: () => Date;
   alert?: (db: PrismaClient, ownerUserId: string, summary: AlertSummary) => Promise<unknown>;
-  /** Categorização por IA no fim da gravação; padrão: categorizeUncategorized. */
-  categorize?: typeof categorizeUncategorized;
 }
 
 export interface RunSyncOptions {
@@ -95,8 +92,6 @@ export interface RunSyncOptions {
   importPending?: boolean;
   /** Validade do lease; scripts usam mais que o cron (primeira gravação longa). */
   leaseTtlMs?: number;
-  /** Não chamar a categorização por IA nesta execução. */
-  skipAi?: boolean;
 }
 
 type DestinationKey = RecordOutcome;
@@ -163,10 +158,6 @@ export interface SyncChecks {
   items: ItemCheck[];
   accounts: AccountCheck[];
   userPatterns: { configured: number; rejected: number; invalid: boolean };
-  /** Categorização por IA depois da gravação (só contagens e estado). */
-  ai: { state: CategorizeResult["state"]; counts: CategorizeCounts; error: string | null } | null;
-  /** Por que a IA não rodou nesta gravação (null quando rodou ou em simulação). */
-  aiSkipped: "flag" | "run_error" | "nothing_new" | null;
   /**
    * Nível já avisado de cada alerta persistente. Só realerta quando o total passa desse
    * nível; se o envio falha, o nível não sobe e o próximo run tenta de novo.
@@ -278,8 +269,6 @@ function emptyChecks(): SyncChecks {
     items: [],
     accounts: [],
     userPatterns: { configured: 0, rejected: 0, invalid: false },
-    ai: null,
-    aiSkipped: null,
     alertBaseline: {},
   };
 }
@@ -552,67 +541,16 @@ export async function runPluggySync(deps: SyncDeps, options: RunSyncOptions): Pr
       if (leaseToken) await releasePluggyLease(db, ownerUserId, leaseToken).catch(() => undefined);
     }
 
-    // Depois de fechar o run e liberar o lease: primeiro o alerta (não depende da IA),
-    // depois a categorização por IA. Nenhum dos dois muda o resultado do run.
+    // Depois de fechar o run e liberar o lease: o alerta não muda o resultado do run.
     await sendAlertIfNeeded(deps, ownerUserId, report);
-    const saveChecks = async () => {
-      if (!report.runId) return;
+    // O nível avisado vai para o banco junto com os checks.
+    if (report.runId) {
       await db.pluggySyncRun
         .update({ where: { id: report.runId }, data: { checks: toJson(report.checks) } })
         .catch(() => undefined);
-    };
-    // O nível avisado vai para o banco antes da IA (que pode levar até o fim do maxDuration).
-    await saveChecks();
-    await runCategorizer(deps, env, options, ownerUserId, report);
-    if (report.checks.ai) await saveChecks();
+    }
   }
   return report;
-}
-
-/** A IA só roda quando pode haver algo novo para categorizar, nunca depois de um run com erro. */
-function aiSkipReason(options: RunSyncOptions, report: SyncReport): SyncChecks["aiSkipped"] {
-  if (options.skipAi) return "flag";
-  if (report.status === "error") return "run_error";
-  const d = report.counts.destinations;
-  const somethingNew = d.created + d.adopted + d.updated + d.restored > 0;
-  // Cron e script rodam no máximo algumas vezes por dia; o webhook só quando entrou algo.
-  if (options.trigger === "webhook" && !somethingNew) return "nothing_new";
-  return null;
-}
-
-async function runCategorizer(
-  deps: SyncDeps,
-  env: Record<string, string | undefined>,
-  options: RunSyncOptions,
-  ownerUserId: string,
-  report: SyncReport
-): Promise<void> {
-  const skip = aiSkipReason(options, report);
-  report.checks.aiSkipped = skip;
-  if (skip) return;
-  const categorize = deps.categorize ?? categorizeUncategorized;
-  try {
-    const ai = await categorize(deps.db, { mode: "apply", ownerUserId, ...categorizerConfigFromEnv(env) });
-    report.checks.ai = { state: ai.state, counts: ai.counts, error: ai.error };
-  } catch (error) {
-    report.checks.ai = { state: "erro", counts: emptyAiCounts(), error: describeSyncError(error) };
-  }
-}
-
-function emptyAiCounts(): CategorizeCounts {
-  return {
-    selected: 0,
-    unminimizable: 0,
-    planned: 0,
-    sent: 0,
-    categorized: 0,
-    abstained: 0,
-    lowConfidence: 0,
-    discarded: 0,
-    conflicts: 0,
-    notSent: 0,
-    calls: 0,
-  };
 }
 
 async function sendAlertIfNeeded(deps: SyncDeps, ownerUserId: string, report: SyncReport): Promise<void> {

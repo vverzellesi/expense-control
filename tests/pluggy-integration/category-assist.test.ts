@@ -1,13 +1,12 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { categorizeUncategorized, type AiBatchPayload } from "@/lib/ai-categorizer";
+import { applyDecisions, ATTEMPTS_SETTING_KEY, buildExport, type PendingFile, type PrivateMap } from "@/lib/category-assist";
 import { applyBatch, createOwner, createTestClient, noonUtc, rec, resetDatabase, syncFromDate, type Owner } from "./helpers";
 
-// Seleção e atualização condicional da categorização por IA em Postgres real.
-// O provedor é sempre simulado: nenhuma chamada sai da máquina.
+// Exportação, aplicação condicional e tentativas da categorização assistida em Postgres real.
+// Nenhum provedor externo: as decisões são escritas pelo próprio teste, como faria a rotina.
 
 const db: PrismaClient = createTestClient();
-const KEY = "sk-test-not-a-real-key";
 
 afterAll(async () => {
   await db.$disconnect();
@@ -17,24 +16,18 @@ let owner: Owner;
 let foodId: string;
 let leisureId: string;
 
-/** Provedor simulado que categoriza tudo como a primeira categoria, com confiança alta. */
-function provider(beforeRespond?: () => Promise<void>) {
-  const payloads: AiBatchPayload[] = [];
-  const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
-    const payload = JSON.parse(JSON.parse(String(init.body)).messages[0].content[0].text) as AiBatchPayload;
-    payloads.push(payload);
-    if (beforeRespond) await beforeRespond();
-    const food = payload.categories.find((c) => c.name === "Alimentação")!.key;
-    const output = { results: payload.items.map((i) => ({ item: i.key, category: food, confidence: "high" })) };
-    return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(output) }], stop_reason: "end_turn" }), {
-      status: 200,
-    });
-  });
-  return { fetchImpl: fetchImpl as unknown as typeof fetch, payloads };
-}
-
 async function tx(description: string) {
   return db.transaction.findFirstOrThrow({ where: { userId: owner.userId, description } });
+}
+
+async function exportNow(includeBank = false): Promise<{ pending: PendingFile; map: PrivateMap }> {
+  return buildExport(db, { ownerUserId: owner.userId, includeBank });
+}
+
+/** Decide todos os itens exportados como a categoria de nome dado. */
+function decideAll(pending: PendingFile, categoryName: string, confianca: "alta" | "media" | "baixa" = "alta") {
+  const categoria = pending.categorias.find((c) => c.nome === categoryName)!.chave;
+  return { exportacao: pending.exportacao, decisoes: pending.itens.map((i) => ({ chave: i.chave, categoria, confianca })) };
 }
 
 beforeEach(async () => {
@@ -58,7 +51,7 @@ beforeEach(async () => {
   await db.transaction.update({ where: { id: (await tx("FARMACIA TESTE")).id }, data: { deletedAt: new Date() } });
   await db.transaction.update({ where: { id: (await tx("LIVRARIA EXEMPLO")).id }, data: { categoryId: leisureId, categorySource: "rule" } });
 
-  // Conta corrente do mesmo dono: fica só com as regras.
+  // Conta corrente do mesmo dono: só entra com --incluir-conta.
   const bankOrigin = await db.origin.create({ data: { name: "Conta Teste", userId: owner.userId, type: "DEBIT" } });
   const bank = await db.pluggyAccountLink.create({
     data: {
@@ -74,7 +67,7 @@ beforeEach(async () => {
     accountLinkId: bank.id,
   });
 
-  // Cartão desativado (desligamento em andamento): fora da IA.
+  // Cartão desativado (desligamento em andamento): fora.
   const offOrigin = await db.origin.create({ data: { name: "Cartão Desativado", userId: owner.userId, type: "CREDIT_CARD" } });
   const off = await db.pluggyAccountLink.create({
     data: {
@@ -140,22 +133,24 @@ beforeEach(async () => {
   await applyBatch(db, otherOwner, [rec({ externalId: "x_1", description: "LOJA DE OUTRO DONO" })]);
 });
 
-describe("categorização por IA em Postgres real", () => {
-  it("seleciona só a despesa de cartão Pluggy sem categoria e sem origem de categoria", async () => {
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "simulate" });
-    expect(r.state).toBe("ok");
-    expect(r.counts.selected).toBe(1);
-    expect(r.preview).toHaveLength(1);
-    expect(r.preview![0].items).toEqual([{ key: "i1", description: "MERCADO EXEMPLO", amountRange: "até 50" }]);
-    expect(r.preview![0].categories.map((c) => c.name)).toEqual(["Alimentação", "Lazer"]);
+describe("categorização assistida em Postgres real", () => {
+  it("exporta só a despesa de cartão Pluggy sem categoria e sem origem de categoria", async () => {
+    const { pending, counts } = await exportNow();
+    expect(counts).toMatchObject({ elegiveis: 1, exportadas: 1 });
+    expect(pending.itens).toEqual([{ chave: "i1", descricao: "MERCADO EXEMPLO", faixaDeValor: "até 50" }]);
+    expect(pending.categorias.map((c) => c.nome)).toEqual(["Alimentação", "Lazer"]);
+  });
+
+  it("com a conta corrente, inclui a despesa da conta", async () => {
+    const { pending } = await exportNow(true);
+    expect(pending.itens.map((i) => i.descricao).sort()).toEqual(["MERCADO EXEMPLO", "PADARIA DA CONTA"]);
   });
 
   it("grava categoria e categorySource ai sem tocar no resto", async () => {
     const before = await db.transaction.findMany({ where: { userId: owner.userId }, orderBy: { id: "asc" } });
-    const p = provider();
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(r).toMatchObject({ state: "ok", error: null });
-    expect(r.counts).toMatchObject({ selected: 1, sent: 1, categorized: 1, calls: 1 });
+    const { pending, map } = await exportNow();
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r).toMatchObject({ error: null, counts: { aplicadas: 1, conflitos: 0 } });
 
     const ok = await tx("MERCADO EXEMPLO");
     expect(ok.categoryId).toBe(foodId);
@@ -166,48 +161,68 @@ describe("categorização por IA em Postgres real", () => {
     expect(changed.map((t) => t.description)).toEqual(["MERCADO EXEMPLO"]);
     expect((await tx("POSTO FICTICIO")).categoryId).toBeNull();
 
-    // Reexecução não encontra mais nada.
-    const again = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(again.counts.selected).toBe(0);
+    // Nova exportação não encontra mais nada; reaplicar o mesmo arquivo só gera conflito.
+    expect((await exportNow()).counts.elegiveis).toBe(0);
+    const again = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(again.counts).toMatchObject({ aplicadas: 0, conflitos: 1 });
   });
 
-  it("edição humana durante a chamada não é sobrescrita", async () => {
+  it("simulação não grava", async () => {
+    const { pending, map } = await exportNow();
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "simulate", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r.counts).toMatchObject({ aplicadas: 1, conflitos: 0 });
+    expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
+  });
+
+  it("edição humana entre a exportação e a aplicação não é sobrescrita", async () => {
+    const { pending, map } = await exportNow();
     const target = await tx("MERCADO EXEMPLO");
-    const p = provider(async () => {
-      await db.transaction.update({ where: { id: target.id }, data: { categoryId: leisureId, categorySource: "manual" } });
-    });
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(r.counts).toMatchObject({ categorized: 0, conflicts: 1 });
+    await db.transaction.update({ where: { id: target.id }, data: { categoryId: leisureId, categorySource: "manual" } });
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r.counts).toMatchObject({ aplicadas: 0, conflitos: 1 });
     const after = await tx("MERCADO EXEMPLO");
     expect(after.categoryId).toBe(leisureId);
     expect(after.categorySource).toBe("manual");
   });
 
   it("qualquer edição concorrente (updatedAt mudou) impede a escrita", async () => {
-    const target = await tx("MERCADO EXEMPLO");
-    const p = provider(async () => {
-      await db.transaction.update({ where: { id: target.id }, data: { isFixed: true } });
-    });
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(r.counts.conflicts).toBe(1);
+    const { pending, map } = await exportNow();
+    await db.transaction.update({ where: { id: (await tx("MERCADO EXEMPLO")).id }, data: { isFixed: true } });
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r.counts.conflitos).toBe(1);
     expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
   });
 
-  it("cartão desativado durante a chamada não recebe escrita (a escrita repete a seleção)", async () => {
-    const p = provider(async () => {
-      await db.pluggyAccountLink.update({ where: { id: owner.accountLinkId }, data: { enabled: false } });
-    });
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(r.counts).toMatchObject({ categorized: 0, conflicts: 1 });
+  it("cartão desativado depois da exportação não recebe escrita (a escrita repete a seleção)", async () => {
+    const { pending, map } = await exportNow();
+    await db.pluggyAccountLink.update({ where: { id: owner.accountLinkId }, data: { enabled: false } });
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r.counts).toMatchObject({ aplicadas: 0, conflitos: 1 });
     expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
   });
 
-  it("categoria apagada durante a chamada vira conflito, sem derrubar a execução", async () => {
-    const p = provider(async () => {
-      await db.category.delete({ where: { id: foodId } });
+  it("categoria apagada depois da exportação vira conflito, sem derrubar a execução", async () => {
+    const { pending, map } = await exportNow();
+    await db.category.delete({ where: { id: foodId } });
+    const r = await applyDecisions(db, { ownerUserId: owner.userId, mode: "apply", map, decisions: decideAll(pending, "Alimentação") });
+    expect(r).toMatchObject({ error: null, counts: { aplicadas: 0, conflitos: 1 } });
+  });
+
+  it("confiança baixa fica registrada em Settings e não volta na próxima exportação", async () => {
+    const { pending, map } = await exportNow();
+    const r = await applyDecisions(db, {
+      ownerUserId: owner.userId,
+      mode: "apply",
+      map,
+      decisions: decideAll(pending, "Alimentação", "baixa"),
     });
-    const r = await categorizeUncategorized(db, { ownerUserId: owner.userId, mode: "apply", apiKey: KEY, fetchImpl: p.fetchImpl });
-    expect(r).toMatchObject({ state: "ok", error: null });
-    expect(r.counts).toMatchObject({ categorized: 0, conflicts: 1 });
+    expect(r.counts).toMatchObject({ aplicadas: 0, baixaConfianca: 1 });
+    expect((await tx("MERCADO EXEMPLO")).categoryId).toBeNull();
+    const setting = await db.settings.findFirstOrThrow({ where: { key: ATTEMPTS_SETTING_KEY, userId: owner.userId } });
+    expect(Object.keys(JSON.parse(setting.value))).toEqual([(await tx("MERCADO EXEMPLO")).id]);
+
+    const next = await exportNow();
+    expect(next.pending.itens).toEqual([]);
+    expect(next.counts).toMatchObject({ elegiveis: 1, tentadasRecentes: 1 });
   });
 });

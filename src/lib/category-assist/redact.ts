@@ -1,5 +1,5 @@
 /**
- * Minimização do que sai do servidor para o provedor de IA (pura, sem I/O).
+ * Minimização do que sai do banco para a rotina de categorização (pura, sem I/O).
  *
  * A descrição do banco é dado não confiável e pode carregar identificadores
  * pessoais. Antes de qualquer envio: remove CPF/CNPJ, telefones, e-mails,
