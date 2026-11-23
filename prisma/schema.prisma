@@ -60,6 +60,11 @@ model User {
 
   // AI usage tracking
   aiUsage AiUsage[]
+
+  // Pluggy (Open Finance) integration
+  pluggyAccountLinks PluggyAccountLink[]
+  pluggySyncRuns     PluggySyncRun[]
+  pluggySyncLease    PluggySyncLease?
 }
 
 model Account {
@@ -148,6 +153,12 @@ model Transaction {
 
   // Investment transaction link (reverse relation)
   investmentTransaction InvestmentTransaction?
+
+  // Origem da categoria: "rule" | "ai" | "manual"; null = legado
+  categorySource String?
+
+  // Vínculos com registros da Pluggy (vários ids históricos podem apontar para a mesma transação)
+  pluggyLinks PluggyTransactionLink[]
 
   @@index([userId])
   @@index([userId, date])
@@ -267,6 +278,8 @@ model Origin {
   // Shared space
   spaceId String?
   space   Space?  @relation("SpaceOrigins", fields: [spaceId], references: [id], onDelete: Cascade)
+
+  pluggyAccountLinks PluggyAccountLink[]
 
   @@unique([name, userId])
   @@unique([name, spaceId])
@@ -663,4 +676,99 @@ model AiUsage {
 
   @@unique([userId, yearMonth])
   @@index([userId])
+}
+
+// ==========================================
+// PLUGGY (OPEN FINANCE) INTEGRATION
+// ==========================================
+
+/// Conta da Pluggy vinculada a um Origin pessoal do dono. Populado por script local, nunca por rota HTTP.
+model PluggyAccountLink {
+  id                    String             @id @default(cuid())
+  userId                String
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId                String
+  pluggyAccountId       String             @unique
+  accountType           String // "BANK" | "CREDIT"
+  /// Origin pessoal do dono (spaceId = null); o nome é resolvido na escrita
+  originId              String
+  origin                Origin             @relation(fields: [originId], references: [id], onDelete: NoAction)
+  /// Início do dia de corte; comparado por dia no fuso America/Sao_Paulo
+  syncFrom              DateTime
+  enabled               Boolean            @default(true)
+  lastSuccessfulSyncAt  DateTime?
+  /// Conta anterior que esta substitui (reconexão do banco gera ids novos)
+  replacesAccountLinkId String?            @unique
+  /// Cartão: vencimento da última fatura já importada por PDF (corte por fatura)
+  cutoffBillDueDate     DateTime?
+  replaces              PluggyAccountLink? @relation("PluggyAccountLineage", fields: [replacesAccountLinkId], references: [id], onDelete: NoAction)
+  replacedBy            PluggyAccountLink? @relation("PluggyAccountLineage")
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  transactionLinks PluggyTransactionLink[]
+
+  @@index([userId])
+}
+
+/// Destino de cada registro lido da Pluggy. Sem payload bruto.
+model PluggyTransactionLink {
+  id                String            @id @default(cuid())
+  accountLinkId     String
+  accountLink       PluggyAccountLink @relation(fields: [accountLinkId], references: [id], onDelete: Cascade)
+  /// id do registro na Pluggy (não é permanente)
+  externalId        String
+  /// id do banco, quando vier
+  providerId        String?
+  /// Transaction local; null quando não há lançamento
+  transactionId     String?
+  transaction       Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  /// created | adopted | excluded | pending | needs_review | before_cutoff | superseded
+  disposition       String
+  reasonCode        String?
+  sourceStatus      String // PENDING | POSTED
+  sourceDate        DateTime
+  /// Data gravada em Transaction.date na última vez em que o registro foi aplicado
+  ledgerDate        DateTime
+  purchaseDate      DateTime?
+  sourceAmountCents Int
+  currencyCode      String
+  direction         String // DEBIT | CREDIT
+  sourceDescription String
+  billId            String?
+  creditKind        String? // refund | bill_payment | other | unknown
+  installmentNumber Int?
+  totalInstallments Int?
+  firstSeenAt       DateTime          @default(now())
+  lastSeenAt        DateTime
+  /// Carimbo do soft delete feito pelo sistema (provisório que sumiu, reclassificado); permite restaurar
+  systemDeletedAt   DateTime?
+
+  @@unique([accountLinkId, externalId])
+  @@index([accountLinkId, providerId])
+  @@index([transactionId])
+  @@index([accountLinkId, disposition])
+}
+
+model PluggySyncRun {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger    String // cron | manual
+  status     String // running | ok | warning | error | interrupted
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  counts     Json?
+  checks     Json?
+  /// sanitizado: sem ids, descrições ou segredos
+  error      String?
+
+  @@index([userId, startedAt])
+}
+
+model PluggySyncLease {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownerToken String
+  expiresAt  DateTime
 }

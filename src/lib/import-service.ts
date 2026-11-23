@@ -50,7 +50,7 @@ function normalizeText(text: string): string {
 }
 
 // Check if transaction description matches recurring expense keywords
-function matchesRecurring(
+export function matchesRecurring(
   transactionDesc: string,
   recurringDesc: string
 ): boolean {
@@ -87,6 +87,8 @@ export interface ImportResult {
     recurringExpenseId: string | null;
   }>;
   skippedCount: number;
+  /** Linhas ignoradas porque o origin é sincronizado pela Pluggy a partir do corte. */
+  skippedPluggyManaged: number;
   linkedCount: number;
   carryoverLinkedCount: number;
   installmentGroupsCreated: number;
@@ -98,6 +100,32 @@ export interface ImportResult {
     interestRate: number | null;
     interestAmount: number | null;
   }>;
+}
+
+const saoPauloDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * Origins pessoais do usuário com vínculo Pluggy ativo → dia de corte (YYYY-MM-DD).
+ * A importação manual não grava nesses origins a partir do corte, porque a
+ * sincronização já cobre esse período (evita duplicar).
+ */
+async function loadPluggyManagedOrigins(userId: string): Promise<Map<string, string>> {
+  const links = await prisma.pluggyAccountLink.findMany({
+    where: { userId, enabled: true, origin: { userId, spaceId: null } },
+    select: { syncFrom: true, origin: { select: { name: true } } },
+  });
+  const managed = new Map<string, string>();
+  for (const link of links) {
+    const day = saoPauloDayFormatter.format(link.syncFrom);
+    const current = managed.get(link.origin.name);
+    if (!current || day < current) managed.set(link.origin.name, day);
+  }
+  return managed;
 }
 
 export async function importTransactions(
@@ -127,9 +155,12 @@ export async function importTransactions(
     })).map(t => `${t.id}:${t.categoryId}`)
   );
 
+  const pluggyManagedOrigins = await loadPluggyManagedOrigins(userId);
+
   const created: ImportResult["created"] = [];
   let linkedCount = 0;
   let skippedCount = 0;
+  let skippedPluggyManaged = 0;
   let carryoverLinkedCount = 0;
   let installmentGroupsCreated = 0;
   let futureInstallmentsCreated = 0;
@@ -152,6 +183,12 @@ export async function importTransactions(
     const transactionMonth = transactionDate.getMonth();
     const transactionYear = transactionDate.getFullYear();
     const transactionOrigin = t.origin || defaultOrigin;
+
+    const managedFrom = pluggyManagedOrigins.get(transactionOrigin);
+    if (managedFrom !== undefined && saoPauloDayFormatter.format(transactionDate) >= managedFrom) {
+      skippedPluggyManaged++;
+      continue;
+    }
 
     // Try to match with a recurring expense
     let matchedRecurringId: string | null = null;
@@ -367,6 +404,7 @@ export async function importTransactions(
   return {
     created,
     skippedCount,
+    skippedPluggyManaged,
     linkedCount,
     carryoverLinkedCount,
     installmentGroupsCreated,

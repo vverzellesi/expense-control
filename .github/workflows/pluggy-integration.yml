@@ -1,0 +1,66 @@
+name: Pluggy integration
+
+# Suíte de integração da Pluggy em Postgres descartável (sem nenhum secret).
+# O servidor roda em America/Sao_Paulo de propósito: garante que o lease e as
+# datas não dependem do fuso do banco.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pluggy-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pluggy_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+          TZ: America/Sao_Paulo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/pluggy_test
+      PLUGGY_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/pluggy_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create schema (db push)
+        run: npx prisma db push --skip-generate
+
+      # Migrações novas do PR, aplicadas sobre um banco criado a partir do schema
+      # da base, precisam chegar exatamente ao schema do PR.
+      - name: Validate new migrations against the base schema
+        env:
+          MIGCHECK_URL: postgresql://postgres@localhost:5432/migcheck
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          git show "origin/$GITHUB_BASE_REF:prisma/schema.prisma" > /tmp/base.prisma
+          psql postgresql://postgres@localhost:5432/postgres -c "CREATE DATABASE migcheck"
+          DATABASE_URL="$MIGCHECK_URL" npx prisma db push --schema /tmp/base.prisma --skip-generate
+          for f in $(git diff --name-only --diff-filter=A "origin/$GITHUB_BASE_REF" HEAD -- 'prisma/migrations/*/migration.sql' | sort); do
+            echo "applying $f"
+            psql -v ON_ERROR_STOP=1 "$MIGCHECK_URL" -f "$f"
+          done
+          npx prisma migrate diff --from-url "$MIGCHECK_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      - name: Run Pluggy integration tests
+        run: npm run test:pluggy-integration
+
