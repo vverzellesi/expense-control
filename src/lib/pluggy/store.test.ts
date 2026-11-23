@@ -247,12 +247,14 @@ describe("decisão em memória", () => {
       ["bill_old", "2026-03-10"],
       ["bill_new", "2026-04-10"],
     ]);
-    expect(cutoffDecision({ billId: "bill_old", ledgerDate: "2026-03-20" }, card, bills)?.disposition).toBe("before_cutoff");
-    expect(cutoffDecision({ billId: "bill_new", ledgerDate: "2026-01-01" }, card, bills)).toBeNull();
-    expect(cutoffDecision({ billId: null, ledgerDate: "2025-01-01" }, card, bills)).toBeNull();
-    expect(cutoffDecision({ billId: "bill_x", ledgerDate: "2026-03-20" }, card, bills)).toEqual({ disposition: "needs_review", reasonCode: "unknown_bill" });
+    const posted = "POSTED" as const;
+    expect(cutoffDecision({ billId: "bill_old", ledgerDate: "2026-03-20", sourceStatus: posted }, card, bills)?.disposition).toBe("before_cutoff");
+    expect(cutoffDecision({ billId: "bill_new", ledgerDate: "2026-01-01", sourceStatus: posted }, card, bills)).toBeNull();
+    expect(cutoffDecision({ billId: null, ledgerDate: "2025-01-01", sourceStatus: "PENDING" }, card, bills)).toBeNull();
+    expect(cutoffDecision({ billId: null, ledgerDate: "2025-01-01", sourceStatus: posted }, card, bills)).toEqual({ disposition: "needs_review", reasonCode: "missing_bill" });
+    expect(cutoffDecision({ billId: "bill_x", ledgerDate: "2026-03-20", sourceStatus: posted }, card, bills)).toEqual({ disposition: "needs_review", reasonCode: "unknown_bill" });
     const bank = { accountType: "BANK", cutoffBillDueDay: null, syncFromDay: "2026-03-01" };
-    expect(cutoffDecision({ billId: null, ledgerDate: "2026-02-28" }, bank, bills)?.reasonCode).toBe("before_sync_from");
+    expect(cutoffDecision({ billId: null, ledgerDate: "2026-02-28", sourceStatus: posted }, bank, bills)?.reasonCode).toBe("before_sync_from");
   });
 
   it("reclassificação tardia: created intocado vira excluded com soft delete; editado só diverge", async () => {

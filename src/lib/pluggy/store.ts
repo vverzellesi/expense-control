@@ -766,8 +766,14 @@ export interface DecisionPlan {
   updateTransaction: TransactionUpdate | null;
   /** A adoção corrigiu o valor de uma projeção para o valor da fonte. */
   projectionAmountCorrected: boolean;
-  /** Reclassificação tardia: soft delete (pelo sistema) da transação intocada. */
-  softDelete: null | { transactionId: string; expectAmount: number; expectDate: Date };
+  /** Reclassificação tardia: soft delete (pelo sistema) da transação intocada e das projeções só dela. */
+  softDelete: null | {
+    transactionId: string;
+    expectAmount: number;
+    expectDate: Date;
+    installmentId: string | null;
+    installmentNumber: number | null;
+  };
   /** Provisório que voltou: desfaz o soft delete feito pelo sistema (mesmo carimbo). */
   restore: null | { transactionId: string; systemDeletedAt: Date; installmentId: string | null };
   /** Registro antes "created" que a fonte passou a excluir (reclassified_excluded). */
@@ -800,17 +806,20 @@ export interface BatchFacts {
 
 /**
  * Corte (passo 4). Cartão com cutoffBillDueDate: vale a fatura — billId com
- * vencimento até o corte → before_cutoff; sem billId (ciclo aberto) ou fatura
- * posterior → segue, qualquer que seja a data; billId fora do mapa →
- * needs_review / unknown_bill. Sem corte por fatura: ledgerDate antes de syncFrom.
+ * vencimento até o corte → before_cutoff; ciclo aberto (PENDING sem billId) ou
+ * fatura posterior → segue, qualquer que seja a data; billId fora do mapa →
+ * needs_review / unknown_bill; POSTED sem billId → needs_review / missing_bill. Sem corte por fatura: ledgerDate antes de syncFrom.
  */
 export function cutoffDecision(
-  record: Pick<PluggyStoreRecord, "billId" | "ledgerDate">,
+  record: Pick<PluggyStoreRecord, "billId" | "ledgerDate" | "sourceStatus">,
   ctx: Pick<AccountContext, "accountType" | "cutoffBillDueDay" | "syncFromDay">,
   billDueDates: Map<string, string>
 ): null | { disposition: "before_cutoff" | "needs_review"; reasonCode: string } {
   if (ctx.accountType === "CREDIT" && ctx.cutoffBillDueDay) {
-    if (!record.billId) return null;
+    if (!record.billId) {
+      // Sem billId só o ciclo aberto (PENDING) segue; lançado sem fatura não tem como ser cortado.
+      return record.sourceStatus === "PENDING" ? null : { disposition: "needs_review", reasonCode: "missing_bill" };
+    }
     const due = billDueDates.get(record.billId);
     if (!due) return { disposition: "needs_review", reasonCode: "unknown_bill" };
     return due <= ctx.cutoffBillDueDay ? { disposition: "before_cutoff", reasonCode: "before_cutoff_bill" } : null;
@@ -1199,6 +1208,11 @@ async function decideKnownTransitions(
     }
     return linkOnly("needs_review", "exclusion_reverted", existing.id, [], existing.transactionId);
   }
+  // Destino fixo: o lançamento local de um registro igual foi apagado de vez.
+  // Nunca volta a ser criado sozinho (nem na execução seguinte).
+  if (existing.disposition === "needs_review" && existing.reasonCode === "linked_transaction_deleted") {
+    return linkOnly("needs_review", "linked_transaction_deleted", existing.id, [], existing.transactionId);
+  }
   if (existing.disposition === "needs_review" && existing.reasonCode === "exclusion_reverted") {
     return excludedNow
       ? linkOnly("excluded", excludedNow.reasonCode, existing.id, [], existing.transactionId)
@@ -1216,10 +1230,29 @@ async function decideKnownTransitions(
       amountCents: existing.sourceAmountCents,
     });
     if (tx.cents === previousCents && tx.day === existing.ledgerDate && tx.categorySource !== "manual") {
-      plan.softDelete = { transactionId: tx.id, expectAmount: tx.amount, expectDate: tx.date };
+      plan.softDelete = {
+        transactionId: tx.id,
+        expectAmount: tx.amount,
+        expectDate: tx.date,
+        installmentId: tx.installmentId,
+        installmentNumber: existing.installmentNumber,
+      };
       return plan;
     }
     return { ...touchPlan(existing), divergence: true };
+  }
+  // Lançamento adotado (era do usuário) que a fonte passa a excluir: não apaga, só sinaliza.
+  if (existing.disposition === "adopted" && existing.transactionId && excludedNow) {
+    return { ...touchPlan(existing), divergence: true };
+  }
+
+  if (
+    existing.disposition === "superseded" &&
+    !existing.transactionId &&
+    (existing.reasonCode === "provisional_vanished" || existing.reasonCode === "provisional_vanished_adopted")
+  ) {
+    // O provisório voltou, mas o lançamento dele já foi purgado da lixeira.
+    return linkOnly("needs_review", "linked_transaction_deleted", existing.id, []);
   }
 
   if (
@@ -1235,9 +1268,10 @@ async function decideKnownTransitions(
       [],
       existing.transactionId
     );
-    plan.outcome = "restored";
     const systemDeleted =
       !!tx && !!existing.systemDeletedAt && !!tx.deletedAt && tx.deletedAt.getTime() === existing.systemDeletedAt.getTime();
+    // "restored" só quando o lançamento volta a valer; apagado pelo usuário continua apagado.
+    plan.outcome = systemDeleted || (tx && !tx.deleted) ? "restored" : "unchanged";
     if (tx && systemDeleted) {
       plan.restore = {
         transactionId: tx.id,
@@ -1495,6 +1529,28 @@ async function executePlan(
     });
     if (res.count !== 1) throw new PluggyStoreError("concurrent_edit");
     systemDeletedAt = now;
+    if (d.installmentId && d.installmentNumber !== null) {
+      const othersLinked = await tx.transaction.count({
+        where: {
+          installmentId: d.installmentId,
+          id: { not: d.transactionId },
+          pluggyLinks: { some: { disposition: { not: "superseded" } } },
+        },
+      });
+      if (othersLinked === 0) {
+        await tx.transaction.updateMany({
+          where: {
+            installmentId: d.installmentId,
+            userId: ctx.ownerUserId,
+            spaceId: null,
+            currentInstallment: { gt: d.installmentNumber },
+            deletedAt: null,
+            pluggyLinks: { none: {} },
+          },
+          data: { deletedAt: now },
+        });
+      }
+    }
   }
 
   let transactionId = plan.link.transactionId;
@@ -1660,8 +1716,20 @@ async function applyPlanToOverlay(
   }
   if (plan.updateTransaction) await applyUpdateToOverlay(view, overlay, plan.updateTransaction);
   if (plan.softDelete) {
-    const [row] = await view.ownerTransactionsById([plan.softDelete.transactionId]);
+    const d = plan.softDelete;
+    const [row] = await view.ownerTransactionsById([d.transactionId]);
     if (row) overlay.txs.set(row.id, { ...row, deleted: true, deletedAt: now });
+    if (d.installmentId && d.installmentNumber !== null) {
+      const members = await view.groupMembers(d.installmentId);
+      const othersLinked = members.some((m) => m.id !== d.transactionId && m.hasPluggyLink);
+      if (!othersLinked) {
+        for (const m of members) {
+          if (!m.hasPluggyLink && !m.deleted && (m.currentInstallment ?? 0) > d.installmentNumber) {
+            overlay.txs.set(m.id, { ...m, deleted: true, deletedAt: now });
+          }
+        }
+      }
+    }
   }
 
   let transactionId = plan.link.transactionId;
@@ -2171,9 +2239,12 @@ export async function reconcileUnseenLinks(
         where: { accountLinkId: ctx.accountLinkId, disposition: { not: "superseded" } },
       })
     ).map(toLinkRow);
-    const presentTx = new Set(
-      links.filter((l) => l.transactionId && seen.has(l.externalId)).map((l) => l.transactionId as string)
-    );
+    // Presença por transação: inclui as religações do próprio lote (na simulação
+    // elas só existem em memória, no BatchResult).
+    const presentTx = new Set([
+      ...links.filter((l) => l.transactionId && seen.has(l.externalId)).map((l) => l.transactionId as string),
+      ...p.results.map((x) => x.transactionId).filter((x): x is string => !!x && !x.startsWith("sim_")),
+    ]);
     const unseen = links.filter(
       (l) => !seen.has(l.externalId) && !(l.transactionId && presentTx.has(l.transactionId))
     );
@@ -2273,4 +2344,5 @@ export async function reconcileUnseenLinks(
     return summarize(r, pendingVanished);
   });
 }
+
 
