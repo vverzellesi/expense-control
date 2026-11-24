@@ -1,6 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { applyDecisions, ATTEMPTS_SETTING_KEY, buildExport, type PendingFile, type PrivateMap } from "@/lib/category-assist";
+import {
+  applyDecisions,
+  ATTEMPTS_SETTING_KEY,
+  buildExport,
+  type ExportCounts,
+  type PendingFile,
+  type PrivateMap,
+} from "@/lib/category-assist";
 import { applyBatch, createOwner, createTestClient, noonUtc, rec, resetDatabase, syncFromDate, type Owner } from "./helpers";
 
 // Exportação, aplicação condicional e tentativas da categorização assistida em Postgres real.
@@ -20,8 +27,30 @@ async function tx(description: string) {
   return db.transaction.findFirstOrThrow({ where: { userId: owner.userId, description } });
 }
 
-async function exportNow(includeBank = false): Promise<{ pending: PendingFile; map: PrivateMap }> {
-  return buildExport(db, { ownerUserId: owner.userId, includeBank });
+async function exportNow(
+  includeBank = false,
+  extra: { includePeople?: boolean; retryAttempted?: boolean } = {}
+): Promise<{ pending: PendingFile; map: PrivateMap; counts: ExportCounts }> {
+  return buildExport(db, { ownerUserId: owner.userId, includeBank, ...extra });
+}
+
+/** Lançamento pessoal já categorizado, como histórico. */
+async function historyTx(
+  description: string,
+  data: { categoryId: string; categorySource?: string | null; deletedAt?: Date; spaceId?: string; date?: Date; installmentId?: string }
+) {
+  return db.transaction.create({
+    data: {
+      userId: owner.userId,
+      description,
+      amount: -30,
+      date: noonUtc("2026-02-10"),
+      type: "EXPENSE",
+      origin: owner.originName,
+      categorySource: "manual",
+      ...data,
+    },
+  });
 }
 
 /** Decide todos os itens exportados como a categoria de nome dado. */
@@ -137,13 +166,139 @@ describe("categorização assistida em Postgres real", () => {
   it("exporta só a despesa de cartão Pluggy sem categoria e sem origem de categoria", async () => {
     const { pending, counts } = await exportNow();
     expect(counts).toMatchObject({ elegiveis: 1, exportadas: 1 });
-    expect(pending.itens).toEqual([{ chave: "i1", descricao: "MERCADO EXEMPLO", faixaDeValor: "até 50" }]);
+    expect(pending.itens).toEqual([
+      { chave: "i1", descricao: "MERCADO EXEMPLO", valor: 25, faixaDeValor: "até 50", data: "2026-03-10", conta: "cartao", historico: [] },
+    ]);
     expect(pending.categorias.map((c) => c.nome)).toEqual(["Alimentação", "Lazer"]);
   });
 
   it("com a conta corrente, inclui a despesa da conta", async () => {
     const { pending } = await exportNow(true);
     expect(pending.itens.map((i) => i.descricao).sort()).toEqual(["MERCADO EXEMPLO", "PADARIA DA CONTA"]);
+    expect(pending.itens.find((i) => i.descricao === "PADARIA DA CONTA")!.conta).toBe("conta");
+  });
+
+  it("histórico: mesma descrição normalizada, pela descrição ou pela da fonte; fora ai, apagados, espaço e outro dono", async () => {
+    await historyTx("Mercado Exemplo 1/3", { categoryId: foodId });
+    await historyTx("MERCADO  EXEMPLO", { categoryId: foodId, categorySource: null });
+    await historyTx("MERCADO EXEMPLO", { categoryId: leisureId, categorySource: "ai" });
+    await historyTx("MERCADO EXEMPLO", { categoryId: leisureId, deletedAt: new Date() });
+    const space = await db.space.create({ data: { name: "Espaço Histórico", createdBy: owner.userId } });
+    await historyTx("MERCADO EXEMPLO", { categoryId: leisureId, spaceId: space.id });
+    await historyTx("MERCADO EXEMPLO DIFERENTE", { categoryId: leisureId });
+    // Receita com a mesma descrição e despesa futura: fora.
+    await db.transaction.create({
+      data: { userId: owner.userId, description: "MERCADO EXEMPLO", amount: 30, date: noonUtc("2026-02-10"), type: "INCOME", origin: owner.originName, categoryId: leisureId },
+    });
+    await historyTx("MERCADO EXEMPLO", { categoryId: leisureId, date: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000) });
+    // Categoria dada por regra conta.
+    await historyTx("MERCADO EXEMPLO", { categoryId: foodId, categorySource: "rule" });
+    // Outro dono, com a mesma descrição e categoria própria.
+    const stranger = await db.user.create({ data: { email: "estranho@example.test" } });
+    const strangerCat = await db.category.create({ data: { name: "Lazer", color: "#000000", userId: stranger.id } });
+    await db.transaction.create({
+      data: { userId: stranger.id, description: "MERCADO EXEMPLO", amount: -30, date: noonUtc("2026-02-10"), type: "EXPENSE", origin: "X", categoryId: strangerCat.id },
+    });
+    // Renomeado pelo dono: casa pela descrição da fonte no vínculo.
+    await applyBatch(db, owner, [rec({ externalId: "h_src", description: "MERCADO EXEMPLO", sourceDate: "2026-02-01" })]);
+    const renamed = await db.pluggyTransactionLink.findFirstOrThrow({ where: { externalId: "h_src" } });
+    await db.transaction.update({
+      where: { id: renamed.transactionId! },
+      data: { description: "APELIDO DO DONO", categoryId: leisureId, categorySource: "manual" },
+    });
+
+    const { pending, counts } = await exportNow();
+    expect(pending.itens).toHaveLength(1);
+    expect(pending.itens[0].historico).toEqual([
+      { categoria: "c1", vezes: 3 },
+      { categoria: "c2", vezes: 1 },
+    ]);
+    expect(counts.comHistorico).toBe(1);
+  });
+
+  it("parcelas de uma compra contam como uma decisão", async () => {
+    const group = await db.installment.create({
+      data: { description: "MERCADO EXEMPLO", totalAmount: 90, totalInstallments: 3, installmentAmount: 30, startDate: noonUtc("2026-01-10"), origin: owner.originName, userId: owner.userId },
+    });
+    for (const n of [1, 2, 3]) {
+      await historyTx("MERCADO EXEMPLO " + n + "/3", { categoryId: leisureId, installmentId: group.id, date: noonUtc("2026-0" + n + "-10") });
+    }
+    const { pending } = await exportNow();
+    expect(pending.itens[0].historico).toEqual([{ categoria: "c2", vezes: 1 }]);
+  });
+
+  it("item com vínculo de cartão e de conta sai como cartão", async () => {
+    const bank = await db.pluggyAccountLink.findFirstOrThrow({ where: { userId: owner.userId, accountType: "BANK" } });
+    const item = await tx("MERCADO EXEMPLO");
+    await db.pluggyTransactionLink.create({
+      data: {
+        accountLinkId: bank.id,
+        externalId: "b_same",
+        transactionId: item.id,
+        disposition: "adopted",
+        sourceStatus: "POSTED",
+        sourceDate: noonUtc("2026-03-10"),
+        ledgerDate: noonUtc("2026-03-10"),
+        sourceAmountCents: 2500,
+        currencyCode: "BRL",
+        direction: "DEBIT",
+        sourceDescription: "MERCADO EXEMPLO",
+        lastSeenAt: new Date(),
+      },
+    });
+    const { pending } = await exportNow(true);
+    expect(pending.itens.find((i) => i.descricao === "MERCADO EXEMPLO")!.conta).toBe("cartao");
+  });
+
+  it("histórico tem no máximo 3 categorias, mais usadas primeiro", async () => {
+    const healthId = (await db.category.create({ data: { name: "Saúde", color: "#000000", userId: owner.userId } })).id;
+    const carId = (await db.category.create({ data: { name: "Transporte", color: "#000000", userId: owner.userId } })).id;
+    const plan: Array<[string, number]> = [[foodId, 1], [leisureId, 4], [healthId, 2], [carId, 3]];
+    for (const [categoryId, n] of plan) for (let i = 0; i < n; i++) await historyTx("MERCADO EXEMPLO", { categoryId });
+
+    const { pending } = await exportNow();
+    const name = (chave: string) => pending.categorias.find((c) => c.chave === chave)!.nome;
+    expect(pending.itens[0].historico.map((h) => [name(h.categoria), h.vezes])).toEqual([
+      ["Lazer", 4],
+      ["Transporte", 3],
+      ["Saúde", 2],
+    ]);
+  });
+
+  it("transferência entre pessoas só entra com includePeople, com valor exato e sem documento", async () => {
+    const bank = await db.pluggyAccountLink.findFirstOrThrow({ where: { userId: owner.userId, accountType: "BANK" } });
+    await applyBatch(
+      db,
+      owner,
+      [rec({ externalId: "b_pix", accountType: "BANK", description: "PIX ENVIADO FULANO EXEMPLO 123.456.789-09", amountCents: 23000, sourceDate: "2026-03-12" })],
+      { accountLinkId: bank.id }
+    );
+
+    const without = await exportNow(true);
+    expect(without.pending.itens.map((i) => i.descricao)).not.toContain("PIX ENVIADO FULANO EXEMPLO");
+    expect(without.counts.naoMinimizaveis).toBe(1);
+
+    const withPeople = await exportNow(true, { includePeople: true });
+    const pix = withPeople.pending.itens.find((i) => i.descricao === "PIX ENVIADO FULANO EXEMPLO");
+    expect(pix).toMatchObject({ valor: 230, data: "2026-03-12", conta: "conta" });
+    expect(JSON.stringify(withPeople.pending)).not.toContain("123.456");
+  });
+
+  it("nenhum id do banco aparece no arquivo de pendentes", async () => {
+    await historyTx("MERCADO EXEMPLO", { categoryId: foodId });
+    const { pending } = await exportNow(true, { includePeople: true });
+    expect(pending.itens.length).toBeGreaterThan(0);
+    const text = JSON.stringify(pending);
+    const ids = [
+      ...(await db.transaction.findMany({ select: { id: true } })),
+      ...(await db.category.findMany({ select: { id: true } })),
+      ...(await db.user.findMany({ select: { id: true } })),
+      ...(await db.pluggyAccountLink.findMany({ select: { id: true } })),
+      ...(await db.pluggyTransactionLink.findMany({ select: { id: true } })),
+    ].map((r) => r.id);
+    expect(ids.length).toBeGreaterThan(10);
+    for (const id of ids) expect(text).not.toContain(id);
+    for (const externalId of ["c_ok", "b_1", "item_test", "acc_test"]) expect(text).not.toContain(externalId);
   });
 
   it("grava categoria e categorySource ai sem tocar no resto", async () => {
@@ -224,5 +379,10 @@ describe("categorização assistida em Postgres real", () => {
     const next = await exportNow();
     expect(next.pending.itens).toEqual([]);
     expect(next.counts).toMatchObject({ elegiveis: 1, tentadasRecentes: 1 });
+
+    // Com retryAttempted (--refazer-tentadas), volta.
+    const retry = await exportNow(false, { retryAttempted: true });
+    expect(retry.pending.itens.map((i) => i.descricao)).toEqual(["MERCADO EXEMPLO"]);
+    expect(retry.counts.tentadasRecentes).toBe(0);
   });
 });

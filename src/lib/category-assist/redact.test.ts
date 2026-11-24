@@ -72,6 +72,16 @@ describe("minimizeDescription", () => {
     expect(minimizeDescription("PIC PAY *PESSOA EXEMPLO")).toBeNull();
   });
 
+  it("com includePeople, transferência e carteira entram, ainda sem identificadores", () => {
+    const opts = { includePeople: true };
+    expect(minimizeDescription("PIX FULANO DE TAL", opts)).toBe("PIX FULANO DE TAL");
+    expect(minimizeDescription("PICPAY*PESSOA EXEMPLO", opts)).toBe("PICPAY*PESSOA EXEMPLO");
+    expect(minimizeDescription("TED PESSOA EXEMPLO 123.456.789-00 (11) 98765-4321 pessoa@example.test 1234567", opts)).toBe(
+      "TED PESSOA EXEMPLO"
+    );
+    expect(minimizeDescription("PIX 12.345.678/0001-00", opts)).toBe("PIX");
+  });
+
   it("conta letras acentuadas", () => {
     expect(minimizeDescription("ÁÉÍ")).toBe("ÁÉÍ");
   });

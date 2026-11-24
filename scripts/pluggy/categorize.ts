@@ -4,12 +4,15 @@
  * fora do app; este script só exporta os pendentes e aplica as decisões validadas.
  *
  * Uso (da raiz do repositório):
- *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts --export [--incluir-conta] [--limite 150] [--prod]
+ *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts --export [--incluir-conta] [--incluir-pessoas] [--refazer-tentadas] [--limite 150] [--prod]
  *   npx tsx --tsconfig tsconfig.json scripts/pluggy/categorize.ts --apply-decisions <arquivo> [--apply] [--prod]
  *
  *   --export            somente leitura no banco; grava personal/pluggy/categorizar-pendentes.json (o que a rotina lê)
  *                       e personal/pluggy/categorizar-mapa.json (mapa privado chave → id, que a rotina não precisa ler)
  *   --incluir-conta     inclui a conta corrente além do cartão
+ *   --incluir-pessoas   inclui transferências e carteiras entre pessoas (PIX, TED, PicPay...); documentos,
+ *                       telefones, e-mails e sequências longas de dígitos continuam removidos
+ *   --refazer-tentadas  reexporta o que a rotina já tentou sem resultado nos últimos 30 dias
  *   --limite N          máximo de itens por exportação (padrão 150, mais recentes primeiro)
  *   --apply-decisions   valida o arquivo de decisões contra o mapa da última exportação;
  *                       SIMULAÇÃO por padrão, grava só com --apply (confiança "alta")
@@ -49,6 +52,9 @@ async function main(): Promise<void> {
   if (hasFlag("apply-decisions") && !decisionsPath) fail("--apply-decisions precisa do caminho do arquivo de decisões.");
   if (doExport === Boolean(decisionsPath)) fail("Use --export ou --apply-decisions <arquivo> (um dos dois).");
   if (doExport && hasFlag("apply")) fail("--apply só vale com --apply-decisions.");
+  for (const flag of ["incluir-conta", "incluir-pessoas", "refazer-tentadas", "limite"]) {
+    if (!doExport && hasFlag(flag)) fail("--" + flag + " só vale com --export.");
+  }
 
   const owner = requireOwner();
   // Confere os caminhos antes de abrir o banco.
@@ -62,11 +68,22 @@ async function main(): Promise<void> {
   try {
     if (doExport) {
       const includeBank = hasFlag("incluir-conta");
-      const { pending, map: privateMap, counts } = await buildExport(target.db, { ownerUserId: owner, includeBank, limit });
+      const includePeople = hasFlag("incluir-pessoas");
+      const retryAttempted = hasFlag("refazer-tentadas");
+      const { pending, map: privateMap, counts } = await buildExport(target.db, {
+        ownerUserId: owner,
+        includeBank,
+        includePeople,
+        retryAttempted,
+        limit,
+      });
       // Mapa antes dos pendentes: se a segunda escrita falhar, a aplicação recusa por exportação diferente.
       writePersonalReport(MAP_PATH, JSON.stringify(privateMap, null, 2) + "\n");
       writePersonalReport(PENDING_PATH, JSON.stringify(pending, null, 2) + "\n");
-      console.log("Banco: " + target.label + " | exportação (somente leitura) | " + (includeBank ? "cartão e conta corrente" : "só cartão"));
+      console.log(
+        "Banco: " + target.label + " | exportação (somente leitura) | " + (includeBank ? "cartão e conta corrente" : "só cartão") +
+          (includePeople ? " | com pessoas" : "") + (retryAttempted ? " | refazendo tentadas" : "")
+      );
       console.log(Object.entries(counts).map(([name, n]) => name + "=" + n).join(" "));
       console.log("Pendentes para a rotina: " + PENDING_PATH);
       return;

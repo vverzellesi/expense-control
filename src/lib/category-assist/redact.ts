@@ -6,7 +6,10 @@
  * sequências de 6 ou mais dígitos, valores com centavos e dia/mês, normaliza
  * espaços e trunca. Descrição que não puder ser minimizada com segurança
  * (transferência ou carteira de pagamento entre pessoas, onde costuma vir nome
- * de pessoa) ou que fique com menos de 3 letras não é exportado.
+ * de pessoa) ou que fique com menos de 3 letras não é exportada. Com
+ * `includePeople`, transferências e carteiras entre pessoas entram (o nome da
+ * contraparte vai junto), mas a remoção de documentos, telefones, e-mails e
+ * sequências longas de dígitos continua valendo.
  */
 
 export const MAX_DESCRIPTION_LENGTH = 80;
@@ -36,11 +39,18 @@ const TRANSFER_RE = new RegExp(
 /** Carteira usada sobretudo para pagar pessoas: o texto depois do prefixo costuma ser um nome. */
 const PERSON_WALLET_RE = /^\s*PIC\s*PAY/i;
 
+export interface MinimizeOptions {
+  /** Inclui transferências e carteiras entre pessoas (opção --incluir-pessoas). */
+  includePeople?: boolean;
+}
+
 /** Descrição minimizada, ou null quando o item deve ficar fora da exportação. */
-export function minimizeDescription(raw: string): string | null {
+export function minimizeDescription(raw: string, options: MinimizeOptions = {}): string | null {
   if (typeof raw !== "string") return null;
-  if (TRANSFER_RE.test(raw)) return null;
-  if (PERSON_WALLET_RE.test(raw)) return null;
+  if (options.includePeople !== true) {
+    if (TRANSFER_RE.test(raw)) return null;
+    if (PERSON_WALLET_RE.test(raw)) return null;
+  }
   const cleaned = raw
     .replace(CONTROL_RE, " ")
     .replace(EMAIL_RE, " ")
@@ -60,7 +70,7 @@ export function minimizeDescription(raw: string): string | null {
 
 export type AmountRange = "até 50" | "50 a 200" | "200 a 1000" | "acima de 1000";
 
-/** Faixa de valor em reais (o valor exato nunca sai do servidor). */
+/** Faixa de valor em reais (vai junto do valor exato, para leitura rápida). */
 export function amountRange(amountCents: number): AmountRange {
   const cents = Math.abs(amountCents);
   if (cents <= 5_000) return "até 50";
